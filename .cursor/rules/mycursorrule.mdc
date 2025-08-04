@@ -1,5 +1,16 @@
 ---
-description:
+description: >
+  Conservative rules: prevent Cursor from auto-applying changes and reduce unnecessary suggestions that lead to rework and higher costs.
+
 globs:
-alwaysApply: false
+  - path: "**/*"
+    alwaysApply: false
+    askBeforeApply: true
+    comment: "Confirm before applying any changes. Avoid unnecessary rework or cost."
+  - path: "**/*"
+    alwaysApply: false
+    askBeforeApply: true
+    comment: >
+      Confirm before applying any changes. Also, check if a well-maintained open-source library exists before writing functionality from scratch.
+
 ---

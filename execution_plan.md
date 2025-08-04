@@ -94,6 +94,60 @@ CREATE TABLE workflows (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Execution and Scheduling Tables
+CREATE TABLE workflow_executions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
+  status VARCHAR(50) NOT NULL, -- 'pending', 'running', 'completed', 'failed', 'paused'
+  input_data JSONB,
+  output_data JSONB,
+  error_message TEXT,
+  started_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP,
+  created_by UUID REFERENCES users(id),
+  execution_time_ms INTEGER,
+  retry_count INTEGER DEFAULT 0
+);
+
+CREATE TABLE execution_steps (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  execution_id UUID REFERENCES workflow_executions(id) ON DELETE CASCADE,
+  node_id VARCHAR(255) NOT NULL,
+  step_number INTEGER NOT NULL,
+  status VARCHAR(50) NOT NULL, -- 'pending', 'running', 'completed', 'failed'
+  input_data JSONB,
+  output_data JSONB,
+  error_message TEXT,
+  started_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP,
+  execution_time_ms INTEGER
+);
+
+CREATE TABLE workflow_schedules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  cron_expression VARCHAR(255),
+  timezone VARCHAR(50) DEFAULT 'UTC',
+  is_active BOOLEAN DEFAULT true,
+  next_execution TIMESTAMP,
+  last_execution TIMESTAMP,
+  execution_window_start TIME,
+  execution_window_end TIME,
+  max_retries INTEGER DEFAULT 3,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE execution_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  execution_id UUID REFERENCES workflow_executions(id) ON DELETE CASCADE,
+  level VARCHAR(20) NOT NULL, -- 'info', 'warning', 'error', 'debug'
+  message TEXT NOT NULL,
+  timestamp TIMESTAMP DEFAULT NOW(),
+  metadata JSONB
+);
 ```
 
 **Day 4-7: API Endpoints**
@@ -111,6 +165,8 @@ CREATE TABLE workflows (
 - **Slack Node**: Webhook and channel management
 - **Data Node**: Input/output data handling
 - **Condition Node**: If/then logic builder
+- **Delay Node**: Time-based delays and pauses
+- **Schedule Node**: Recurring execution scheduling
 
 **Day 4-7: Node Configuration**
 - Build configuration forms for each node type
@@ -216,9 +272,27 @@ pip install langgraph langchain openai
 - Fix critical issues and bugs
 - Prepare for next phase
 
-### Phase 4: Integrations & Templates (Weeks 13-16) - "Connecting the World"
+### Phase 4: Scheduling & Integrations (Weeks 13-16) - "Automation & Connectivity"
 
-#### Week 13: Email Integration
+#### Week 13: Scheduling System
+**Day 1-3: Job Queue Setup**
+```bash
+# Install scheduling dependencies
+npm install bull bullmq node-cron
+```
+
+- Set up Redis for job queuing
+- Implement Bull/BullMQ for job management
+- Create cron-based scheduling system
+- Add timezone support
+
+**Day 4-7: Schedule Node Implementation**
+- Build visual schedule configuration interface
+- Implement cron expression builder
+- Add calendar-based scheduling
+- Create execution window management
+
+#### Week 14: Email Integration
 **Day 1-3: SMTP Integration**
 - Implement SMTP email sending
 - Add email template system
@@ -231,31 +305,18 @@ pip install langgraph langchain openai
 - Create email template library
 - Add email validation and testing
 
-#### Week 14: Slack Integration
-**Day 1-3: Slack API Integration**
-- Implement Slack webhook system
-- Add channel management
-- Create message formatting
-- Build user mention system
+#### Week 15: Content Creation Nodes
+**Day 1-3: Blog Writer Node**
+- Implement AI-powered content generation
+- Add SEO optimization capabilities
+- Create content template system
+- Build content quality validation
 
-**Day 4-7: Slack Node Features**
-- Add message scheduling
-- Implement thread management
-- Create notification system
-- Add Slack app installation flow
-
-#### Week 15: Lead Qualification Template
-**Day 1-3: Template Development**
-- Design lead qualification workflow
-- Implement data enrichment nodes
-- Create scoring algorithm
-- Build CRM integration placeholder
-
-**Day 4-7: Template Testing**
-- Test template with real data
-- Validate scoring accuracy
-- Optimize workflow performance
-- Create template documentation
+**Day 4-7: Social Media Node**
+- Implement platform-specific post generation
+- Add image generation integration
+- Create social media scheduling
+- Build engagement tracking
 
 #### Week 16: Human-in-the-Loop
 **Day 1-3: Approval System**
@@ -270,7 +331,7 @@ pip install langgraph langchain openai
 - Create emergency bypass options
 - Build audit trail system
 
-### Phase 5: Polish & Launch (Weeks 17-20) - "Ready for the World"
+### Phase 5: Analytics & Launch (Weeks 17-20) - "Ready for the World"
 
 #### Week 17: Analytics & Monitoring
 **Day 1-3: Dashboard Development**
@@ -285,18 +346,18 @@ pip install langgraph langchain openai
 - Add performance alerts
 - Create health check endpoints
 
-#### Week 18: Security & Compliance
-**Day 1-3: Security Hardening**
-- Implement data encryption
-- Add API rate limiting
-- Create security audit logs
-- Set up vulnerability scanning
+#### Week 18: Historical Analytics
+**Day 1-3: Execution Analytics**
+- Implement execution history analysis
+- Create performance trend tracking
+- Add success rate analytics
+- Build bottleneck identification
 
-**Day 4-7: Compliance Features**
-- Add GDPR compliance features
-- Implement data retention policies
-- Create privacy controls
-- Build compliance reporting
+**Day 4-7: Predictive Analytics**
+- Implement execution pattern analysis
+- Create resource usage forecasting
+- Add anomaly detection
+- Build optimization recommendations
 
 #### Week 19: Performance & Optimization
 **Day 1-3: Frontend Optimization**
@@ -333,7 +394,8 @@ src/
 │   ├── ui/           # Reusable UI components
 │   ├── nodes/        # Workflow node components
 │   ├── canvas/       # React Flow canvas components
-│   └── layout/       # Layout components
+│   ├── layout/       # Layout components
+│   └── analytics/    # Analytics and monitoring components
 ├── hooks/            # Custom React hooks
 ├── stores/           # Zustand state stores
 ├── services/         # API service layer
@@ -351,7 +413,9 @@ backend/
 │   ├── services/     # Business logic
 │   ├── middleware/   # Express middleware
 │   ├── utils/        # Utility functions
-│   └── ai/           # AI integration layer
+│   ├── ai/           # AI integration layer
+│   ├── scheduler/    # Job scheduling and queuing
+│   └── analytics/    # Analytics and monitoring
 ├── config/           # Configuration files
 └── tests/            # Test files
 ```
@@ -399,13 +463,16 @@ CREATE TABLE workflows (
 CREATE TABLE workflow_executions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
-  status VARCHAR(50) NOT NULL, -- 'running', 'completed', 'failed', 'paused'
+  status VARCHAR(50) NOT NULL, -- 'pending', 'running', 'completed', 'failed', 'paused'
   input_data JSONB,
   output_data JSONB,
   error_message TEXT,
   started_at TIMESTAMP DEFAULT NOW(),
   completed_at TIMESTAMP,
-  created_by UUID REFERENCES users(id)
+  created_by UUID REFERENCES users(id),
+  execution_time_ms INTEGER,
+  retry_count INTEGER DEFAULT 0,
+  scheduled_execution_id UUID
 );
 
 -- Execution Steps
@@ -419,20 +486,72 @@ CREATE TABLE execution_steps (
   output_data JSONB,
   error_message TEXT,
   started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP
+  completed_at TIMESTAMP,
+  execution_time_ms INTEGER
+);
+
+-- Workflow Schedules
+CREATE TABLE workflow_schedules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  cron_expression VARCHAR(255),
+  timezone VARCHAR(50) DEFAULT 'UTC',
+  is_active BOOLEAN DEFAULT true,
+  next_execution TIMESTAMP,
+  last_execution TIMESTAMP,
+  execution_window_start TIME,
+  execution_window_end TIME,
+  max_retries INTEGER DEFAULT 3,
+  retry_delay_minutes INTEGER DEFAULT 5,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Execution Logs
+CREATE TABLE execution_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  execution_id UUID REFERENCES workflow_executions(id) ON DELETE CASCADE,
+  level VARCHAR(20) NOT NULL, -- 'info', 'warning', 'error', 'debug'
+  message TEXT NOT NULL,
+  timestamp TIMESTAMP DEFAULT NOW(),
+  metadata JSONB
 );
 
 -- Integrations
 CREATE TABLE integrations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
-  type VARCHAR(50) NOT NULL, -- 'email', 'slack', 'crm'
+  type VARCHAR(50) NOT NULL, -- 'email', 'slack', 'wordpress', 'linkedin'
   name VARCHAR(255) NOT NULL,
   config JSONB NOT NULL,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Analytics and Performance
+CREATE TABLE execution_analytics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  total_executions INTEGER DEFAULT 0,
+  successful_executions INTEGER DEFAULT 0,
+  failed_executions INTEGER DEFAULT 0,
+  avg_execution_time_ms INTEGER,
+  total_execution_time_ms BIGINT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create indexes for performance
+CREATE INDEX idx_workflow_executions_workflow_id ON workflow_executions(workflow_id);
+CREATE INDEX idx_workflow_executions_status ON workflow_executions(status);
+CREATE INDEX idx_workflow_executions_started_at ON workflow_executions(started_at);
+CREATE INDEX idx_execution_steps_execution_id ON execution_steps(execution_id);
+CREATE INDEX idx_workflow_schedules_next_execution ON workflow_schedules(next_execution);
+CREATE INDEX idx_workflow_schedules_is_active ON workflow_schedules(is_active);
+CREATE INDEX idx_execution_logs_execution_id ON execution_logs(execution_id);
+CREATE INDEX idx_execution_logs_timestamp ON execution_logs(timestamp);
 ```
 
 ## Development Guidelines
@@ -450,7 +569,8 @@ main (production)
 ├── develop (integration)
 ├── feature/workflow-builder
 ├── feature/ai-integration
-├── feature/email-integration
+├── feature/scheduling
+├── feature/analytics
 └── hotfix/critical-bug
 ```
 
@@ -479,14 +599,14 @@ main (production)
 - [ ] Real-time monitoring operational
 - [ ] Error handling robust
 
-### Week 16 Milestone: Integrations Complete
+### Week 16 Milestone: Scheduling & Integrations Complete
+- [ ] Scheduling system operational
 - [ ] Email integration working
-- [ ] Slack integration working
-- [ ] Lead qualification template functional
+- [ ] Content creation nodes functional
 - [ ] Human-in-the-loop operational
 
 ### Week 20 Milestone: Launch Ready
-- [ ] All features tested and working
+- [ ] Analytics and reporting complete
 - [ ] Performance optimized
 - [ ] Security hardened
 - [ ] Production deployment complete
@@ -498,6 +618,7 @@ main (production)
 - **Performance Issues**: Implement caching and optimization from day one
 - **Integration Failures**: Use mock services during development
 - **Scalability Concerns**: Design for horizontal scaling from the start
+- **Scheduling Complexity**: Use proven libraries like Bull/BullMQ
 
 ### Business Risks
 - **Scope Creep**: Stick to MVP features, defer nice-to-haves
