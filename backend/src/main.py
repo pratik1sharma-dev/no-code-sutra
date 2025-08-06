@@ -12,9 +12,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import LangGraph workflows
-from src.services.langgraph_workflows.ai_workflows import WorkflowFactory
-from src.services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
-from src.services.aiWorkflowGenerator import AIWorkflowGenerator
+from services.langgraph_workflows.ai_workflows import WorkflowFactory
+from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
+from services.aiWorkflowGenerator import AIWorkflowGenerator
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -83,7 +83,7 @@ langgraph_executor = None
 def get_workflow_factory():
     global workflow_factory
     if workflow_factory is None:
-        from src.services.langgraph_workflows.ai_workflows import WorkflowFactory
+        from services.langgraph_workflows.ai_workflows import WorkflowFactory
         workflow_factory = WorkflowFactory()
     return workflow_factory
 
@@ -97,7 +97,7 @@ def get_ai_generator():
 def get_langgraph_executor():
     global langgraph_executor
     if langgraph_executor is None:
-        from src.services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
+        from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
         langgraph_executor = LangGraphWorkflowExecutor()
     return langgraph_executor
 

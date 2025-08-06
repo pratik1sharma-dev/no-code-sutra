@@ -1,6 +1,6 @@
 from typing import Dict, Any
-from src.services.langgraph_nodes.ai_nodes import SimpleAIWorkflowNodes
-from src.workflow_types.workflow import ResearchState, LeadQualificationState
+from services.langgraph_nodes.ai_nodes import SimpleAIWorkflowNodes
+from workflow_types.workflow import ResearchState, LeadQualificationState
 
 class SimpleWorkflows:
     def __init__(self):
