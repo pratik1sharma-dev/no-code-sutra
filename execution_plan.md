@@ -2,648 +2,525 @@
 
 ## Project Setup & Development Roadmap
 
-### Phase 1: Foundation (Weeks 1-4) - "Building the Base"
+### Phase 1: Conversational Interface (Weeks 1-2) - "AI-Powered Entry Point"
 
-#### Week 1: Project Initialization
-**Day 1-2: Development Environment Setup**
+#### Week 1: Landing Page & Conversational UI
+**Day 1-2: Landing Page Development**
 ```bash
-# Create project structure
-mkdir no-code-sutra
-cd no-code-sutra
-npm create vite@latest frontend -- --template react-ts
-cd frontend
-npm install
+# Create new landing page components
+mkdir src/components/landing
+mkdir src/services
 ```
 
-**Key Dependencies to Install:**
-- React Flow (for visual workflow builder)
-- Tailwind CSS (for modern styling)
-- Zustand (for state management)
-- React Router (for navigation)
-- Axios (for API calls)
-- React Hook Form (for forms)
+**Key Components to Build:**
+- Landing page with conversational interface
+- Prompt input area with smart suggestions
+- Chat interface for clarification
+- Workflow preview component
+- Navigation to existing editor
 
-**Day 3-4: Backend Foundation**
+**Day 3-4: LLM Integration Foundation**
+```bash
+# Install LLM dependencies
+npm install openai @langchain/openai @langchain/core
+```
+
+**Day 5-7: Workflow Generation Service**
+- Create workflow generation service
+- Implement intent parsing
+- Build node selection logic
+- Add integration detection
+
+#### Week 2: AI-Powered Workflow Generation
+**Day 1-3: Intent Parsing & Workflow Creation**
+- Implement LLM-based intent parsing
+- Create workflow structure generation
+- Add smart node selection
+- Build edge creation logic
+
+**Day 4-7: Integration & Testing**
+- Connect conversational interface to existing editor
+- Test workflow generation end-to-end
+- Add error handling and validation
+- Implement cost estimation
+
+### Phase 2: AI Integration & Workflow Generation (Weeks 2-3) - "Smart Automation"
+
+#### Week 2: Advanced Generation Features
+**Day 1-3: Enhanced LLM Integration**
+- Implement context-aware question generation
+- Add progressive disclosure logic
+- Build validation feedback system
+- Create integration requirement detection
+
+**Day 4-7: Dynamic Node System**
+- Create extensible node registry
+- Implement dynamic node loading
+- Add configuration schema validation
+- Build node metadata system
+
+#### Week 3: Backend Integration
+**Day 1-3: Backend Foundation**
 ```bash
 # Backend setup
 mkdir backend
 cd backend
 npm init -y
-npm install express cors dotenv bcryptjs jsonwebtoken
+npm install express cors dotenv openai
 npm install -D nodemon typescript @types/node @types/express
 ```
 
-**Day 5-7: Database & Authentication**
-- Set up PostgreSQL database
-- Create user authentication system
-- Implement JWT token management
-- Set up basic API structure
+**Day 4-7: API Development**
+- Create workflow generation API endpoints
+- Implement LLM service integration
+- Add workflow validation and storage
+- Build integration requirement tracking
 
-#### Week 2: Core UI Framework
-**Day 1-3: Design System & Components**
-- Create design tokens (colors, typography, spacing)
-- Build reusable UI components:
-  - Button variants (primary, secondary, danger)
-  - Input fields with validation
-  - Modal dialogs
-  - Navigation sidebar
-  - Header with user menu
+### Phase 3: Visual Editor Integration (Weeks 3-4) - "Seamless Experience"
 
-**Day 4-7: Layout & Navigation**
-- Implement responsive layout system
-- Create main dashboard structure
-- Set up routing for different pages
-- Build workspace management interface
+#### Week 3: Editor Enhancement
+**Day 1-3: Generated Workflow Integration**
+- Modify existing WorkflowBuilder to accept generated workflows
+- Add generated workflow metadata display
+- Implement seamless import functionality
+- Create integration setup guidance
 
-#### Week 3: Canvas Foundation
-**Day 1-3: React Flow Integration**
-- Set up React Flow canvas with infinite scroll
-- Implement basic node dragging and dropping
-- Create connection system between nodes
-- Add zoom and pan functionality
+**Day 4-7: User Experience Polish**
+- Add workflow preview before import
+- Implement one-click customization
+- Create guided setup flows
+- Add validation and error handling
 
-**Day 4-7: Node System Foundation**
-- Create base node component structure
-- Implement node type registry
-- Build properties panel for node configuration
-- Add node validation system
+#### Week 4: Advanced Features
+**Day 1-3: Template System**
+- Create industry-specific templates
+- Implement use case examples
+- Add template customization
+- Build template sharing system
 
-#### Week 4: Data Layer & API
-**Day 1-3: Database Schema**
-```sql
--- Core tables
-CREATE TABLE users (
-  id UUID PRIMARY KEY,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
-);
+**Day 4-7: Testing & Optimization**
+- End-to-end testing of conversational flow
+- Performance optimization
+- User experience improvements
+- Bug fixes and polish
 
-CREATE TABLE workspaces (
-  id UUID PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  owner_id UUID REFERENCES users(id),
-  created_at TIMESTAMP DEFAULT NOW()
-);
+### Phase 4: Advanced Features & Launch (Weeks 5-6) - "Production Ready"
 
-CREATE TABLE workflows (
-  id UUID PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  workspace_id UUID REFERENCES workspaces(id),
-  data JSONB NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
+#### Week 5: Advanced Integrations
+**Day 1-3: Real Integrations**
+- Implement email service integration
+- Add Slack API integration
+- Create LinkedIn lead research
+- Build content platform integrations
 
--- Execution and Scheduling Tables
-CREATE TABLE workflow_executions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
-  status VARCHAR(50) NOT NULL, -- 'pending', 'running', 'completed', 'failed', 'paused'
-  input_data JSONB,
-  output_data JSONB,
-  error_message TEXT,
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-  created_by UUID REFERENCES users(id),
-  execution_time_ms INTEGER,
-  retry_count INTEGER DEFAULT 0
-);
-
-CREATE TABLE execution_steps (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  execution_id UUID REFERENCES workflow_executions(id) ON DELETE CASCADE,
-  node_id VARCHAR(255) NOT NULL,
-  step_number INTEGER NOT NULL,
-  status VARCHAR(50) NOT NULL, -- 'pending', 'running', 'completed', 'failed'
-  input_data JSONB,
-  output_data JSONB,
-  error_message TEXT,
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-  execution_time_ms INTEGER
-);
-
-CREATE TABLE workflow_schedules (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
-  name VARCHAR(255) NOT NULL,
-  cron_expression VARCHAR(255),
-  timezone VARCHAR(50) DEFAULT 'UTC',
-  is_active BOOLEAN DEFAULT true,
-  next_execution TIMESTAMP,
-  last_execution TIMESTAMP,
-  execution_window_start TIME,
-  execution_window_end TIME,
-  max_retries INTEGER DEFAULT 3,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE execution_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  execution_id UUID REFERENCES workflow_executions(id) ON DELETE CASCADE,
-  level VARCHAR(20) NOT NULL, -- 'info', 'warning', 'error', 'debug'
-  message TEXT NOT NULL,
-  timestamp TIMESTAMP DEFAULT NOW(),
-  metadata JSONB
-);
-```
-
-**Day 4-7: API Endpoints**
-- User authentication endpoints
-- Workspace CRUD operations
-- Workflow save/load functionality
-- Basic error handling and validation
-
-### Phase 2: Core Builder (Weeks 5-8) - "Visual Workflow Creation"
-
-#### Week 5: Node Library Development
-**Day 1-3: Core Node Types**
-- **AI Agent Node**: LangGraph integration placeholder
-- **Email Node**: SMTP configuration interface
-- **Slack Node**: Webhook and channel management
-- **Data Node**: Input/output data handling
-- **Condition Node**: If/then logic builder
-- **Delay Node**: Time-based delays and pauses
-- **Schedule Node**: Recurring execution scheduling
-
-**Day 4-7: Node Configuration**
-- Build configuration forms for each node type
-- Implement validation rules for node settings
-- Create node preview and testing interface
-- Add node documentation and help tooltips
-
-#### Week 6: Workflow Logic & Validation
-**Day 1-3: Connection System**
-- Implement connection validation rules
-- Add connection types (success, error, conditional)
-- Create connection visual indicators
-- Build connection deletion and editing
-
-**Day 4-7: Workflow Validation**
-- Implement workflow validation engine
-- Add circular dependency detection
-- Create workflow completeness checks
-- Build error highlighting and suggestions
-
-#### Week 7: Save & Load System
-**Day 1-3: Workflow Persistence**
-- Implement workflow serialization
-- Create version control system
-- Add auto-save functionality
-- Build workflow export/import
-
-**Day 4-7: Workspace Management**
-- Create workspace switching interface
-- Implement workflow organization (folders, tags)
-- Add workflow search and filtering
-- Build workflow templates system
-
-#### Week 8: User Experience Polish
-**Day 1-3: Performance Optimization**
-- Implement lazy loading for large workflows
-- Add workflow caching system
-- Optimize React Flow rendering
-- Add loading states and progress indicators
-
-**Day 4-7: Accessibility & Polish**
-- Add keyboard navigation support
-- Implement screen reader compatibility
-- Add undo/redo functionality
-- Polish animations and transitions
-
-### Phase 3: AI Integration (Weeks 9-12) - "Intelligence Layer"
-
-#### Week 9: LangGraph Foundation
-**Day 1-3: LangGraph Setup**
-```python
-# Backend AI integration
-pip install langgraph langchain openai
-```
-
-- Set up LangGraph execution environment
-- Create basic agent framework
-- Implement workflow state management
-- Add agent memory and context
-
-**Day 4-7: Agent Node Implementation**
-- Build AI agent node configuration
-- Implement prompt template system
-- Add model selection (GPT-4, Claude, etc.)
-- Create agent testing interface
-
-#### Week 10: Execution Engine
-**Day 1-3: Workflow Execution**
+**Day 4-7: Execution Engine**
 - Implement workflow execution engine
-- Create step-by-step execution tracking
-- Add execution state management
-- Build execution history logging
+- Add real-time monitoring
+- Create execution history
+- Build error handling and retry logic
 
-**Day 4-7: Real-time Monitoring**
-- Implement WebSocket connections
-- Create real-time execution updates
-- Add progress indicators and status
-- Build execution pause/resume functionality
+#### Week 6: Launch Preparation
+**Day 1-3: Production Setup**
+- Deploy to production environment
+- Set up monitoring and analytics
+- Implement security measures
+- Create user documentation
 
-#### Week 11: Error Handling & Recovery
-**Day 1-3: Error Management**
-- Implement comprehensive error handling
-- Add retry logic for failed steps
-- Create error recovery mechanisms
-- Build error reporting and analytics
-
-**Day 4-7: Performance Optimization**
-- Optimize AI model calls
-- Implement request batching
-- Add execution timeouts
-- Create performance monitoring
-
-#### Week 12: Testing & Validation
-**Day 1-3: Integration Testing**
-- Test end-to-end workflow execution
-- Validate AI agent responses
-- Test error scenarios and recovery
-- Performance testing under load
-
-**Day 4-7: User Testing**
-- Conduct internal user testing
-- Gather feedback on usability
-- Fix critical issues and bugs
-- Prepare for next phase
-
-### Phase 4: Scheduling & Integrations (Weeks 13-16) - "Automation & Connectivity"
-
-#### Week 13: Scheduling System
-**Day 1-3: Job Queue Setup**
-```bash
-# Install scheduling dependencies
-npm install bull bullmq node-cron
-```
-
-- Set up Redis for job queuing
-- Implement Bull/BullMQ for job management
-- Create cron-based scheduling system
-- Add timezone support
-
-**Day 4-7: Schedule Node Implementation**
-- Build visual schedule configuration interface
-- Implement cron expression builder
-- Add calendar-based scheduling
-- Create execution window management
-
-#### Week 14: Email Integration
-**Day 1-3: SMTP Integration**
-- Implement SMTP email sending
-- Add email template system
-- Create email response parsing
-- Build email attachment handling
-
-**Day 4-7: Email Node Enhancement**
-- Add email scheduling functionality
-- Implement email tracking and analytics
-- Create email template library
-- Add email validation and testing
-
-#### Week 15: Content Creation Nodes
-**Day 1-3: Blog Writer Node**
-- Implement AI-powered content generation
-- Add SEO optimization capabilities
-- Create content template system
-- Build content quality validation
-
-**Day 4-7: Social Media Node**
-- Implement platform-specific post generation
-- Add image generation integration
-- Create social media scheduling
-- Build engagement tracking
-
-#### Week 16: Human-in-the-Loop
-**Day 1-3: Approval System**
-- Implement approval node type
-- Create approval request interface
-- Add approval notification system
-- Build approval history tracking
-
-**Day 4-7: Override Capabilities**
-- Add manual intervention interface
-- Implement data override functionality
-- Create emergency bypass options
-- Build audit trail system
-
-### Phase 5: Analytics & Launch (Weeks 17-20) - "Ready for the World"
-
-#### Week 17: Analytics & Monitoring
-**Day 1-3: Dashboard Development**
-- Create analytics dashboard
-- Implement usage tracking
-- Add performance metrics
-- Build reporting system
-
-**Day 4-7: Monitoring System**
-- Set up application monitoring
-- Implement error tracking
-- Add performance alerts
-- Create health check endpoints
-
-#### Week 18: Historical Analytics
-**Day 1-3: Execution Analytics**
-- Implement execution history analysis
-- Create performance trend tracking
-- Add success rate analytics
-- Build bottleneck identification
-
-**Day 4-7: Predictive Analytics**
-- Implement execution pattern analysis
-- Create resource usage forecasting
-- Add anomaly detection
-- Build optimization recommendations
-
-#### Week 19: Performance & Optimization
-**Day 1-3: Frontend Optimization**
-- Optimize bundle size
-- Implement code splitting
-- Add service worker for caching
-- Optimize image loading
-
-**Day 4-7: Backend Optimization**
-- Optimize database queries
-- Implement caching strategies
-- Add load balancing
-- Optimize API response times
-
-#### Week 20: Launch Preparation
-**Day 1-3: Final Testing**
-- Conduct comprehensive testing
-- Fix critical bugs
-- Performance testing
-- Security testing
-
-**Day 4-7: Deployment & Launch**
-- Deploy to production
-- Set up monitoring
-- Create launch documentation
-- Prepare support system
+**Day 4-7: Launch & Optimization**
+- Soft launch with beta users
+- Collect feedback and iterate
+- Performance optimization
+- Marketing and user acquisition
 
 ## Technical Implementation Details
 
 ### Frontend Architecture
+
+#### New Components Structure
 ```
 src/
+├── pages/
+│   ├── LandingPage.tsx              # New conversational interface
+│   ├── Dashboard.tsx                # Existing dashboard
+│   └── WorkflowBuilder.tsx          # Enhanced existing editor
 ├── components/
-│   ├── ui/           # Reusable UI components
-│   ├── nodes/        # Workflow node components
-│   ├── canvas/       # React Flow canvas components
-│   ├── layout/       # Layout components
-│   └── analytics/    # Analytics and monitoring components
-├── hooks/            # Custom React hooks
-├── stores/           # Zustand state stores
-├── services/         # API service layer
-├── types/            # TypeScript type definitions
-├── utils/            # Utility functions
-└── pages/            # Page components
+│   ├── landing/                     # New landing page components
+│   │   ├── HeroSection.tsx
+│   │   ├── PromptInterface.tsx
+│   │   ├── ChatInterface.tsx
+│   │   ├── WorkflowPreview.tsx
+│   │   └── Examples.tsx
+│   ├── workflow/                    # Existing workflow components
+│   │   ├── nodes/
+│   │   ├── NodePalette.tsx
+│   │   └── GeneratedWorkflowInfo.tsx # New component
+│   └── ui/                          # Existing UI components
+├── services/                        # New services
+│   ├── workflowGenerator.ts
+│   ├── intentParser.ts
+│   └── nodeRegistry.ts
+├── stores/                          # Enhanced existing stores
+│   └── workflowStore.ts
+└── types/                           # Enhanced existing types
+    └── workflow.ts
+```
+
+#### Landing Page Implementation
+```typescript
+// src/pages/LandingPage.tsx
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { HeroSection } from '../components/landing/HeroSection';
+import { PromptInterface } from '../components/landing/PromptInterface';
+import { ChatInterface } from '../components/landing/ChatInterface';
+import { WorkflowPreview } from '../components/landing/WorkflowPreview';
+import { Examples } from '../components/landing/Examples';
+import { useWorkflowGenerator } from '../services/workflowGenerator';
+
+const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
+  const [userPrompt, setUserPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedWorkflow, setGeneratedWorkflow] = useState(null);
+  const [showChat, setShowChat] = useState(false);
+  
+  const { generateWorkflow, askClarification } = useWorkflowGenerator();
+
+  const handleGenerateWorkflow = async () => {
+    setIsGenerating(true);
+    try {
+      const workflow = await generateWorkflow(userPrompt);
+      setGeneratedWorkflow(workflow);
+      
+      if (workflow.needsClarification) {
+        setShowChat(true);
+      } else {
+        navigateToEditor(workflow);
+      }
+    } catch (error) {
+      console.error('Failed to generate workflow:', error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const navigateToEditor = (workflow: any) => {
+    const workflowData = encodeURIComponent(JSON.stringify(workflow));
+    navigate(`/workflow/new?generated=${workflowData}`);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <HeroSection />
+      
+      <main className="container mx-auto px-4 py-16">
+        <PromptInterface 
+          value={userPrompt}
+          onChange={setUserPrompt}
+          onGenerate={handleGenerateWorkflow}
+          isLoading={isGenerating}
+        />
+        
+        {showChat && (
+          <ChatInterface 
+            workflow={generatedWorkflow}
+            onComplete={navigateToEditor}
+          />
+        )}
+        
+        {generatedWorkflow && !showChat && (
+          <WorkflowPreview 
+            workflow={generatedWorkflow}
+            onCustomize={() => navigateToEditor(generatedWorkflow)}
+          />
+        )}
+        
+        <Examples />
+      </main>
+    </div>
+  );
+};
+
+export default LandingPage;
 ```
 
 ### Backend Architecture
-```
-backend/
-├── src/
-│   ├── controllers/  # API route handlers
-│   ├── models/       # Database models
-│   ├── services/     # Business logic
-│   ├── middleware/   # Express middleware
-│   ├── utils/        # Utility functions
-│   ├── ai/           # AI integration layer
-│   ├── scheduler/    # Job scheduling and queuing
-│   └── analytics/    # Analytics and monitoring
-├── config/           # Configuration files
-└── tests/            # Test files
+
+#### API Endpoints
+```typescript
+// backend/src/routes/workflow.ts
+import express from 'express';
+import { WorkflowGenerator } from '../services/WorkflowGenerator';
+
+const router = express.Router();
+const workflowGenerator = new WorkflowGenerator();
+
+// Generate workflow from natural language
+router.post('/generate', async (req, res) => {
+  try {
+    const { prompt, context } = req.body;
+    const workflow = await workflowGenerator.generateFromPrompt(prompt, context);
+    res.json(workflow);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate workflow' });
+  }
+});
+
+// Ask clarification questions
+router.post('/clarify', async (req, res) => {
+  try {
+    const { workflow, question } = req.body;
+    const clarification = await workflowGenerator.askClarification(workflow, question);
+    res.json(clarification);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get clarification' });
+  }
+});
+
+// Get node definitions
+router.get('/nodes/definitions', async (req, res) => {
+  try {
+    const definitions = await workflowGenerator.getNodeDefinitions();
+    res.json(definitions);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get node definitions' });
+  }
+});
+
+export default router;
 ```
 
-### Database Schema (Detailed)
+#### Workflow Generation Service
+```typescript
+// backend/src/services/WorkflowGenerator.ts
+import OpenAI from 'openai';
+import { NodeRegistry } from './NodeRegistry';
+
+export class WorkflowGenerator {
+  private openai: OpenAI;
+  private nodeRegistry: NodeRegistry;
+
+  constructor() {
+    this.openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+    this.nodeRegistry = new NodeRegistry();
+  }
+
+  async generateFromPrompt(prompt: string, context?: any) {
+    // 1. Parse user intent
+    const intent = await this.parseIntent(prompt);
+    
+    // 2. Generate workflow structure
+    const workflow = await this.createWorkflow(intent);
+    
+    // 3. Identify requirements
+    const requirements = await this.identifyRequirements(workflow);
+    
+    // 4. Check if clarification is needed
+    const needsClarification = this.checkClarificationNeeds(workflow, requirements);
+    
+    return {
+      nodes: workflow.nodes,
+      edges: workflow.edges,
+      metadata: {
+        title: intent.title,
+        description: intent.description,
+        estimatedCost: requirements.cost,
+        requiredIntegrations: requirements.integrations,
+        authRequirements: requirements.auth
+      },
+      needsClarification,
+      clarificationQuestions: needsClarification ? this.generateQuestions(workflow) : []
+    };
+  }
+
+  private async parseIntent(prompt: string) {
+    const response = await this.openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a workflow automation expert. Parse the user\'s intent and extract key information.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    });
+    
+    return JSON.parse(response.choices[0].message.content || '{}');
+  }
+
+  private async createWorkflow(intent: any) {
+    const response = await this.openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'system',
+          content: 'Generate a workflow structure based on the user intent. Return valid JSON with nodes and edges.'
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(intent)
+        }
+      ]
+    });
+    
+    return JSON.parse(response.choices[0].message.content || '{}');
+  }
+
+  private async identifyRequirements(workflow: any) {
+    const integrations = new Set<string>();
+    const auth = new Set<string>();
+    
+    workflow.nodes.forEach((node: any) => {
+      const nodeDef = this.nodeRegistry.getNodeDefinition(node.type);
+      if (nodeDef) {
+        nodeDef.requiredIntegrations?.forEach(integration => integrations.add(integration));
+        nodeDef.authRequirements?.forEach(authReq => auth.add(authReq));
+      }
+    });
+    
+    return {
+      integrations: Array.from(integrations),
+      auth: Array.from(auth),
+      cost: this.estimateCost(workflow)
+    };
+  }
+
+  private estimateCost(workflow: any): string {
+    // Simple cost estimation based on node types and frequency
+    const nodeCosts = {
+      aiAgent: 0.02,
+      email: 0.01,
+      slack: 0.005,
+      data: 0.001
+    };
+    
+    let totalCost = 0;
+    workflow.nodes.forEach((node: any) => {
+      totalCost += nodeCosts[node.type] || 0.01;
+    });
+    
+    return `$${totalCost.toFixed(2)} per execution`;
+  }
+}
+```
+
+### Database Schema Updates
+
+#### New Tables for Generated Workflows
 ```sql
--- Users and Authentication
-CREATE TABLE users (
+-- Generated workflow metadata
+CREATE TABLE generated_workflows (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  first_name VARCHAR(100),
-  last_name VARCHAR(100),
-  is_active BOOLEAN DEFAULT true,
+  user_id UUID REFERENCES users(id),
+  original_prompt TEXT NOT NULL,
+  generated_workflow JSONB NOT NULL,
+  metadata JSONB,
+  status VARCHAR(50) DEFAULT 'generated',
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Workspaces
-CREATE TABLE workspaces (
+-- Node definitions (for extensible system)
+CREATE TABLE node_definitions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(255) NOT NULL,
+  type VARCHAR(100) UNIQUE NOT NULL,
+  label VARCHAR(255) NOT NULL,
   description TEXT,
-  owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  is_public BOOLEAN DEFAULT false,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Workflows
-CREATE TABLE workflows (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
-  data JSONB NOT NULL,
-  version INTEGER DEFAULT 1,
-  is_template BOOLEAN DEFAULT false,
-  created_by UUID REFERENCES users(id),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Workflow Executions
-CREATE TABLE workflow_executions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
-  status VARCHAR(50) NOT NULL, -- 'pending', 'running', 'completed', 'failed', 'paused'
-  input_data JSONB,
-  output_data JSONB,
-  error_message TEXT,
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-  created_by UUID REFERENCES users(id),
-  execution_time_ms INTEGER,
-  retry_count INTEGER DEFAULT 0,
-  scheduled_execution_id UUID
-);
-
--- Execution Steps
-CREATE TABLE execution_steps (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  execution_id UUID REFERENCES workflow_executions(id) ON DELETE CASCADE,
-  node_id VARCHAR(255) NOT NULL,
-  step_number INTEGER NOT NULL,
-  status VARCHAR(50) NOT NULL, -- 'pending', 'running', 'completed', 'failed'
-  input_data JSONB,
-  output_data JSONB,
-  error_message TEXT,
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-  execution_time_ms INTEGER
-);
-
--- Workflow Schedules
-CREATE TABLE workflow_schedules (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
-  name VARCHAR(255) NOT NULL,
-  cron_expression VARCHAR(255),
-  timezone VARCHAR(50) DEFAULT 'UTC',
-  is_active BOOLEAN DEFAULT true,
-  next_execution TIMESTAMP,
-  last_execution TIMESTAMP,
-  execution_window_start TIME,
-  execution_window_end TIME,
-  max_retries INTEGER DEFAULT 3,
-  retry_delay_minutes INTEGER DEFAULT 5,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Execution Logs
-CREATE TABLE execution_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  execution_id UUID REFERENCES workflow_executions(id) ON DELETE CASCADE,
-  level VARCHAR(20) NOT NULL, -- 'info', 'warning', 'error', 'debug'
-  message TEXT NOT NULL,
-  timestamp TIMESTAMP DEFAULT NOW(),
-  metadata JSONB
-);
-
--- Integrations
-CREATE TABLE integrations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
-  type VARCHAR(50) NOT NULL, -- 'email', 'slack', 'wordpress', 'linkedin'
-  name VARCHAR(255) NOT NULL,
-  config JSONB NOT NULL,
+  category VARCHAR(100),
+  config_schema JSONB,
+  default_config JSONB,
+  required_integrations TEXT[],
+  auth_requirements TEXT[],
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Analytics and Performance
-CREATE TABLE execution_analytics (
+-- Integration requirements tracking
+CREATE TABLE integration_requirements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
-  date DATE NOT NULL,
-  total_executions INTEGER DEFAULT 0,
-  successful_executions INTEGER DEFAULT 0,
-  failed_executions INTEGER DEFAULT 0,
-  avg_execution_time_ms INTEGER,
-  total_execution_time_ms BIGINT,
-  created_at TIMESTAMP DEFAULT NOW()
+  workflow_id UUID REFERENCES workflows(id),
+  integration_type VARCHAR(100) NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',
+  config JSONB,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );
-
--- Create indexes for performance
-CREATE INDEX idx_workflow_executions_workflow_id ON workflow_executions(workflow_id);
-CREATE INDEX idx_workflow_executions_status ON workflow_executions(status);
-CREATE INDEX idx_workflow_executions_started_at ON workflow_executions(started_at);
-CREATE INDEX idx_execution_steps_execution_id ON execution_steps(execution_id);
-CREATE INDEX idx_workflow_schedules_next_execution ON workflow_schedules(next_execution);
-CREATE INDEX idx_workflow_schedules_is_active ON workflow_schedules(is_active);
-CREATE INDEX idx_execution_logs_execution_id ON execution_logs(execution_id);
-CREATE INDEX idx_execution_logs_timestamp ON execution_logs(timestamp);
 ```
 
 ## Development Guidelines
 
-### Code Quality Standards
-- **TypeScript**: Strict mode enabled
-- **ESLint**: Airbnb configuration
-- **Prettier**: Consistent code formatting
-- **Testing**: 80% code coverage minimum
-- **Documentation**: JSDoc for all functions
+### Code Organization
+- **Frontend**: React components with TypeScript
+- **Backend**: Node.js with Express and TypeScript
+- **Database**: PostgreSQL with Prisma ORM
+- **AI Integration**: OpenAI GPT-4 for workflow generation
+- **State Management**: Zustand for frontend state
+- **API Communication**: Axios for HTTP requests
 
-### Git Workflow
-```
-main (production)
-├── develop (integration)
-├── feature/workflow-builder
-├── feature/ai-integration
-├── feature/scheduling
-├── feature/analytics
-└── hotfix/critical-bug
-```
+### Testing Strategy
+- **Unit Tests**: Jest for service and utility functions
+- **Integration Tests**: API endpoint testing
+- **E2E Tests**: Playwright for user journey testing
+- **AI Testing**: Prompt testing and response validation
 
 ### Deployment Strategy
-- **Development**: Local development environment
-- **Staging**: AWS/GCP staging environment
-- **Production**: AWS/GCP production with CDN
+- **Frontend**: Vercel for static hosting
+- **Backend**: Railway or Heroku for API hosting
+- **Database**: Supabase or Railway PostgreSQL
+- **Monitoring**: Sentry for error tracking
 
 ## Success Criteria & Milestones
 
-### Week 4 Milestone: Foundation Complete
-- [ ] User authentication working
-- [ ] Basic React Flow canvas functional
-- [ ] Database schema implemented
-- [ ] API endpoints operational
+### Phase 1 Success Criteria
+- ✅ Landing page loads with conversational interface
+- ✅ Users can input natural language prompts
+- ✅ Basic workflow generation works
+- ✅ Generated workflows open in existing editor
 
-### Week 8 Milestone: Core Builder Complete
-- [ ] All node types implemented
-- [ ] Workflow save/load working
-- [ ] Validation system operational
-- [ ] User experience polished
+### Phase 2 Success Criteria
+- ✅ Advanced intent parsing with 90% accuracy
+- ✅ Dynamic node system loads from external source
+- ✅ Integration requirements are correctly identified
+- ✅ Cost estimation is within 20% accuracy
 
-### Week 12 Milestone: AI Integration Complete
-- [ ] LangGraph integration working
-- [ ] Workflow execution functional
-- [ ] Real-time monitoring operational
-- [ ] Error handling robust
+### Phase 3 Success Criteria
+- ✅ Seamless workflow import to visual editor
+- ✅ Generated workflow metadata is displayed
+- ✅ One-click customization works
+- ✅ Integration setup guidance is clear
 
-### Week 16 Milestone: Scheduling & Integrations Complete
-- [ ] Scheduling system operational
-- [ ] Email integration working
-- [ ] Content creation nodes functional
-- [ ] Human-in-the-loop operational
-
-### Week 20 Milestone: Launch Ready
-- [ ] Analytics and reporting complete
-- [ ] Performance optimized
-- [ ] Security hardened
-- [ ] Production deployment complete
+### Phase 4 Success Criteria
+- ✅ Real integrations work end-to-end
+- ✅ Workflow execution engine is stable
+- ✅ User can deploy workflows successfully
+- ✅ Platform is ready for production launch
 
 ## Risk Mitigation Strategies
 
 ### Technical Risks
-- **LangGraph Complexity**: Start with simple agents, gradually increase complexity
-- **Performance Issues**: Implement caching and optimization from day one
-- **Integration Failures**: Use mock services during development
-- **Scalability Concerns**: Design for horizontal scaling from the start
-- **Scheduling Complexity**: Use proven libraries like Bull/BullMQ
+- **LLM Reliability**: Implement fallback workflows and error handling
+- **Integration Complexity**: Start with simple integrations and expand gradually
+- **Performance**: Implement caching and optimization strategies
+- **Scalability**: Design for horizontal scaling from the start
 
 ### Business Risks
-- **Scope Creep**: Stick to MVP features, defer nice-to-haves
-- **Timeline Delays**: Buffer time in each phase for unexpected issues
-- **User Adoption**: Regular user testing and feedback incorporation
-- **Competition**: Focus on unique value proposition and user experience
+- **User Adoption**: Focus on simple, valuable use cases first
+- **Competition**: Differentiate through AI-powered generation
+- **Cost Management**: Implement usage-based pricing and cost controls
+- **Security**: Implement enterprise-grade security measures
 
 ## Next Steps
 
-1. **Immediate Actions** (This Week):
-   - Set up development environment
-   - Create project repository
-   - Install core dependencies
-   - Set up database
+1. **Start Phase 1**: Build landing page and conversational interface
+2. **Set up LLM Integration**: Configure OpenAI API and test workflow generation
+3. **Enhance Existing Editor**: Modify to accept generated workflows
+4. **Test End-to-End**: Validate complete user journey
+5. **Launch MVP**: Deploy and gather user feedback
 
-2. **Week 1 Goals**:
-   - Basic React app running
-   - Authentication system working
-   - Database connected
-   - Basic API structure
-
-3. **Success Metrics**:
-   - Development environment fully operational
-   - First user can log in and access dashboard
-   - Basic workflow canvas loads without errors
-   - Database operations working correctly
-
-This execution plan provides a clear roadmap for building No Code Sutra. Each phase builds upon the previous one, ensuring steady progress toward a fully functional platform. The modular approach allows for iterative development and testing throughout the process. 
+The conversational-first approach with AI-powered workflow generation positions No Code Sutra as a unique solution in the no-code automation space, combining the ease of natural language with the power of visual customization. 
