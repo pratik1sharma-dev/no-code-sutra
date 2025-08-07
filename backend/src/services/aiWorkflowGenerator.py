@@ -1,29 +1,83 @@
 import openai
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import os
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
+from langchain_community.llms import HuggingFaceEndpoint
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.language_models import BaseLanguageModel
+
+# Load environment variables
+load_dotenv()
 
 class AIWorkflowGenerator:
     def __init__(self):
+        self.llm = self._initialize_llm()
+        self.client = None  # Keep for backward compatibility
+
+    def _initialize_llm(self) -> Optional[BaseLanguageModel]:
+        """Initialize the best available LLM based on environment configuration"""
+        
+        # Priority 1: Ollama (local, free)
+        if os.getenv("USE_OLLAMA", "false").lower() == "true":
+            try:
+                model_name = os.getenv("OLLAMA_MODEL", "llama3.1")
+                return ChatOllama(
+                    model=model_name,
+                    temperature=0.7
+                )
+            except Exception as e:
+                print(f"Ollama not available: {e}")
+        
+        # Priority 2: Hugging Face (free tier)
+        hf_token = os.getenv("HUGGINGFACE_API_TOKEN")
+        if hf_token:
+            try:
+                model_id = os.getenv("HF_MODEL_ID", "meta-llama/Llama-3.1-8B-Instruct")
+                return HuggingFaceEndpoint(
+                    endpoint_url=f"https://api-inference.huggingface.co/models/{model_id}",
+                    huggingfacehub_api_token=hf_token,
+                    task="text-generation",
+                    model_kwargs={"temperature": 0.7}
+                )
+            except Exception as e:
+                print(f"Hugging Face not available: {e}")
+        
+        # Priority 3: OpenAI (fallback)
         api_key = os.getenv("OPENAI_API_KEY")
         if api_key and api_key != "your_openai_api_key_here":
-            self.client = openai.OpenAI(api_key=api_key)
-            self.llm = ChatOpenAI(
-                model="gpt-4",
-                temperature=0.7,
-                api_key=api_key
-            )
-        else:
-            self.client = None
-            self.llm = None
+            try:
+                return ChatOpenAI(
+                    model="gpt-4",
+                    temperature=0.7,
+                    api_key=api_key
+                )
+            except Exception as e:
+                print(f"OpenAI not available: {e}")
+        
+        # Priority 4: Together AI (very cheap alternative)
+        together_api_key = os.getenv("TOGETHER_API_KEY")
+        if together_api_key:
+            try:
+                return ChatOpenAI(
+                    model="meta-llama/Llama-3.1-8B-Instruct",
+                    temperature=0.7,
+                    api_key=together_api_key,
+                    base_url="https://api.together.xyz/v1"
+                )
+            except Exception as e:
+                print(f"Together AI not available: {e}")
+        
+        print("No LLM provider configured, using fallback workflow generation")
+        return None
 
     async def generateWorkflow(self, request: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            # Check if LangChain LLM is available
+            # Check if LLM is available
             if self.llm is None:
-                print("OpenAI API key not configured, using fallback workflow")
+                print("No LLM provider configured, using fallback workflow")
                 return self._generate_fallback_workflow(request.get('prompt', ''))
             
             system_prompt = self._build_system_prompt()
