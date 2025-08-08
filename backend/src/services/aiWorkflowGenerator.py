@@ -216,18 +216,23 @@ class AIWorkflowGenerator:
 
 Your task is to analyze user requests and generate structured workflow definitions that can be executed by our platform.
 
-AVAILABLE NODE TYPES:
-- aiAgent: AI-powered tasks (research, analysis, content generation)
+AVAILABLE NODE TYPES (16 Core Types):
+- aiAgent: AI-powered tasks (research, analysis, content generation, image generation, SEO optimization)
+- webScraper: Extract data from websites and web pages
 - email: Send emails via SMTP or email services
 - slack: Send messages to Slack channels
-- data: Data processing and manipulation
+- notification: Send notifications (push, SMS, in-app)
+- data: Data processing, storage, and manipulation
+- fileOperation: File operations (read, write, move, delete)
+- database: Database operations (query, insert, update, delete)
+- apiCall: External API integrations (social media, third-party services)
 - condition: Conditional logic and branching
 - delay: Time delays and scheduling
 - schedule: Recurring task scheduling
-- blogWriter: Generate blog content
-- socialMedia: Post to social media platforms
-- imageGenerator: Generate images using AI
-- seoOptimizer: SEO optimization tasks
+- transform: Data transformation (CSV↔JSON, format conversion)
+- filter: Data filtering based on conditions
+- aggregate: Data aggregation (group, sum, count, average)
+- errorHandler: Error handling and recovery
 
 CRITICAL WORKFLOW RULES:
 1. EVERY node must be connected in execution order
@@ -390,25 +395,45 @@ Generate the workflow in the specified JSON format."""
 
     def _validate_and_enhance_nodes(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         logger.info(f"Validating and enhancing {len(nodes)} nodes")
+        
+        # Consolidated valid node types
         valid_node_types = [
-            'aiAgent', 'email', 'slack', 'data', 'condition', 'delay', 
-            'schedule', 'blogWriter', 'socialMedia', 'imageGenerator', 'seoOptimizer'
+            'aiAgent', 'webScraper', 'email', 'slack', 'notification', 'data',
+            'fileOperation', 'database', 'apiCall', 'condition', 'delay', 'schedule',
+            'transform', 'filter', 'aggregate', 'errorHandler'
         ]
+
+        # Map legacy types to consolidated types
+        legacy_to_new: Dict[str, str] = {
+            'blogWriter': 'aiAgent',
+            'socialMedia': 'apiCall',
+            'imageGenerator': 'aiAgent',
+            'seoOptimizer': 'aiAgent',
+            'langGraph': 'aiAgent'
+        }
 
         enhanced_nodes = []
         for index, node in enumerate(nodes):
             original_type = node.get('type', 'unknown')
+            
+            # Map legacy types to new consolidated types
+            if original_type in legacy_to_new:
+                mapped_type = legacy_to_new[original_type]
+                logger.info(f"Mapping legacy node type '{original_type}' to '{mapped_type}' for node {index + 1}")
+                original_type = mapped_type
+            
             if original_type not in valid_node_types:
                 logger.warning(f"Invalid node type '{original_type}' for node {index + 1}, defaulting to 'aiAgent'")
+                original_type = 'aiAgent'
             
             enhanced_node = {
                 "id": node.get('id') or f"node_{index + 1}",
-                "type": node.get('type') if node.get('type') in valid_node_types else 'aiAgent',
+                "type": original_type,
                 "label": node.get('label') or f"Step {index + 1}",
                 "position": node.get('position') or {"x": 100 + (index * 200), "y": 100},
                 "data": {
                     "label": node.get('data', {}).get('label') or node.get('label') or f"Step {index + 1}",
-                    "type": node.get('type') if node.get('type') in valid_node_types else 'aiAgent',
+                    "type": original_type,
                     "config": node.get('data', {}).get('config') or {},
                     "status": "idle",
                     "executionCount": 0

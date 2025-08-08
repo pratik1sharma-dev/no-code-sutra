@@ -71,6 +71,13 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
         <h3 className="text-sm font-semibold truncate">
           {data.label}
         </h3>
+        {/* Node Type Badge */}
+        <span 
+          className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-full"
+          title={`Node Type: ${data.type}`}
+        >
+          {data.type}
+        </span>
         <div className="ml-auto">
           <StatusIndicator status={data.status} />
         </div>

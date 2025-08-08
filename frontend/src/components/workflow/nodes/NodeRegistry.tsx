@@ -12,31 +12,38 @@ import {
   Share2,
   Image,
   Search,
-  Brain
+  Brain,
+  Globe,
+  Bell,
+  FolderOpen,
+  Server,
+  Zap,
+  Filter,
+  BarChart3,
+  AlertTriangle
 } from 'lucide-react';
 import type { WorkflowNodeData, NodeType } from '../../../types/workflow';
 import { BaseNode } from './BaseNode';
 import { AIAgentNode } from './AIAgentNode';
 import { EmailNode } from './EmailNode';
-import { LangGraphNode } from './LangGraphNode';
 
 // Node type definitions
 export const NODE_TYPES = {
   aiAgent: {
     type: 'aiAgent' as NodeType,
     label: 'AI Agent',
-    description: 'LangGraph AI agent for intelligent processing',
+    description: 'AI-powered tasks (research, analysis, content generation)',
     icon: Bot,
     color: 'primary',
     category: 'AI & ML'
   },
-  langGraph: {
-    type: 'langGraph' as NodeType,
-    label: 'LangGraph Agent',
-    description: 'AI-powered workflow nodes with LangGraph',
-    icon: Brain,
-    color: 'primary',
-    category: 'AI & ML'
+  webScraper: {
+    type: 'webScraper' as NodeType,
+    label: 'Web Scraper',
+    description: 'Extract data from websites and web pages',
+    icon: Globe,
+    color: 'secondary',
+    category: 'Data'
   },
   email: {
     type: 'email' as NodeType,
@@ -54,13 +61,45 @@ export const NODE_TYPES = {
     color: 'primary',
     category: 'Communication'
   },
+  notification: {
+    type: 'notification' as NodeType,
+    label: 'Notification',
+    description: 'Send notifications (push, SMS, in-app)',
+    icon: Bell,
+    color: 'warning',
+    category: 'Communication'
+  },
   data: {
     type: 'data' as NodeType,
     label: 'Data',
-    description: 'Input/output data handling',
+    description: 'Data processing, storage, and manipulation',
     icon: Database,
     color: 'secondary',
     category: 'Data'
+  },
+  fileOperation: {
+    type: 'fileOperation' as NodeType,
+    label: 'File Operation',
+    description: 'File operations (read, write, move, delete)',
+    icon: FolderOpen,
+    color: 'secondary',
+    category: 'Data'
+  },
+  database: {
+    type: 'database' as NodeType,
+    label: 'Database',
+    description: 'Database operations (query, insert, update, delete)',
+    icon: Server,
+    color: 'secondary',
+    category: 'Data'
+  },
+  apiCall: {
+    type: 'apiCall' as NodeType,
+    label: 'API Call',
+    description: 'External API integrations (social media, third-party services)',
+    icon: Zap,
+    color: 'primary',
+    category: 'Integration'
   },
   condition: {
     type: 'condition' as NodeType,
@@ -86,37 +125,37 @@ export const NODE_TYPES = {
     color: 'primary',
     category: 'Timing'
   },
-  blogWriter: {
-    type: 'blogWriter' as NodeType,
-    label: 'Blog Writer',
-    description: 'Generate blog content with AI',
+  transform: {
+    type: 'transform' as NodeType,
+    label: 'Transform',
+    description: 'Data transformation (CSV↔JSON, format conversion)',
     icon: FileText,
-    color: 'success',
-    category: 'Content'
+    color: 'secondary',
+    category: 'Data'
   },
-  socialMedia: {
-    type: 'socialMedia' as NodeType,
-    label: 'Social Media',
-    description: 'Post to social media platforms',
-    icon: Share2,
-    color: 'primary',
-    category: 'Content'
+  filter: {
+    type: 'filter' as NodeType,
+    label: 'Filter',
+    description: 'Data filtering based on conditions',
+    icon: Filter,
+    color: 'secondary',
+    category: 'Data'
   },
-  imageGenerator: {
-    type: 'imageGenerator' as NodeType,
-    label: 'Image Generator',
-    description: 'Generate images with AI',
-    icon: Image,
-    color: 'warning',
-    category: 'Content'
+  aggregate: {
+    type: 'aggregate' as NodeType,
+    label: 'Aggregate',
+    description: 'Data aggregation (group, sum, count, average)',
+    icon: BarChart3,
+    color: 'secondary',
+    category: 'Data'
   },
-  seoOptimizer: {
-    type: 'seoOptimizer' as NodeType,
-    label: 'SEO Optimizer',
-    description: 'Optimize content for SEO',
-    icon: Search,
-    color: 'success',
-    category: 'Content'
+  errorHandler: {
+    type: 'errorHandler' as NodeType,
+    label: 'Error Handler',
+    description: 'Error handling and recovery',
+    icon: AlertTriangle,
+    color: 'danger',
+    category: 'Logic'
   }
 } as const;
 
@@ -140,30 +179,39 @@ const DefaultNode: React.FC<NodeProps<WorkflowNodeData>> = (props) => {
 };
 
 // Placeholder components for unimplemented nodes
+const WebScraperNode = DefaultNode;
 const SlackNode = DefaultNode;
+const NotificationNode = DefaultNode;
 const DataNode = DefaultNode;
+const FileOperationNode = DefaultNode;
+const DatabaseNode = DefaultNode;
+const ApiCallNode = DefaultNode;
 const ConditionNode = DefaultNode;
 const DelayNode = DefaultNode;
 const ScheduleNode = DefaultNode;
-const BlogWriterNode = DefaultNode;
-const SocialMediaNode = DefaultNode;
-const ImageGeneratorNode = DefaultNode;
-const SEOOptimizerNode = DefaultNode;
+const TransformNode = DefaultNode;
+const FilterNode = DefaultNode;
+const AggregateNode = DefaultNode;
+const ErrorHandlerNode = DefaultNode;
 
 // Node component mapping
 const NODE_COMPONENTS: Record<NodeType, React.ComponentType<NodeProps<WorkflowNodeData>>> = {
   aiAgent: AIAgentNode,
-  langGraph: LangGraphNode,
+  webScraper: WebScraperNode,
   email: EmailNode,
   slack: SlackNode,
+  notification: NotificationNode,
   data: DataNode,
+  fileOperation: FileOperationNode,
+  database: DatabaseNode,
+  apiCall: ApiCallNode,
   condition: ConditionNode,
   delay: DelayNode,
   schedule: ScheduleNode,
-  blogWriter: BlogWriterNode,
-  socialMedia: SocialMediaNode,
-  imageGenerator: ImageGeneratorNode,
-  seoOptimizer: SEOOptimizerNode
+  transform: TransformNode,
+  filter: FilterNode,
+  aggregate: AggregateNode,
+  errorHandler: ErrorHandlerNode
 };
 
 // Node registry hook
