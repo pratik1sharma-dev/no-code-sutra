@@ -67,7 +67,11 @@ const WorkflowBuilder: React.FC = () => {
       const generatedWorkflowData = searchParams.get('generated');
       if (generatedWorkflowData) {
         try {
-          const workflow = JSON.parse(decodeURIComponent(generatedWorkflowData));
+          const workflowData = JSON.parse(decodeURIComponent(generatedWorkflowData));
+          
+          // Handle both nested and flat workflow structures
+          const workflow = workflowData.workflow || workflowData;
+          
           setCurrentWorkflow({
             ...workflow,
             id: id || uuidv4(),
