@@ -3,17 +3,21 @@ import type { Node, Edge } from 'reactflow';
 // Node Types
 export type NodeType = 
   | 'aiAgent'
-  | 'langGraph'
+  | 'webScraper'
   | 'email'
   | 'slack'
+  | 'notification'
   | 'data'
+  | 'fileOperation'
+  | 'database'
+  | 'apiCall'
   | 'condition'
   | 'delay'
   | 'schedule'
-  | 'blogWriter'
-  | 'socialMedia'
-  | 'imageGenerator'
-  | 'seoOptimizer';
+  | 'transform'
+  | 'filter'
+  | 'aggregate'
+  | 'errorHandler';
 
 // Edge Types
 export type EdgeType = 'default' | 'conditional' | 'data';
