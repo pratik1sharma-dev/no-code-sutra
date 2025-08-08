@@ -15,6 +15,8 @@ load_dotenv()
 from services.langgraph_workflows.ai_workflows import WorkflowFactory
 from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
 from services.aiWorkflowGenerator import AIWorkflowGenerator
+from services.workflow_executor import workflow_executor
+from services.node_executors import executor_registry
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -283,25 +285,60 @@ async def get_available_agents():
         ]
     }
 
+@app.get("/api/executors/available")
+async def get_available_executors():
+    """
+    Get list of available node executors
+    """
+    available_types = executor_registry.list_available_types()
+    executors_info = []
+    
+    for node_type in available_types:
+        info = executor_registry.get_executor_info(node_type)
+        if info:
+            executors_info.append(info)
+    
+    return {
+        "executors": executors_info,
+        "total_count": len(executors_info),
+        "supported_types": available_types
+    }
+
 @app.post("/api/workflows/execute")
 async def execute_workflow(request: WorkflowExecutionRequest):
     """
-    Execute a workflow built in the frontend using LangGraph
+    Execute a workflow using the new executor system
     """
     try:
-        import time
-        start_time = time.time()
+        # Execute workflow using the new executor
+        execution = await workflow_executor.execute_workflow(
+            workflow=request.workflow,
+            inputs=request.input_data
+        )
         
-        executor = get_langgraph_executor()
-        result = executor.execute_workflow(request.workflow, request.input_data)
-        
-        execution_time = time.time() - start_time
-        
+        # Convert execution to response format
         return {
-            "success": result.get("status") == "completed",
-            "data": result,
-            "execution_time": execution_time,
-            "timestamp": datetime.utcnow().isoformat()
+            "success": execution.status.value in ["completed"],
+            "execution_id": execution.execution_id,
+            "status": execution.status.value,
+            "data": {
+                "results": execution.results,
+                "steps": [
+                    {
+                        "node_id": step.node_id,
+                        "node_type": step.node_type,
+                        "status": step.status.value,
+                        "inputs": step.inputs,
+                        "outputs": step.outputs,
+                        "error": step.error,
+                        "execution_time": step.end_time - step.start_time if step.start_time and step.end_time else None
+                    }
+                    for step in execution.steps
+                ]
+            },
+            "execution_time": execution.end_time - execution.start_time if execution.start_time and execution.end_time else 0.0,
+            "timestamp": datetime.utcnow().isoformat(),
+            "error": execution.error
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
