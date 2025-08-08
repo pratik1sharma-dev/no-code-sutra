@@ -403,24 +403,9 @@ Generate the workflow in the specified JSON format."""
             'transform', 'filter', 'aggregate', 'errorHandler'
         ]
 
-        # Map legacy types to consolidated types
-        legacy_to_new: Dict[str, str] = {
-            'blogWriter': 'aiAgent',
-            'socialMedia': 'apiCall',
-            'imageGenerator': 'aiAgent',
-            'seoOptimizer': 'aiAgent',
-            'langGraph': 'aiAgent'
-        }
-
         enhanced_nodes = []
         for index, node in enumerate(nodes):
             original_type = node.get('type', 'unknown')
-            
-            # Map legacy types to new consolidated types
-            if original_type in legacy_to_new:
-                mapped_type = legacy_to_new[original_type]
-                logger.info(f"Mapping legacy node type '{original_type}' to '{mapped_type}' for node {index + 1}")
-                original_type = mapped_type
             
             if original_type not in valid_node_types:
                 logger.warning(f"Invalid node type '{original_type}' for node {index + 1}, defaulting to 'aiAgent'")
