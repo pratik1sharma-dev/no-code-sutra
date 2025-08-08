@@ -1,12 +1,13 @@
 import openai
 import json
 import logging
+import boto3
 from typing import Dict, Any, List, Optional
 import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
-from langchain_community.llms import HuggingFaceEndpoint
+from langchain_huggingface import HuggingFaceEndpoint
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models import BaseLanguageModel
 import asyncio
@@ -32,7 +33,26 @@ class AIWorkflowGenerator:
         """Initialize the best available LLM based on environment configuration"""
         logger.info("Initializing LLM provider")
         
-        # Priority 1: Ollama (local, free)
+        # Priority 1: Amazon Bedrock (fastest & most reliable)
+        bedrock_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+        if bedrock_token:
+            logger.info("Attempting to initialize Amazon Bedrock LLM")
+            try:
+                model_id = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-8b-instruct-v1:0")
+                region = os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
+                logger.info(f"Using Bedrock model: {model_id} in region: {region}")
+                
+                # Set the Bearer token as environment variable for Bedrock
+                os.environ['AWS_BEARER_TOKEN_BEDROCK'] = bedrock_token
+                
+                # Create a simple object to identify this as a Bedrock client
+                llm = type('BedrockClient', (), {'converse': True})()
+                logger.info("Amazon Bedrock LLM initialized successfully")
+                return llm
+            except Exception as e:
+                logger.warning(f"Amazon Bedrock not available: {e}")
+        
+        # Priority 2: Ollama (local, free)
         if os.getenv("USE_OLLAMA", "false").lower() == "true":
             logger.info("Attempting to initialize Ollama LLM")
             try:
@@ -43,32 +63,32 @@ class AIWorkflowGenerator:
                     temperature=0.5,  # Lower for faster responses
                     timeout=30,  # 30 second timeout
                     num_ctx=2048,  # Limit context window for speed
-                    num_predict=500  # Limit response length
+                    num_predict=1200  # Limit response length
                 )
                 logger.info("Ollama LLM initialized successfully")
                 return llm
             except Exception as e:
                 logger.warning(f"Ollama not available: {e}")
         
-        # Priority 2: Hugging Face (free tier)
+        # Priority 3: Hugging Face (free tier)
         hf_token = os.getenv("HUGGINGFACE_API_TOKEN")
         if hf_token:
             logger.info("Attempting to initialize Hugging Face LLM")
             try:
-                model_id = os.getenv("HF_MODEL_ID", "meta-llama/Llama-3.1-8B-Instruct")
+                model_id = os.getenv("HF_MODEL_ID", "meta-llama/Llama-3.1-8B-Instruct:novita")
                 logger.info(f"Using Hugging Face model: {model_id}")
                 llm = HuggingFaceEndpoint(
                     endpoint_url=f"https://api-inference.huggingface.co/models/{model_id}",
                     huggingfacehub_api_token=hf_token,
                     task="text-generation",
-                    model_kwargs={"temperature": 0.7}
+                    temperature=0.7
                 )
                 logger.info("Hugging Face LLM initialized successfully")
                 return llm
             except Exception as e:
                 logger.warning(f"Hugging Face not available: {e}")
         
-        # Priority 3: OpenAI (fallback)
+        # Priority 4: OpenAI (fallback)
         api_key = os.getenv("OPENAI_API_KEY")
         if api_key and api_key != "your_openai_api_key_here":
             logger.info("Attempting to initialize OpenAI LLM")
@@ -83,7 +103,7 @@ class AIWorkflowGenerator:
             except Exception as e:
                 logger.warning(f"OpenAI not available: {e}")
         
-        # Priority 4: Together AI (very cheap alternative)
+        # Priority 5: Together AI (very cheap alternative)
         together_api_key = os.getenv("TOGETHER_API_KEY")
         if together_api_key:
             logger.info("Attempting to initialize Together AI LLM")
@@ -116,32 +136,72 @@ class AIWorkflowGenerator:
             system_prompt = self._build_system_prompt()
             user_prompt = self._build_user_prompt(prompt)
 
-            # Use LangChain for better integration with LangGraph
-            logger.info("Creating LangChain template and chain")
-            template = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", user_prompt)
-            ])
+            # Create the full prompt
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
             
-            chain = template | self.llm
-            logger.info("Invoking LLM chain")
+            logger.info("Invoking LLM")
             try:
-                response = await asyncio.wait_for(
-                    chain.ainvoke({"prompt": prompt}),
-                    timeout=180.0  # 45 second timeout
-                )
+                # Use simple boto3 approach
+                if hasattr(self.llm, 'converse'):  # Bedrock client
+                    messages = [{"role": "user", "content": [{"text": full_prompt}]}]
+                    
+                    # Use requests library for API key authentication as per AWS docs
+                    import requests
+                    bedrock_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+                    region = os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
+                    model_id = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-8b-instruct-v1:0")
+                    
+                    url = f"https://bedrock-runtime.{region}.amazonaws.com/model/{model_id}/converse"
+                    
+                    payload = {"messages": messages}
+                    headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {bedrock_token}"
+                    }
+                    
+                    response = await asyncio.to_thread(
+                        requests.post,
+                        url,
+                        json=payload,
+                        headers=headers
+                    )
+                    
+                    if response.status_code == 200:
+                        response_data = response.json()
+                        logger.info(f"Bedrock response structure: {list(response_data.keys())}")
+                        
+                        # Handle different response structures
+                        if 'content' in response_data:
+                            response_content = response_data['content'][0]['text']
+                        elif 'message' in response_data:
+                            response_content = response_data['message']['content'][0]['text']
+                        elif 'output' in response_data and 'message' in response_data['output']:
+                            response_content = response_data['output']['message']['content'][0]['text']
+                        elif 'generation' in response_data:
+                            response_content = response_data['generation']
+                        else:
+                            # Log the full response for debugging
+                            logger.error(f"Unexpected response structure: {response_data}")
+                            raise Exception(f"Unexpected response structure from Bedrock API")
+                    else:
+                        raise Exception(f"Bedrock API error: {response.status_code} - {response.text}")
+                else:  # Other LLM providers
+                    response_content = await asyncio.wait_for(
+                        self.llm._acall(full_prompt),
+                        timeout=30.0
+                    )
             except asyncio.TimeoutError:
-                logger.error("Ollama request timed out after 45 seconds")
+                logger.error("LLM request timed out after 30 seconds")
                 raise Exception('LLM request timed out')
 
-            if not response.content:
+            if not response_content:
                 logger.error("No response content from AI service")
                 raise Exception('No response from AI service')
 
-            logger.info(f"Received response from LLM (length: {len(response.content)})")
-            logger.info(f"LLM response: {response.content}")
+            logger.info(f"Received response from LLM (length: {len(response_content)})")
+            logger.info(f"LLM response: {response_content[100:]}")
             
-            result = self._parse_ai_response(response.content, prompt)
+            result = self._parse_ai_response(response_content, prompt)
             logger.info("Workflow generation completed successfully")
             return result
             
@@ -169,8 +229,18 @@ AVAILABLE NODE TYPES:
 - imageGenerator: Generate images using AI
 - seoOptimizer: SEO optimization tasks
 
+CRITICAL WORKFLOW RULES:
+1. EVERY node must be connected in execution order
+2. Each node (except the first) must have at least one incoming edge
+3. Each node (except the last) must have at least one outgoing edge
+4. Workflows must form a complete execution chain from start to finish
+5. No disconnected or orphaned nodes allowed
+6. Parallel branches must be properly connected to main flow
+
 RESPONSE FORMAT:
-Return a JSON object with the following structure:
+You MUST return ONLY a valid JSON object. Do not include any explanatory text before or after the JSON.
+
+The JSON must have this exact structure:
 {{
   "workflow": {{
     "name": "Descriptive workflow name",
@@ -213,13 +283,24 @@ Return a JSON object with the following structure:
   "questions": ["Clarifying question 1", "Clarifying question 2"]
 }}
 
+CRITICAL: Return ONLY the JSON object. No other text, explanations, or formatting.
+
 GUIDELINES:
 1. Keep workflows simple and focused
 2. Use clear, descriptive node labels
 3. Position nodes logically (left to right flow)
-4. Include relevant metadata for user understanding
-5. Suggest improvements and ask clarifying questions
-6. Focus on practical, achievable automations"""
+4. ENSURE ALL NODES ARE CONNECTED IN EXECUTION ORDER
+5. Include relevant metadata for user understanding
+6. Suggest improvements and ask clarifying questions
+7. Focus on practical, achievable automations
+
+WORKFLOW VALIDATION:
+Before returning the response, verify:
+- All nodes are connected in a logical sequence
+- No orphaned or disconnected nodes exist
+- The workflow forms a complete execution chain
+- Parallel branches are properly connected to main flow
+- Every node has appropriate incoming and outgoing connections"""
 
     def _build_user_prompt(self, user_prompt: str) -> str:
         return f"""Please analyze this user request and generate a workflow:
@@ -244,6 +325,7 @@ Generate the workflow in the specified JSON format."""
                 raise Exception('No JSON found in response')
 
             logger.info(f"Found JSON start at position {json_match}")
+            
             # Find the closing brace by counting braces
             brace_count = 0
             end_pos = json_match
@@ -258,33 +340,47 @@ Generate the workflow in the specified JSON format."""
             
             json_str = response[json_match:end_pos]
             logger.info(f"Extracted JSON string (length: {len(json_str)})")
-            logger.debug(f"JSON string: {json_str[:200]}...")
             
-            parsed = json.loads(json_str)
+            # Clean up the JSON string - remove any trailing content after the closing brace
+            json_str = json_str.strip()
+            
+            # Try to parse the JSON
+            try:
+                parsed = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parsing failed, attempting to fix common issues: {e}")
+                # Try to fix common JSON issues
+                # Remove any trailing text after the last closing brace
+                last_brace = json_str.rfind('}')
+                if last_brace != -1:
+                    json_str = json_str[:last_brace + 1]
+                    try:
+                        parsed = json.loads(json_str)
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to fix JSON: {json_str}")
+                        raise
             logger.info("JSON parsed successfully")
             
             # Validate and enhance the response
             logger.info("Validating and enhancing parsed response")
             result = {
-                "workflow": {
-                    "name": parsed.get('workflow', {}).get('name') or self._generate_workflow_name(original_prompt),
-                    "description": parsed.get('workflow', {}).get('description') or original_prompt,
-                    "nodes": self._validate_and_enhance_nodes(parsed.get('workflow', {}).get('nodes', [])),
-                    "edges": self._validate_and_enhance_edges(parsed.get('workflow', {}).get('edges', [])),
-                    "metadata": {
-                        "title": parsed.get('workflow', {}).get('metadata', {}).get('title') or parsed.get('workflow', {}).get('name') or 'Generated Workflow',
-                        "description": parsed.get('workflow', {}).get('metadata', {}).get('description') or original_prompt,
-                        "estimatedCost": parsed.get('workflow', {}).get('metadata', {}).get('estimatedCost') or 'Free to $20/month',
-                        "requiredIntegrations": parsed.get('workflow', {}).get('metadata', {}).get('requiredIntegrations') or [],
-                        "authRequirements": parsed.get('workflow', {}).get('metadata', {}).get('authRequirements') or [],
-                        "complexity": parsed.get('workflow', {}).get('metadata', {}).get('complexity') or 'simple',
-                        "estimatedTime": parsed.get('workflow', {}).get('metadata', {}).get('estimatedTime') or '5-10 minutes'
-                    }
+                "name": parsed.get('workflow', {}).get('name') or self._generate_workflow_name(original_prompt),
+                "description": parsed.get('workflow', {}).get('description') or original_prompt,
+                "nodes": self._validate_and_enhance_nodes(parsed.get('workflow', {}).get('nodes', [])),
+                "edges": self._validate_and_enhance_edges(parsed.get('workflow', {}).get('edges', [])),
+                "metadata": {
+                    "title": parsed.get('workflow', {}).get('metadata', {}).get('title') or parsed.get('workflow', {}).get('name') or 'Generated Workflow',
+                    "description": parsed.get('workflow', {}).get('metadata', {}).get('description') or original_prompt,
+                    "estimatedCost": parsed.get('workflow', {}).get('metadata', {}).get('estimatedCost') or 'Free to $20/month',
+                    "requiredIntegrations": parsed.get('workflow', {}).get('metadata', {}).get('requiredIntegrations') or [],
+                    "authRequirements": parsed.get('workflow', {}).get('metadata', {}).get('authRequirements') or [],
+                    "complexity": parsed.get('workflow', {}).get('metadata', {}).get('complexity') or 'simple',
+                    "estimatedTime": parsed.get('workflow', {}).get('metadata', {}).get('estimatedTime') or '5-10 minutes'
                 },
                 "suggestions": parsed.get('suggestions', []),
                 "questions": parsed.get('questions', [])
             }
-            logger.info(f"Response validation completed. Workflow: {result['workflow']['name']}, Nodes: {len(result['workflow']['nodes'])}, Edges: {len(result['workflow']['edges'])}")
+            logger.info(f"Response validation completed. Workflow: {result['name']}, Nodes: {len(result['nodes'])}, Edges: {len(result['edges'])}")
             return result
         except Exception as error:
             logger.error(f'Error parsing AI response: {error}', exc_info=True)

@@ -125,10 +125,10 @@ async def generate_workflow(request: WorkflowRequest):
         result = await get_ai_generator().generateWorkflow(request_dict)
         
         return WorkflowResponse(
-            workflow=result["workflow"],
+            workflow=result,
             suggestions=result.get("suggestions", []),
             questions=result.get("questions", []),
-            metadata=result["workflow"].get('metadata', {}),
+            metadata=result.get('metadata', {}),
             generated_at=datetime.utcnow().isoformat()
         )
     except Exception as e:
