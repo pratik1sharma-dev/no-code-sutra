@@ -1,0 +1,50 @@
+{
+  "workflow_id": "real_instagram_test",
+  "workflow_name": "Real Instagram Posting Test",
+  "description": "Test workflow for real Instagram posting with AI-generated content",
+  "nodes": [
+    {
+      "id": "node_1",
+      "type": "ai_agent",
+      "config": {
+        "task": "generate",
+        "topic": "AI and machine learning trends",
+        "prompt": "Create an engaging Instagram post about the latest AI trends that would interest tech professionals"
+      }
+    },
+    {
+      "id": "node_2",
+      "type": "data",
+      "config": {
+        "operation": "transform",
+        "input_source": "node_1.output",
+        "output": "instagram_content",
+        "transformation": "format_for_instagram"
+      }
+    },
+    {
+      "id": "node_3",
+      "type": "social_media",
+      "config": {
+        "platform": "instagram",
+        "access_token": "YOUR_REAL_INSTAGRAM_ACCESS_TOKEN_HERE",
+        "post": "instagram_content"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "node_1",
+      "to": "node_2"
+    },
+    {
+      "from": "node_2",
+      "to": "node_3"
+    }
+  ],
+  "metadata": {
+    "created_at": "2025-01-20T10:00:00Z",
+    "version": "1.0",
+    "tags": ["instagram", "ai", "real_posting"]
+  }
+}

@@ -161,8 +161,9 @@ const WorkflowBuilder: React.FC = () => {
   // Node types for React Flow - memoized to prevent recreation
   const nodeTypes: NodeTypes = useMemo(() => {
     const types: NodeTypes = {};
-    const nodeTypeList = ['aiAgent', 'email', 'slack', 'data', 'condition', 'delay', 'schedule', 'blogWriter', 'socialMedia', 'imageGenerator', 'seoOptimizer'];
-    nodeTypeList.forEach(type => {
+    // Get all available node types from the registry
+    const allNodeTypes = Object.keys(NODE_TYPES);
+    allNodeTypes.forEach(type => {
       types[type] = getNodeComponent(type as NodeType);
     });
     return types;
@@ -337,7 +338,7 @@ const WorkflowBuilder: React.FC = () => {
 
   return (
     <DndContext onDragEnd={onDragEnd}>
-      <div className="flex h-full">
+      <div className="flex h-full w-full">
         <DragOverlay>
           <div className="bg-white border border-gray-300 rounded-lg shadow-lg p-3 opacity-80">
             <div className="flex items-center gap-2">
@@ -349,7 +350,7 @@ const WorkflowBuilder: React.FC = () => {
         <NodePalette onNodeSelect={handleNodeSelect} />
         
         {/* Main Canvas Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
           <div className="bg-white border-b border-gray-200 px-6 py-4">
             {/* Show generated workflow info if available */}
@@ -409,7 +410,7 @@ const WorkflowBuilder: React.FC = () => {
           </div>
           
           {/* React Flow Canvas */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <DroppableReactFlow
               nodes={nodes}
               edges={edges}

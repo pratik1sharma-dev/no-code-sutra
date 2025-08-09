@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { NodeProps } from 'reactflow';
 import { 
   Bot, 
@@ -20,150 +20,50 @@ import {
   Zap,
   Filter,
   BarChart3,
-  AlertTriangle
+  AlertTriangle,
+  Instagram
 } from 'lucide-react';
 import type { WorkflowNodeData, NodeType } from '../../../types/workflow';
 import { BaseNode } from './BaseNode';
 import { AIAgentNode } from './AIAgentNode';
 import { EmailNode } from './EmailNode';
+import { InstagramPostNode } from './InstagramPostNode';
+import { nodeRegistryService } from '../../../services/nodeRegistryService';
+import type { NodeMetadata } from '../../../services/nodeRegistryService';
 
-// Node type definitions
-export const NODE_TYPES = {
-  aiAgent: {
-    type: 'aiAgent' as NodeType,
-    label: 'AI Agent',
-    description: 'AI-powered tasks (research, analysis, content generation)',
-    icon: Bot,
-    color: 'primary',
-    category: 'AI & ML'
-  },
-  webScraper: {
-    type: 'webScraper' as NodeType,
-    label: 'Web Scraper',
-    description: 'Extract data from websites and web pages',
-    icon: Globe,
-    color: 'secondary',
-    category: 'Data'
-  },
-  email: {
-    type: 'email' as NodeType,
-    label: 'Email',
-    description: 'Send automated emails with templates',
-    icon: Mail,
-    color: 'success',
-    category: 'Communication'
-  },
-  slack: {
-    type: 'slack' as NodeType,
-    label: 'Slack',
-    description: 'Send messages to Slack channels',
-    icon: MessageSquare,
-    color: 'primary',
-    category: 'Communication'
-  },
-  notification: {
-    type: 'notification' as NodeType,
-    label: 'Notification',
-    description: 'Send notifications (push, SMS, in-app)',
-    icon: Bell,
-    color: 'warning',
-    category: 'Communication'
-  },
-  data: {
-    type: 'data' as NodeType,
-    label: 'Data',
-    description: 'Data processing, storage, and manipulation',
-    icon: Database,
-    color: 'secondary',
-    category: 'Data'
-  },
-  fileOperation: {
-    type: 'fileOperation' as NodeType,
-    label: 'File Operation',
-    description: 'File operations (read, write, move, delete)',
-    icon: FolderOpen,
-    color: 'secondary',
-    category: 'Data'
-  },
-  database: {
-    type: 'database' as NodeType,
-    label: 'Database',
-    description: 'Database operations (query, insert, update, delete)',
-    icon: Server,
-    color: 'secondary',
-    category: 'Data'
-  },
-  apiCall: {
-    type: 'apiCall' as NodeType,
-    label: 'API Call',
-    description: 'External API integrations (social media, third-party services)',
-    icon: Zap,
-    color: 'primary',
-    category: 'Integration'
-  },
-  condition: {
-    type: 'condition' as NodeType,
-    label: 'Condition',
-    description: 'If/then logic and branching',
-    icon: GitBranch,
-    color: 'warning',
-    category: 'Logic'
-  },
-  delay: {
-    type: 'delay' as NodeType,
-    label: 'Delay',
-    description: 'Add time delays to workflow',
-    icon: Clock,
-    color: 'secondary',
-    category: 'Timing'
-  },
-  schedule: {
-    type: 'schedule' as NodeType,
-    label: 'Schedule',
-    description: 'Schedule workflow execution',
-    icon: Calendar,
-    color: 'primary',
-    category: 'Timing'
-  },
-  transform: {
-    type: 'transform' as NodeType,
-    label: 'Transform',
-    description: 'Data transformation (CSV↔JSON, format conversion)',
-    icon: FileText,
-    color: 'secondary',
-    category: 'Data'
-  },
-  filter: {
-    type: 'filter' as NodeType,
-    label: 'Filter',
-    description: 'Data filtering based on conditions',
-    icon: Filter,
-    color: 'secondary',
-    category: 'Data'
-  },
-  aggregate: {
-    type: 'aggregate' as NodeType,
-    label: 'Aggregate',
-    description: 'Data aggregation (group, sum, count, average)',
-    icon: BarChart3,
-    color: 'secondary',
-    category: 'Data'
-  },
-  errorHandler: {
-    type: 'errorHandler' as NodeType,
-    label: 'Error Handler',
-    description: 'Error handling and recovery',
-    icon: AlertTriangle,
-    color: 'danger',
-    category: 'Logic'
-  }
-} as const;
+// Icon mapping for dynamic loading
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+  Bot,
+  Globe,
+  Mail,
+  MessageSquare,
+  Bell,
+  Database,
+  FolderOpen,
+  Server,
+  Instagram,
+  GitBranch,
+  Clock,
+  Calendar,
+  Zap,
+  Filter,
+  BarChart3,
+  AlertTriangle,
+  Search,
+  Brain,
+  FileText,
+  Share2,
+  Image
+};
+
+// Dynamic node types - populated from backend registry
+export const NODE_TYPES: Record<string, any> = {};
 
 // Default node component for unimplemented nodes
 const DefaultNode: React.FC<NodeProps<WorkflowNodeData>> = (props) => {
   const { data } = props;
   const nodeType = NODE_TYPES[data.type];
-  const Icon = nodeType?.icon || Bot;
+  const Icon = nodeType?.icon ? ICON_MAP[nodeType.icon] || Bot : Bot;
 
   return (
     <BaseNode
@@ -211,40 +111,94 @@ const NODE_COMPONENTS: Record<NodeType, React.ComponentType<NodeProps<WorkflowNo
   transform: TransformNode,
   filter: FilterNode,
   aggregate: AggregateNode,
-  errorHandler: ErrorHandlerNode
+  errorHandler: ErrorHandlerNode,
+  instagram_post: InstagramPostNode
 };
 
-// Node registry hook
+// Hook for managing node registry
 export const useNodeRegistry = () => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load node registry from backend
+  useEffect(() => {
+    const loadRegistry = async () => {
+      try {
+        setIsLoading(true);
+        const registry = await nodeRegistryService.getNodeRegistry();
+        
+        // Transform backend data to frontend format
+        Object.entries(registry.nodes).forEach(([type, metadata]) => {
+          NODE_TYPES[type] = {
+            type: metadata.type,
+            label: metadata.label,
+            description: metadata.description,
+            icon: metadata.icon,
+            color: metadata.color,
+            category: metadata.category
+          };
+        });
+        
+        setError(null);
+      } catch (err) {
+        console.error('Failed to load node registry:', err);
+        setError('Failed to load node types from server');
+        
+        // Fallback to basic node types if backend fails
+        NODE_TYPES['aiAgent'] = {
+          type: 'aiAgent',
+          label: 'AI Agent',
+          description: 'AI-powered tasks (research, analysis, content generation)',
+          icon: 'Bot',
+          color: 'primary',
+          category: 'AI & ML'
+        };
+        NODE_TYPES['instagram_post'] = {
+          type: 'instagram_post',
+          label: 'Instagram Post',
+          description: 'Post content to Instagram Business accounts',
+          icon: 'Instagram',
+          color: 'pink',
+          category: 'Social Media'
+        };
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadRegistry();
+  }, []);
+
   const getNodeComponent = (type: NodeType) => {
     return NODE_COMPONENTS[type] || DefaultNode;
   };
 
   const getNodeTypeInfo = (type: NodeType) => {
-    return NODE_TYPES[type];
+    return NODE_TYPES[type] || null;
   };
 
   const getAllNodeTypes = () => {
-    return Object.values(NODE_TYPES);
+    return Object.keys(NODE_TYPES);
   };
 
   const getNodeTypesByCategory = () => {
-    const categories: Record<string, typeof NODE_TYPES[keyof typeof NODE_TYPES][]> = {};
-    
+    const categories: Record<string, string[]> = {};
     Object.values(NODE_TYPES).forEach(nodeType => {
       if (!categories[nodeType.category]) {
         categories[nodeType.category] = [];
       }
-      categories[nodeType.category].push(nodeType);
+      categories[nodeType.category].push(nodeType.type);
     });
-
     return categories;
   };
 
   return {
+    isLoading,
+    error,
     getNodeComponent,
     getNodeTypeInfo,
     getAllNodeTypes,
-    getNodeTypesByCategory
+    getNodeTypesByCategory,
+    NODE_TYPES
   };
 }; 

@@ -212,27 +212,24 @@ class AIWorkflowGenerator:
             return self._generate_fallback_workflow(prompt)
 
     def _build_system_prompt(self) -> str:
-        return """You are an expert AI workflow designer for No Code Sutra, a platform that creates automation workflows from natural language descriptions.
+        # Import centralized node registry
+        from .node_registry import node_registry
+        
+        # Build node types list dynamically
+        node_types_list = []
+        for node_type, metadata in node_registry._nodes.items():
+            if metadata.is_active:
+                node_types_list.append(f"- {node_type}: {metadata.description}")
+        
+        node_types_text = "\n".join(node_types_list)
+        node_count = node_registry.get_node_count()
+        
+        return f"""You are an expert AI workflow designer for No Code Sutra, a platform that creates automation workflows from natural language descriptions.
 
 Your task is to analyze user requests and generate structured workflow definitions that can be executed by our platform.
 
-AVAILABLE NODE TYPES (16 Core Types):
-- aiAgent: AI-powered tasks (research, analysis, content generation, image generation, SEO optimization)
-- webScraper: Extract data from websites and web pages
-- email: Send emails via SMTP or email services
-- slack: Send messages to Slack channels
-- notification: Send notifications (push, SMS, in-app)
-- data: Data processing, storage, and manipulation
-- fileOperation: File operations (read, write, move, delete)
-- database: Database operations (query, insert, update, delete)
-- apiCall: External API integrations (social media, third-party services)
-- condition: Conditional logic and branching
-- delay: Time delays and scheduling
-- schedule: Recurring task scheduling
-- transform: Data transformation (CSV↔JSON, format conversion)
-- filter: Data filtering based on conditions
-- aggregate: Data aggregation (group, sum, count, average)
-- errorHandler: Error handling and recovery
+AVAILABLE NODE TYPES ({node_count} Core Types):
+{node_types_text}
 
 CRITICAL WORKFLOW RULES:
 1. EVERY node must be connected in execution order
@@ -298,6 +295,13 @@ GUIDELINES:
 5. Include relevant metadata for user understanding
 6. Suggest improvements and ask clarifying questions
 7. Focus on practical, achievable automations
+8. **CRITICAL: For Instagram posting, ALWAYS use 'instagram_post' node type. NEVER use 'aiAgent' or 'apiCall' for Instagram.**
+9. For other social media platforms, use 'apiCall' node with appropriate configuration
+
+EXAMPLE WORKFLOW STRUCTURE:
+- Use 'aiAgent' for content generation, research, analysis
+- Use 'instagram_post' for posting to Instagram (NOT 'aiAgent')
+- Use 'apiCall' for other external services (NOT Instagram)
 
 WORKFLOW VALIDATION:
 Before returning the response, verify:
@@ -305,7 +309,8 @@ Before returning the response, verify:
 - No orphaned or disconnected nodes exist
 - The workflow forms a complete execution chain
 - Parallel branches are properly connected to main flow
-- Every node has appropriate incoming and outgoing connections"""
+- Every node has appropriate incoming and outgoing connections
+- **Instagram workflows MUST use 'instagram_post' node type, not 'aiAgent' or 'apiCall'**"""
 
     def _build_user_prompt(self, user_prompt: str) -> str:
         return f"""Please analyze this user request and generate a workflow:
@@ -396,12 +401,11 @@ Generate the workflow in the specified JSON format."""
     def _validate_and_enhance_nodes(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         logger.info(f"Validating and enhancing {len(nodes)} nodes")
         
-        # Consolidated valid node types
-        valid_node_types = [
-            'aiAgent', 'webScraper', 'email', 'slack', 'notification', 'data',
-            'fileOperation', 'database', 'apiCall', 'condition', 'delay', 'schedule',
-            'transform', 'filter', 'aggregate', 'errorHandler'
-        ]
+        # Import centralized node registry
+        from .node_registry import node_registry
+        
+        # Get valid node types from centralized registry
+        valid_node_types = node_registry.get_active_node_types()
 
         enhanced_nodes = []
         for index, node in enumerate(nodes):

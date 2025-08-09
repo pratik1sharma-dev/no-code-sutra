@@ -17,13 +17,15 @@ export type NodeType =
   | 'transform'
   | 'filter'
   | 'aggregate'
-  | 'errorHandler';
+  | 'errorHandler'
+  | 'instagram_post';
 
 // Edge Types
 export type EdgeType = 'default' | 'conditional' | 'data';
 
 // Node Data Interface
 export interface WorkflowNodeData {
+  id: string;
   label: string;
   type: NodeType;
   config: Record<string, any>;
@@ -101,6 +103,17 @@ export interface ScheduleConfig {
   cron: string;
   timezone: string;
   enabled: boolean;
+}
+
+export interface InstagramPostConfig {
+  instagram_credentials: {
+    access_token: string;
+    instagram_business_account_id: string;
+    page_id?: string;
+  };
+  scheduled_time?: string;
+  location?: string;
+  user_tags?: string[];
 }
 
 // Execution Interfaces

@@ -8,9 +8,19 @@ import os
 
 class SimpleAIWorkflowNodes:
     def __init__(self):
-        self.client = openai.OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY")
-        )
+        # Initialize OpenAI client only if API key is available
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key and api_key != "your_openai_api_key_here":
+            try:
+                self.client = openai.OpenAI(api_key=api_key)
+                self.openai_available = True
+            except Exception as e:
+                print(f"Warning: OpenAI initialization failed: {e}")
+                self.openai_available = False
+                self.client = None
+        else:
+            self.openai_available = False
+            self.client = None
     
     def research_company(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """AI-powered company research"""
@@ -38,25 +48,24 @@ class SimpleAIWorkflowNodes:
             - growth_signals: array of strings (e.g., "recent funding", "hiring", "expansion")
             """
             
-            response = self.client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": extraction_prompt}],
-                temperature=0.1
-            )
-            
-            try:
-                company_data = json.loads(response.choices[0].message.content)
-            except json.JSONDecodeError:
-                company_data = {
-                    "company_name": company_name,
-                    "industry": "Unknown",
-                    "revenue_range": "Unknown",
-                    "employee_count": "Unknown",
-                    "location": "Unknown",
-                    "website": "Unknown",
-                    "description": "Could not extract structured data",
-                    "growth_signals": []
-                }
+            if self.openai_available and self.client:
+                try:
+                    response = self.client.chat.completions.create(
+                        model="gpt-4",
+                        messages=[{"role": "user", "content": extraction_prompt}],
+                        temperature=0.1
+                    )
+                    
+                    try:
+                        company_data = json.loads(response.choices[0].message.content)
+                    except json.JSONDecodeError:
+                        company_data = self._get_default_company_data(company_name)
+                except Exception as e:
+                    print(f"OpenAI API call failed: {e}")
+                    company_data = self._get_default_company_data(company_name)
+            else:
+                # Use simulated data when OpenAI is not available
+                company_data = self._get_default_company_data(company_name)
             
             state['research_data'] = company_data
             state['research_status'] = 'completed'
