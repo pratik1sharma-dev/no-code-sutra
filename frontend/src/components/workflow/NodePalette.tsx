@@ -31,7 +31,7 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onNodeSelect }) => {
   };
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 p-4">
+    <div className="w-96 bg-white border-r border-gray-200 p-4">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Node Library</h3>
         <p className="text-xs text-gray-600">

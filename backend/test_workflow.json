@@ -1,0 +1,80 @@
+{
+    "workflow": {
+        "nodes": [
+            {
+                "id": "node1",
+                "type": "aiAgent",
+                "label": "AI Trend Research",
+                "position": {"x": 100, "y": 100},
+                "data": {
+                    "label": "AI Trend Research",
+                    "type": "aiAgent",
+                    "config": {
+                        "task": "research",
+                        "topic": "AI trends"
+                    },
+                    "status": "idle",
+                    "executionCount": 0
+                }
+            },
+            {
+                "id": "node2",
+                "type": "data",
+                "label": "Post Data Transformation",
+                "position": {"x": 300, "y": 100},
+                "data": {
+                    "label": "Post Data Transformation",
+                    "type": "data",
+                    "config": {
+                        "input": "node1",
+                        "output": "post_data"
+                    },
+                    "status": "idle",
+                    "executionCount": 0
+                }
+            },
+            {
+                "id": "node3",
+                "type": "instagram_post",
+                "label": "Post to Instagram",
+                "position": {"x": 500, "y": 100},
+                "data": {
+                    "label": "Post to Instagram",
+                    "type": "instagram_post",
+                    "config": {
+                        "access_token": "Instagram API Key",
+                        "post": "node2.post_data"
+                    },
+                    "status": "idle",
+                    "executionCount": 0
+                }
+            }
+        ],
+        "edges": [
+            {
+                "id": "edge1",
+                "source": "node1",
+                "target": "node2",
+                "type": "default",
+                "label": ""
+            },
+            {
+                "id": "edge2",
+                "source": "node2",
+                "target": "node3",
+                "type": "default",
+                "label": ""
+            }
+        ],
+        "metadata": {
+            "title": "AI Trend Post Creator",
+            "description": "Automatically creates posts in AI trends and posts them on Instagram",
+            "estimatedCost": "Free to $50/month",
+            "requiredIntegrations": ["Instagram"],
+            "authRequirements": ["Instagram API Key"],
+            "complexity": "medium",
+            "estimatedTime": "10-15 minutes setup"
+        }
+    },
+    "input_data": {}
+}

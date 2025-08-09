@@ -11,12 +11,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import LangGraph workflows
-from services.langgraph_workflows.ai_workflows import WorkflowFactory
+# Import LangGraph services
 from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
 from services.aiWorkflowGenerator import AIWorkflowGenerator
-from services.workflow_executor import workflow_executor
-from services.node_executors import executor_registry
+from services.node_registry import node_registry
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -30,11 +28,6 @@ class WorkflowResponse(BaseModel):
     metadata: Dict[str, Any] = {}
     generated_at: str
 
-class LangGraphExecutionRequest(BaseModel):
-    workflow_type: str
-    input_data: Dict[str, Any]
-    user_id: Optional[str] = None
-
 class WorkflowExecutionRequest(BaseModel):
     workflow: Dict[str, Any]
     input_data: Dict[str, Any]
@@ -44,21 +37,6 @@ class NodeExecutionRequest(BaseModel):
     node_type: str
     node_config: Dict[str, Any]
     input_data: Dict[str, Any]
-    user_id: Optional[str] = None
-
-class LangGraphExecutionResponse(BaseModel):
-    success: bool
-    data: Dict[str, Any]
-    workflow_type: str
-    execution_time: float
-    timestamp: str
-
-class ResearchRequest(BaseModel):
-    company_name: str
-    user_id: Optional[str] = None
-
-class LeadQualificationRequest(BaseModel):
-    company_name: str
     user_id: Optional[str] = None
 
 app = FastAPI(
@@ -77,31 +55,9 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Initialize services lazily
-workflow_factory = None
-ai_generator = None
-langgraph_executor = None
-
-def get_workflow_factory():
-    global workflow_factory
-    if workflow_factory is None:
-        from services.langgraph_workflows.ai_workflows import WorkflowFactory
-        workflow_factory = WorkflowFactory()
-    return workflow_factory
-
-def get_ai_generator():
-    global ai_generator
-    if ai_generator is None:
-        from services.aiWorkflowGenerator import AIWorkflowGenerator
-        ai_generator = AIWorkflowGenerator()
-    return ai_generator
-
-def get_langgraph_executor():
-    global langgraph_executor
-    if langgraph_executor is None:
-        from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
-        langgraph_executor = LangGraphWorkflowExecutor()
-    return langgraph_executor
+# Initialize services
+langgraph_executor = LangGraphWorkflowExecutor()
+ai_generator = AIWorkflowGenerator()
 
 @app.get("/")
 async def root():
@@ -123,8 +79,8 @@ async def generate_workflow(request: WorkflowRequest):
             "user_id": request.user_id
         }
         
-        # Use the existing AI workflow generator
-        result = await get_ai_generator().generateWorkflow(request_dict)
+        # Use the AI workflow generator
+        result = await ai_generator.generateWorkflow(request_dict)
         
         return WorkflowResponse(
             workflow=result,
@@ -135,85 +91,6 @@ async def generate_workflow(request: WorkflowRequest):
         )
     except Exception as e:
         print(f"Error in generate_workflow: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/langgraph/execute", response_model=LangGraphExecutionResponse)
-async def execute_langgraph_workflow(request: LangGraphExecutionRequest):
-    """
-    Execute a LangGraph workflow
-    """
-    try:
-        import time
-        start_time = time.time()
-        
-        result = get_workflow_factory().execute_workflow(
-            request.workflow_type, 
-            request.input_data
-        )
-        
-        execution_time = time.time() - start_time
-        
-        return LangGraphExecutionResponse(
-            success=result["success"],
-            data=result.get("data", {}),
-            workflow_type=request.workflow_type,
-            execution_time=execution_time,
-            timestamp=datetime.utcnow().isoformat()
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/research/company")
-async def research_company(request: ResearchRequest):
-    """
-    Research a company using LangGraph workflow
-    """
-    try:
-        input_data = {
-            "company_name": request.company_name,
-            "research_data": {},
-            "research_status": "pending",
-            "research_error": "",
-            "research_timestamp": ""
-        }
-        
-        result = get_workflow_factory().execute_workflow("research", input_data)
-        
-        return {
-            "success": result["success"],
-            "data": result.get("data", {}),
-            "workflow_type": "research",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/leads/qualify")
-async def qualify_lead(request: LeadQualificationRequest):
-    """
-    Qualify a lead using LangGraph workflow
-    """
-    try:
-        input_data = {
-            "company_name": request.company_name,
-            "research_data": {},
-            "lead_analysis": "",
-            "lead_score": 0,
-            "route_decision": "",
-            "qualification_status": "pending",
-            "qualification_error": "",
-            "qualification_timestamp": ""
-        }
-        
-        result = get_workflow_factory().execute_workflow("lead_qualification", input_data)
-        
-        return {
-            "success": result["success"],
-            "data": result.get("data", {}),
-            "workflow_type": "lead_qualification",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/workflows/available")
@@ -288,60 +165,146 @@ async def get_available_agents():
 @app.get("/api/executors/available")
 async def get_available_executors():
     """
-    Get list of available node executors
+    Get list of available LangGraph node types
     """
-    available_types = executor_registry.list_available_types()
-    executors_info = []
-    
-    for node_type in available_types:
-        info = executor_registry.get_executor_info(node_type)
-        if info:
-            executors_info.append(info)
-    
     return {
-        "executors": executors_info,
-        "total_count": len(executors_info),
-        "supported_types": available_types
+        "executors": [
+            {
+                "node_type": "aiAgent",
+                "class_name": "LangGraphWorkflowNodes.ai_agent_node",
+                "description": "AI-powered tasks (research, analysis, content generation)"
+            },
+            {
+                "node_type": "data",
+                "class_name": "LangGraphWorkflowNodes.data_node",
+                "description": "Data processing and transformation"
+            },
+            {
+                "node_type": "email",
+                "class_name": "LangGraphWorkflowNodes.email_node",
+                "description": "Email sending functionality"
+            },
+            {
+                "node_type": "slack",
+                "class_name": "LangGraphWorkflowNodes.slack_node",
+                "description": "Slack messaging functionality"
+            },
+            {
+                "node_type": "condition",
+                "class_name": "LangGraphWorkflowNodes.condition_node",
+                "description": "Conditional logic and routing"
+            },
+            {
+                "node_type": "delay",
+                "class_name": "LangGraphWorkflowNodes.delay_node",
+                "description": "Delay and timing control"
+            },
+            {
+                "node_type": "schedule",
+                "class_name": "LangGraphWorkflowNodes.schedule_node",
+                "description": "Scheduled execution"
+            },
+            {
+                "node_type": "blogWriter",
+                "class_name": "LangGraphWorkflowNodes.blog_writer_node",
+                "description": "Blog content generation"
+            },
+            {
+                "node_type": "socialMedia",
+                "class_name": "LangGraphWorkflowNodes.social_media_node",
+                "description": "Social media content creation"
+            },
+            {
+                "node_type": "imageGenerator",
+                "class_name": "LangGraphWorkflowNodes.image_generator_node",
+                "description": "AI image generation"
+            },
+            {
+                "node_type": "seoOptimizer",
+                "class_name": "LangGraphWorkflowNodes.seo_optimizer_node",
+                "description": "SEO optimization"
+            }
+        ],
+        "total_count": 11,
+        "supported_types": ["aiAgent", "data", "email", "slack", "condition", "delay", "schedule", "blogWriter", "socialMedia", "imageGenerator", "seoOptimizer"]
     }
+
+@app.get("/api/nodes/registry")
+async def get_node_registry():
+    """Get centralized node registry configuration"""
+    try:
+        # Get unique categories from the node registry
+        categories = set()
+        for node_type, metadata in node_registry._nodes.items():
+            if metadata.is_active:
+                categories.add(metadata.category.value)
+        
+        return {
+            "success": True,
+            "nodes": node_registry.get_frontend_config(),
+            "count": node_registry.get_node_count(),
+            "categories": list(categories)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting node registry: {str(e)}")
 
 @app.post("/api/workflows/execute")
 async def execute_workflow(request: WorkflowExecutionRequest):
     """
-    Execute a workflow using the new executor system
+    Execute a workflow using LangGraph
     """
     try:
-        # Execute workflow using the new executor
-        execution = await workflow_executor.execute_workflow(
-            workflow=request.workflow,
-            inputs=request.input_data
+        print(f"Executing workflow with {len(request.workflow.get('nodes', []))} nodes")
+        
+        # Execute workflow using LangGraph
+        result = langgraph_executor.execute_workflow(
+            workflow_data=request.workflow,
+            input_data=request.input_data
         )
         
-        # Convert execution to response format
-        return {
-            "success": execution.status.value in ["completed"],
-            "execution_id": execution.execution_id,
-            "status": execution.status.value,
-            "data": {
-                "results": execution.results,
-                "steps": [
-                    {
-                        "node_id": step.node_id,
-                        "node_type": step.node_type,
-                        "status": step.status.value,
-                        "inputs": step.inputs,
-                        "outputs": step.outputs,
-                        "error": step.error,
-                        "execution_time": step.end_time - step.start_time if step.start_time and step.end_time else None
-                    }
-                    for step in execution.steps
-                ]
-            },
-            "execution_time": execution.end_time - execution.start_time if execution.start_time and execution.end_time else 0.0,
-            "timestamp": datetime.utcnow().isoformat(),
-            "error": execution.error
+        # Ensure the result is JSON serializable
+        if result.get('status') == 'failed':
+            return {
+                "success": False,
+                "execution_id": result.get("execution_id"),
+                "status": result.get("status"),
+                "error": result.get("error"),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        
+        # Prepare successful response
+        response_data = {
+            "success": True,
+            "execution_id": result.get("execution_id"),
+            "status": result.get("status"),
+            "timestamp": datetime.utcnow().isoformat()
         }
+        
+        # Add workflow results if available
+        if 'node_results' in result:
+            response_data['node_results'] = result['node_results']
+        if 'nodes_executed' in result:
+            response_data['nodes_executed'] = result['nodes_executed']
+        
+        # Add any other relevant data (ensure it's serializable)
+        for key, value in result.items():
+            if key not in ['execution_id', 'status', 'node_results', 'nodes_executed']:
+                if isinstance(value, (str, int, float, bool, type(None))):
+                    response_data[key] = value
+                elif isinstance(value, list):
+                    response_data[key] = [str(item) if not isinstance(item, (str, int, float, bool, type(None))) else item for item in value]
+                elif isinstance(value, dict):
+                    response_data[key] = {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v for k, v in value.items()}
+                else:
+                    response_data[key] = str(value)
+        
+        return response_data
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error in workflow execution endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Workflow execution failed: {str(e)}")
 
 @app.post("/api/nodes/execute")
 async def execute_node(request: NodeExecutionRequest):
@@ -352,13 +315,17 @@ async def execute_node(request: NodeExecutionRequest):
         import time
         start_time = time.time()
         
-        executor = get_langgraph_executor()
-        result = executor.execute_node(request.node_type, request.node_config, request.input_data)
+        # Execute node using LangGraph
+        result = langgraph_executor.execute_node(
+            node_type=request.node_type,
+            node_config=request.node_config,
+            input_data=request.input_data
+        )
         
         execution_time = time.time() - start_time
         
         return {
-            "success": result.get("status") == "completed",
+            "success": result.get("status") != "failed",
             "data": result,
             "execution_time": execution_time,
             "timestamp": datetime.utcnow().isoformat()
