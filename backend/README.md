@@ -68,14 +68,26 @@ Server will be available at: http://localhost:8000
 
 ```
 src/
-├── main.py              # FastAPI application
-├── services/            # Business logic
-│   ├── aiWorkflowGenerator.py     # AI workflow generation
-│   ├── instagram_service.py       # Instagram API integration
+├── main.py                          # FastAPI application
+├── services/                        # Business logic
+│   ├── aiWorkflowGenerator.py       # AI workflow generation (uses LLMClient)
+│   ├── node_dispatcher.py           # Node type → executor mapping (OCP)
+│   ├── nodes/                       # Per-node executors (SRP)
+│   │   ├── ai_agent.py
+│   │   ├── data_node.py
+│   │   ├── text_overlay.py
+│   │   ├── image_upload.py
+│   │   ├── social_media.py
+│   │   ├── email.py
+│   │   ├── slack.py
+│   │   ├── condition.py
+│   │   ├── delay.py
+│   │   ├── schedule.py
+│   │   ├── image_generator.py
+│   │   └── seo_optimizer.py
+│   ├── instagram_service.py         # Instagram API integration
 │   └── langgraph_workflows/
-│       └── workflow_executor.py   # Workflow execution engine
-└── services/langgraph_nodes/
-    └── workflow_nodes.py          # Node implementations
+│       └── workflow_executor.py     # Workflow execution engine
 ```
 
 ## Instagram Integration

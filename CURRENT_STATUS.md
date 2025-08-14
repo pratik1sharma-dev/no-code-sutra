@@ -4,6 +4,10 @@
 
 The Instagram integration is **fully functional** and ready for production use. All core features are implemented and working.
 
+- New architecture: modular per-node executors (SRP), NodeDispatcher (OCP), LLMClient abstraction (Bedrock/OpenAI)
+- Monolithic `workflow_nodes.py` removed; all execution uses modular nodes
+- API executor listing updated to reference modular executors
+
 ---
 
 ## ✅ **COMPLETED FEATURES**

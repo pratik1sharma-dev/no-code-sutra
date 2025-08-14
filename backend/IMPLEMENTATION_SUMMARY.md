@@ -16,11 +16,13 @@
 - **Image Processing**: Automatic resizing, cropping, and optimization
 - **Content-Aware Selection**: Context-aware background image matching
 
-### 3. **Enhanced Workflow Nodes**
-- **AI Content Generation**: Structured output (headlines, bullets, captions, hashtags)
-- **Text Overlay System**: Professional Instagram-optimized text formatting
+### 3. **Enhanced Workflow Nodes (Modularized)**
+- **Per-node executors**: SRP-compliant modules in `services/nodes/*`
+- **AI Content Generation**: via `nodes/ai_agent.py` using `LLMClient` (Bedrock/OpenAI)
+- **Text Overlay**: `nodes/text_overlay.py` (Instagram-optimized formatting)
+- **Image Upload**: `nodes/image_upload.py` (Cloudinary signed uploads)
+- **Social Posting**: `nodes/social_media.py` (real vs simulation with InstagramService)
 - **Smart Content Detection**: Automatically finds content from previous nodes
-- **Real vs Simulation Mode**: Automatic switching based on token validity
 - **Comprehensive Logging**: Detailed debugging and monitoring
 
 ### 4. **Security & Reliability**
