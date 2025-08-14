@@ -5,9 +5,7 @@ import boto3
 from typing import Dict, Any, List, Optional
 import os
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from langchain_ollama import ChatOllama
-from langchain_huggingface import HuggingFaceEndpoint
+# Removed unused LLM imports - only using Bedrock
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models import BaseLanguageModel
 import asyncio
@@ -30,10 +28,9 @@ class AIWorkflowGenerator:
         logger.info(f"AIWorkflowGenerator initialized with LLM: {type(self.llm).__name__ if self.llm else 'None'}")
 
     def _initialize_llm(self) -> Optional[BaseLanguageModel]:
-        """Initialize the best available LLM based on environment configuration"""
-        logger.info("Initializing LLM provider")
+        """Initialize Amazon Bedrock LLM"""
+        logger.info("Initializing Amazon Bedrock LLM")
         
-        # Priority 1: Amazon Bedrock (fastest & most reliable)
         bedrock_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
         if bedrock_token:
             logger.info("Attempting to initialize Amazon Bedrock LLM")
@@ -52,74 +49,7 @@ class AIWorkflowGenerator:
             except Exception as e:
                 logger.warning(f"Amazon Bedrock not available: {e}")
         
-        # Priority 2: Ollama (local, free)
-        if os.getenv("USE_OLLAMA", "false").lower() == "true":
-            logger.info("Attempting to initialize Ollama LLM")
-            try:
-                model_name = os.getenv("OLLAMA_MODEL", "llama3.1")
-                logger.info(f"Using Ollama model: {model_name}")
-                llm = ChatOllama(
-                    model=model_name,
-                    temperature=0.5,  # Lower for faster responses
-                    timeout=30,  # 30 second timeout
-                    num_ctx=2048,  # Limit context window for speed
-                    num_predict=1200  # Limit response length
-                )
-                logger.info("Ollama LLM initialized successfully")
-                return llm
-            except Exception as e:
-                logger.warning(f"Ollama not available: {e}")
-        
-        # Priority 3: Hugging Face (free tier)
-        hf_token = os.getenv("HUGGINGFACE_API_TOKEN")
-        if hf_token:
-            logger.info("Attempting to initialize Hugging Face LLM")
-            try:
-                model_id = os.getenv("HF_MODEL_ID", "meta-llama/Llama-3.1-8B-Instruct:novita")
-                logger.info(f"Using Hugging Face model: {model_id}")
-                llm = HuggingFaceEndpoint(
-                    endpoint_url=f"https://api-inference.huggingface.co/models/{model_id}",
-                    huggingfacehub_api_token=hf_token,
-                    task="text-generation",
-                    temperature=0.7
-                )
-                logger.info("Hugging Face LLM initialized successfully")
-                return llm
-            except Exception as e:
-                logger.warning(f"Hugging Face not available: {e}")
-        
-        # Priority 4: OpenAI (fallback)
-        api_key = os.getenv("OPENAI_API_KEY")
-        if api_key and api_key != "your_openai_api_key_here":
-            logger.info("Attempting to initialize OpenAI LLM")
-            try:
-                llm = ChatOpenAI(
-                    model="gpt-4",
-                    temperature=0.7,
-                    api_key=api_key
-                )
-                logger.info("OpenAI LLM initialized successfully")
-                return llm
-            except Exception as e:
-                logger.warning(f"OpenAI not available: {e}")
-        
-        # Priority 5: Together AI (very cheap alternative)
-        together_api_key = os.getenv("TOGETHER_API_KEY")
-        if together_api_key:
-            logger.info("Attempting to initialize Together AI LLM")
-            try:
-                llm = ChatOpenAI(
-                    model="meta-llama/Llama-3.1-8B-Instruct",
-                    temperature=0.7,
-                    api_key=together_api_key,
-                    base_url="https://api.together.xyz/v1"
-                )
-                logger.info("Together AI LLM initialized successfully")
-                return llm
-            except Exception as e:
-                logger.warning(f"Together AI not available: {e}")
-        
-        logger.warning("No LLM provider configured, using fallback workflow generation")
+        logger.warning("Amazon Bedrock not configured, using fallback workflow generation")
         return None
 
     async def generateWorkflow(self, request: Dict[str, Any]) -> Dict[str, Any]:
