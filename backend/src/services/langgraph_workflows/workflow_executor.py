@@ -338,9 +338,11 @@ class LangGraphWorkflowExecutor:
                 state['image_width'] = config.get('image_width', state.get('image_width', 1080))
                 state['image_height'] = config.get('image_height', state.get('image_height', 1080))
                 result = self.nodes.text_overlay_node(state)
-            elif node_type == 'imageGenerator':
-                result = self.nodes.image_generator_node(state)
-            elif node_type == 'seoOptimizer':
+                            elif node_type == 'imageGenerator':
+                    result = self.nodes.image_generator_node(state)
+                elif node_type == 'imageUpload':
+                    result = self.nodes.image_upload_node(state)
+                elif node_type == 'seoOptimizer':
                 result = self.nodes.seo_optimizer_node(state)
             else:
                 result = self.nodes.ai_agent_node(state)
