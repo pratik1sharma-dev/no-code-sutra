@@ -11,6 +11,7 @@ While other no-code platforms offer simple if/then automation, **No Code Sutra**
 - ✍️ **Create personalized content** for each situation
 - 🎯 **Learn and adapt** over time
 - 🔄 **Handle complex branching** logic
+- 📸 **Generate dynamic visual content** with AI-powered image selection
 
 ## 🏗️ Architecture
 
@@ -19,7 +20,7 @@ Frontend (TypeScript/React)
     ↓ API calls
 Backend (Python + LangGraph) ← Agentic AI workflows
     ↓ AI calls
-OpenAI GPT-4
+Amazon Bedrock (LLaMA) + Instagram Graph API
 ```
 
 ### Frontend
@@ -31,8 +32,9 @@ OpenAI GPT-4
 ### Backend  
 - **FastAPI** for high-performance async API
 - **LangGraph** for agentic workflow orchestration
-- **OpenAI GPT-4** for intelligent decision making
-- **PostgreSQL** for workflow storage
+- **Amazon Bedrock (LLaMA)** for intelligent decision making
+- **Instagram Graph API** for social media automation
+- **Dynamic Image APIs** (Unsplash, Pexels, Lorem Picsum) for content generation
 
 ## 🚀 Quick Start
 
@@ -60,22 +62,74 @@ python -m venv venv
 # OR .\venv\Scripts\activate.bat  # Command Prompt
 
 # Install dependencies
-pip install fastapi uvicorn
+pip install -r requirements.txt
+
+# Set up environment variables
+copy env.example .env
+# Edit .env with your credentials
 
 # Start the server
-cd src
-python main-simple.py
+python src/main.py
 ```
 Backend will be available at: http://localhost:8000
 
-### 4. Test the Platform
+### 4. Test Instagram Integration
 1. Visit http://localhost:3000
-2. Type: "Find construction companies in NYC and send them personalized emails"
-3. Watch AI generate an agentic workflow!
-4. Review and customize the workflow
-5. Deploy and monitor execution
+2. Type: "Create an Instagram post about AI trends with dynamic background"
+3. Watch AI generate content and select relevant background images
+4. Review the generated workflow
+5. Execute and post to Instagram!
+
+## 📸 Instagram Integration Features
+
+### ✅ **Working Features**
+- **AI Content Generation** - Creates engaging captions and hashtags
+- **Dynamic Background Images** - Automatically selects relevant images from free APIs
+- **Text Overlay** - Professional text formatting with Instagram-optimized styling
+- **Real Instagram Posting** - Posts directly to Instagram Business accounts
+- **Fallback Mechanisms** - Graceful handling of API failures
+- **Security** - Proper credential management and git history cleaning
+
+### 🎨 **Content Generation**
+- **Structured Content** - Headlines, bullet points, captions, hashtags
+- **Platform Optimization** - Instagram-specific formatting and sizing
+- **Visual Enhancement** - Professional text overlay with modern styling
+- **Dynamic Images** - Context-aware background image selection
+
+### 🔧 **Technical Implementation**
+- **Multi-API Image Search** - Unsplash, Pexels, Lorem Picsum fallback
+- **Error Handling** - Comprehensive logging and recovery
+- **Rate Limiting** - Respects API limits and quotas
+- **Content Validation** - Ensures Instagram compliance
 
 ## 🧠 Agentic Workflow Examples
+
+### Instagram Content Workflow
+```
+User: "Create an Instagram post about AI trends with dynamic background"
+
+AI Agents:
+1. Content Research Agent
+   - Analyzes current AI trends
+   - Identifies engaging topics
+   - Researches relevant hashtags
+
+2. Content Creator Agent
+   - Generates structured content (headline, bullets, caption)
+   - Optimizes for Instagram engagement
+   - Creates platform-specific formatting
+
+3. Visual Content Agent
+   - Extracts keywords from content
+   - Searches multiple image APIs
+   - Selects most relevant background image
+   - Applies professional text overlay
+
+4. Instagram Publishing Agent
+   - Validates content compliance
+   - Posts to Instagram Business account
+   - Tracks post performance
+```
 
 ### Lead Generation Workflow
 ```
@@ -103,27 +157,6 @@ AI Agents:
    - Adapts strategy based on results
 ```
 
-### Content Creation Workflow
-```
-User: "Create blog posts about AI trends and post them to LinkedIn"
-
-AI Agents:
-1. Research Agent
-   - Analyzes current AI trends
-   - Identifies trending topics
-   - Researches relevant data
-
-2. Content Creator Agent
-   - Writes engaging blog posts
-   - Optimizes for SEO
-   - Creates social media variations
-
-3. Publishing Agent
-   - Schedules optimal posting times
-   - Adapts content for different platforms
-   - Monitors engagement
-```
-
 ## 🔧 Development
 
 ### Frontend Development
@@ -137,7 +170,7 @@ npm run lint         # Run linter
 ### Backend Development
 ```bash
 cd backend
-python start.py      # Start development server
+python src/main.py   # Start development server
 black src/           # Format code
 isort src/           # Sort imports
 flake8 src/          # Run linter
@@ -151,19 +184,23 @@ pytest tests/        # Run tests
 
 ## 📊 Available AI Agents
 
-### 1. Lead Research Agent
+### 1. Instagram Content Agent
+- **Capabilities**: Content generation, image selection, text overlay, Instagram posting
+- **Use Cases**: Social media marketing, brand promotion, content creation
+
+### 2. Lead Research Agent
 - **Capabilities**: Web search, LinkedIn analysis, lead scoring
 - **Use Cases**: Finding prospects, qualifying leads, market research
 
-### 2. Content Creator Agent  
+### 3. Content Creator Agent  
 - **Capabilities**: Blog writing, social media, SEO optimization
 - **Use Cases**: Content marketing, social media management
 
-### 3. Email Campaign Agent
+### 4. Email Campaign Agent
 - **Capabilities**: Email personalization, campaign management, A/B testing
 - **Use Cases**: Email marketing, customer outreach
 
-### 4. Data Analyzer Agent
+### 5. Data Analyzer Agent
 - **Capabilities**: Data processing, insight generation, reporting
 - **Use Cases**: Business intelligence, performance analysis
 
@@ -175,6 +212,8 @@ pytest tests/        # Run tests
 - ✅ **Visual Workflow Builder** - Drag-and-drop customization
 - ✅ **Real-time Execution** - Monitor workflows as they run
 - ✅ **Intelligent Agents** - AI makes decisions and adapts
+- ✅ **Dynamic Visual Content** - AI-powered image selection and text overlay
+- ✅ **Social Media Integration** - Direct posting to Instagram and other platforms
 
 ### For Developers
 - ✅ **TypeScript Frontend** - Type-safe, modern React
@@ -182,6 +221,22 @@ pytest tests/        # Run tests
 - ✅ **Extensible Architecture** - Easy to add new agents
 - ✅ **Comprehensive API** - RESTful endpoints with docs
 - ✅ **Production Ready** - Scalable and maintainable
+- ✅ **Security First** - Proper credential management and git history protection
+
+## 🔐 Security & Privacy
+
+### ✅ **Security Features**
+- **Environment Variables** - Secure credential management
+- **Git History Protection** - Automatic .env exclusion
+- **API Key Rotation** - Support for credential regeneration
+- **Private Repository** - Enhanced access control
+- **Input Validation** - Comprehensive data sanitization
+
+### 🔒 **Privacy Protection**
+- **Local Processing** - Sensitive data stays on your servers
+- **No Data Mining** - We don't collect or analyze your content
+- **Secure APIs** - All external API calls use proper authentication
+- **Audit Logging** - Track all system activities
 
 ## 🚀 Deployment
 
@@ -197,9 +252,23 @@ npm run build
 cd backend
 # Deploy to Railway or Heroku
 # Set environment variables:
-# - OPENAI_API_KEY
-# - DATABASE_URL
+# - AWS_BEARER_TOKEN_BEDROCK
+# - INSTAGRAM_ACCESS_TOKEN
+# - CLOUDINARY_CLOUD_NAME
+# - CLOUDINARY_API_KEY
+# - CLOUDINARY_API_SECRET
 ```
+
+## 📚 Documentation
+
+### Setup Guides
+- **[Instagram Setup Guide](backend/INSTAGRAM_SETUP_GUIDE.md)** - Complete Instagram integration setup
+- **[Bedrock Setup Guide](backend/BEDROCK_SETUP_GUIDE.md)** - Amazon Bedrock configuration
+- **[LLM Setup Guide](backend/LLM_SETUP_GUIDE.md)** - Language model configuration
+
+### Implementation Details
+- **[Implementation Summary](backend/IMPLEMENTATION_SUMMARY.md)** - Technical implementation overview
+- **[Backend README](backend/README.md)** - Backend-specific documentation
 
 ## 🤝 Contributing
 
@@ -215,7 +284,7 @@ MIT License - see LICENSE file for details
 
 ## 🆘 Support
 
-- **Documentation**: [Coming Soon]
+- **Documentation**: [Available in /backend/docs]
 - **Issues**: GitHub Issues
 - **Discussions**: GitHub Discussions
 
