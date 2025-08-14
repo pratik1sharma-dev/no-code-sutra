@@ -10,14 +10,14 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 def test_imports():
     """Test that all modules can be imported"""
     try:
-        from services.langgraph_nodes.ai_nodes import SimpleAIWorkflowNodes
-        print("✅ AI nodes import successful")
+        from services.langgraph_nodes.workflow_nodes import LangGraphWorkflowNodes
+        print("✅ Workflow nodes import successful")
         
-        from services.langgraph_workflows.ai_workflows import WorkflowFactory
-        print("✅ Workflow factory import successful")
+        from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
+        print("✅ Workflow executor import successful")
         
-        from workflow_types.workflow import ResearchState, LeadQualificationState
-        print("✅ Workflow types import successful")
+        from services.aiWorkflowGenerator import AIWorkflowGenerator
+        print("✅ AI workflow generator import successful")
         
         return True
     except Exception as e:
@@ -27,14 +27,14 @@ def test_imports():
 def test_workflow_structure():
     """Test workflow structure without API calls"""
     try:
-        from services.langgraph_workflows.ai_workflows import WorkflowFactory
+        from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
         
-        # Create factory (this will fail due to missing API key, but we can test structure)
-        print("✅ Workflow factory structure is correct")
+        # Create executor (this will fail due to missing API key, but we can test structure)
+        print("✅ Workflow executor structure is correct")
         
-        # Test workflow types
-        workflow_types = ["research", "lead_qualification"]
-        print(f"✅ Available workflow types: {workflow_types}")
+        # Test node types
+        node_types = ["aiAgent", "textOverlay", "imageUpload", "instagram_post"]
+        print(f"✅ Available node types: {node_types}")
         
         return True
     except Exception as e:
@@ -56,11 +56,10 @@ def test_api_endpoints():
                 "/",
                 "/health", 
                 "/api/workflows/generate",
-                "/api/langgraph/execute",
-                "/api/research/company",
-                "/api/leads/qualify",
-                "/api/workflows/available",
-                "/api/agents/available"
+                "/api/workflows/execute",
+                "/api/nodes/registry",
+                "/docs",
+                "/redoc"
             ]
             
             print(f"✅ Expected API routes: {len(expected_routes)} routes")
