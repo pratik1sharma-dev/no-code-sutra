@@ -261,6 +261,18 @@ class NodeRegistry:
 		    output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}}}
 		)
     
+		self._nodes['imageUpload'] = NodeMetadata(
+		    type='imageUpload',
+		    label='Image Upload',
+		    description='Upload an image (data URL or URL) to Cloudinary and return a public URL',
+		    category=NodeCategory.INTEGRATION,
+		    icon='Share2',
+		    color='primary',
+		    required_inputs=['image_data_url'],
+		    optional_inputs=['image_url'],
+		    output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}}}
+		)
+    
     def get_node_metadata(self, node_type: str) -> Optional[NodeMetadata]:
         """Get metadata for a specific node type"""
         return self._nodes.get(node_type)

@@ -19,7 +19,8 @@ export type NodeType =
   | 'aggregate'
   | 'errorHandler'
   | 'instagram_post'
-  | 'textOverlay';
+  | 'textOverlay'
+  | 'imageUpload';
 
 // Edge Types
 export type EdgeType = 'default' | 'conditional' | 'data';

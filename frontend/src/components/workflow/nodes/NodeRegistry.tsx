@@ -113,7 +113,8 @@ const NODE_COMPONENTS: Record<NodeType, React.ComponentType<NodeProps<WorkflowNo
   aggregate: AggregateNode,
   errorHandler: ErrorHandlerNode,
   instagram_post: InstagramPostNode,
-  textOverlay: DefaultNode
+  textOverlay: DefaultNode,
+  imageUpload: DefaultNode
 };
 
 // Hook for managing node registry
