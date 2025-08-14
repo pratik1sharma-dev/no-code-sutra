@@ -1,7 +1,16 @@
 from typing import Dict, Any
-
-from .context import nodes_ctx
+from datetime import datetime
 
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
-    return nodes_ctx.delay_node(state)
+    try:
+        delay_seconds = state.get('delay_seconds', 1)
+        state['delay_seconds'] = delay_seconds
+        state['scheduled_for'] = datetime.now().isoformat()
+        state['status'] = 'scheduled'
+        state['timestamp'] = datetime.now().isoformat()
+        return state
+    except Exception as e:
+        state['status'] = 'failed'
+        state['error'] = str(e)
+        return state
