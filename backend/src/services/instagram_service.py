@@ -79,6 +79,25 @@ class InstagramService:
             logger.error(f"Failed to get Instagram Business Account ID: {e}")
             raise
     
+    def _truncate_caption(self, caption: str, max_length: int = 2200) -> str:
+        """
+        Truncate caption to Instagram's maximum length
+        
+        Args:
+            caption: Original caption text
+            max_length: Maximum allowed length (Instagram limit is 2200)
+        
+        Returns:
+            Truncated caption
+        """
+        if len(caption) <= max_length:
+            return caption
+        
+        # Truncate and add ellipsis
+        truncated = caption[:max_length-3] + "..."
+        logger.warning(f"Caption truncated from {len(caption)} to {len(truncated)} characters")
+        return truncated
+    
     def create_media_container(self, caption: str, media_type: str = "IMAGE", image_url: str = None) -> Dict[str, Any]:
         """
         Create a media container for Instagram post
@@ -92,11 +111,14 @@ class InstagramService:
             Response data from Instagram API
         """
         try:
+            # Truncate caption if it exceeds Instagram's limit
+            truncated_caption = self._truncate_caption(caption)
+            
             url = f"{self.base_url}/{self.instagram_business_account_id}/media"
             
             data = {
                 'access_token': self.access_token,
-                'caption': caption,
+                'caption': truncated_caption,
                 'media_type': media_type
             }
             
@@ -178,7 +200,8 @@ class InstagramService:
                     'status': 'success',
                     'instagram_post_id': publish_result.get('id'),
                     'creation_id': creation_id,
-                    'caption': caption,
+                    'caption': truncated_caption,
+                    'original_caption_length': len(caption),
                     'posted_at': datetime.now().isoformat(),
                     'api_response': publish_result
                 }
@@ -207,14 +230,14 @@ class InstagramService:
             Response data from Instagram API
         """
         try:
-            # First, upload the image to get a media ID
-            # This is a simplified version - in production you'd need to handle image uploads properly
+            # Truncate caption if it exceeds Instagram's limit
+            truncated_caption = self._truncate_caption(caption)
             
             url = f"{self.base_url}/{self.instagram_business_account_id}/media"
             
             data = {
                 'access_token': self.access_token,
-                'caption': caption,
+                'caption': truncated_caption,
                 'media_type': 'IMAGE',
                 'image_url': image_url
             }
@@ -233,7 +256,8 @@ class InstagramService:
                     'status': 'success',
                     'instagram_post_id': publish_result.get('id'),
                     'creation_id': creation_id,
-                    'caption': caption,
+                    'caption': truncated_caption,
+                    'original_caption_length': len(caption),
                     'image_url': image_url,
                     'posted_at': datetime.now().isoformat(),
                     'api_response': publish_result
