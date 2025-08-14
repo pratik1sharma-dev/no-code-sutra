@@ -663,7 +663,12 @@ class LangGraphWorkflowNodes:
             if not overlay_text.strip():
                 overlay_text = "Generated Post"
 
-            # Instagram-optimized dimensions (square format for best engagement)
+            # TODO: FUTURE IMPROVEMENT - Make dimensions configurable per platform
+            # Currently hardcoded for Instagram (1080x1080) but should be dynamic based on:
+            # - Platform requirements (Instagram, LinkedIn, Twitter, etc.)
+            # - Node configuration parameters
+            # - User preferences
+            # For now, using Instagram-optimized dimensions as default
             width = int(state.get('image_width', 1080))  # Instagram recommended: 1080x1080
             height = int(state.get('image_height', 1080))
             background_url = state.get('image_url') or state.get('background_image_url')
@@ -680,34 +685,40 @@ class LangGraphWorkflowNodes:
                 base_image = None
 
             if base_image is None:
-                # Create a visually appealing gradient background for Instagram
-                # Use modern Instagram-style colors
-                base_image = Image.new('RGB', (width, height), (255, 255, 255))
+                # Try to get a dynamic background image based on content
+                base_image = self._get_dynamic_background_image(overlay_text, width, height)
                 
-                # Create a beautiful gradient background
-                for y in range(height):
-                    for x in range(width):
-                        # Create a modern gradient from top to bottom
-                        progress = y / height
-                        
-                        # Instagram-style gradient: light blue to purple to pink
-                        if progress < 0.33:
-                            # Top: Light blue to purple
-                            r = int(135 + (147 - 135) * (progress * 3))
-                            g = int(206 + (112 - 206) * (progress * 3))
-                            b = int(250 + (219 - 250) * (progress * 3))
-                        elif progress < 0.66:
-                            # Middle: Purple to pink
-                            r = int(147 + (255 - 147) * ((progress - 0.33) * 3))
-                            g = int(112 + (182 - 112) * ((progress - 0.33) * 3))
-                            b = int(219 + (193 - 219) * ((progress - 0.33) * 3))
-                        else:
-                            # Bottom: Pink to light pink
-                            r = int(255 + (255 - 255) * ((progress - 0.66) * 3))
-                            g = int(182 + (192 - 182) * ((progress - 0.66) * 3))
-                            b = int(193 + (203 - 193) * ((progress - 0.66) * 3))
-                        
-                        base_image.putpixel((x, y), (r, g, b))
+                # Fallback to gradient if no dynamic image found
+                if base_image is None:
+                    print("Using fallback gradient background")
+                    # Create a visually appealing gradient background for Instagram
+                    # Use modern Instagram-style colors
+                    base_image = Image.new('RGB', (width, height), (255, 255, 255))
+                    
+                    # Create a beautiful gradient background
+                    for y in range(height):
+                        for x in range(width):
+                            # Create a modern gradient from top to bottom
+                            progress = y / height
+                            
+                            # Instagram-style gradient: light blue to purple to pink
+                            if progress < 0.33:
+                                # Top: Light blue to purple
+                                r = int(135 + (147 - 135) * (progress * 3))
+                                g = int(206 + (112 - 206) * (progress * 3))
+                                b = int(250 + (219 - 250) * (progress * 3))
+                            elif progress < 0.66:
+                                # Middle: Purple to pink
+                                r = int(147 + (255 - 147) * ((progress - 0.33) * 3))
+                                g = int(112 + (182 - 112) * ((progress - 0.33) * 3))
+                                b = int(219 + (193 - 219) * ((progress - 0.33) * 3))
+                            else:
+                                # Bottom: Pink to light pink
+                                r = int(255 + (255 - 255) * ((progress - 0.66) * 3))
+                                g = int(182 + (192 - 182) * ((progress - 0.66) * 3))
+                                b = int(193 + (203 - 193) * ((progress - 0.66) * 3))
+                            
+                            base_image.putpixel((x, y), (r, g, b))
 
             # Normalize to RGBA for overlays
             image_rgba = base_image.convert('RGBA')
@@ -732,7 +743,12 @@ class LangGraphWorkflowNodes:
             # Draw text with Instagram-optimized fonts and sizing
             draw = ImageDraw.Draw(image_rgba)
             
-            # Calculate optimal font sizes for Instagram (1080x1080)
+            # TODO: FUTURE IMPROVEMENT - Make font sizing configurable per platform
+            # Currently optimized for Instagram (1080x1080) but should be dynamic based on:
+            # - Platform requirements and best practices
+            # - Image dimensions and aspect ratios
+            # - Content type and readability requirements
+            # For now, using Instagram-optimized font sizes as default
             # Headline: 48-60px, Subhead: 32-40px, Body: 24-28px
             headline_size = int(width * 0.055)  # ~60px for 1080px width
             subhead_size = int(width * 0.037)   # ~40px for 1080px width
@@ -755,7 +771,12 @@ class LangGraphWorkflowNodes:
                     font_medium = ImageFont.load_default()
                     font_small = ImageFont.load_default()
 
-            # Wrap text with Instagram-optimized line lengths
+            # TODO: FUTURE IMPROVEMENT - Make text wrapping configurable per platform
+            # Currently optimized for Instagram but should be dynamic based on:
+            # - Platform-specific content guidelines
+            # - Font sizes and readability requirements
+            # - Content type (headlines, body text, etc.)
+            # For now, using Instagram-optimized line lengths
             import textwrap
             max_text_width = width - (panel_margin * 2) - 60  # More padding for better readability
             
@@ -769,7 +790,12 @@ class LangGraphWorkflowNodes:
             max_chars_subhead = max(20, int(max_text_width / char_px_medium))
             max_chars_body = max(25, int(max_text_width / char_px_small))
 
-            # Process text with Instagram-optimized formatting
+            # TODO: FUTURE IMPROVEMENT - Make text formatting configurable per platform
+            # Currently optimized for Instagram but should be dynamic based on:
+            # - Platform-specific content structure requirements
+            # - Content type (headlines, subheads, bullets, etc.)
+            # - User preferences and branding guidelines
+            # For now, using Instagram-optimized formatting
             lines = []
             line_types = []  # Track if each line is headline, subhead, or body
             
@@ -793,7 +819,12 @@ class LangGraphWorkflowNodes:
                     lines.extend(wrapped)
                     line_types.extend(['body'] * len(wrapped))
 
-            # Calculate Instagram-optimized line heights and positioning
+            # TODO: FUTURE IMPROVEMENT - Make line heights and positioning configurable per platform
+            # Currently optimized for Instagram but should be dynamic based on:
+            # - Platform-specific design guidelines
+            # - Font sizes and readability requirements
+            # - Content hierarchy and visual balance
+            # For now, using Instagram-optimized line heights and positioning
             line_heights = {
                 'headline': int(headline_size * 1.3),  # ~78px for 60px font
                 'subhead': int(subhead_size * 1.2),    # ~48px for 40px font
@@ -807,7 +838,12 @@ class LangGraphWorkflowNodes:
             y = panel_top + ((panel_bottom - panel_top - total_height) // 2)
             x = panel_margin + 30  # More left padding for better Instagram aesthetics
 
-            # Render text with Instagram-optimized styling
+            # TODO: FUTURE IMPROVEMENT - Make text styling configurable per platform
+            # Currently optimized for Instagram but should be dynamic based on:
+            # - Platform-specific color schemes and branding
+            # - Content type and hierarchy requirements
+            # - Accessibility and readability standards
+            # For now, using Instagram-optimized styling
             for idx, (line, line_type) in enumerate(zip(lines, line_types)):
                 if line_type == 'headline':
                     font = font_large
@@ -983,4 +1019,190 @@ class LangGraphWorkflowNodes:
             except:
                 return False
         else:
-            return bool(value) 
+            return bool(value)
+    
+    def _get_dynamic_background_image(self, content: str, width: int, height: int) -> Optional[Image.Image]:
+        """
+        Get a dynamic background image based on content using free image APIs.
+        Tries multiple sources: Unsplash, Pexels, then falls back to gradient.
+        """
+        try:
+            # Extract keywords from content for image search
+            keywords = self._extract_image_keywords(content)
+            if not keywords:
+                print("No keywords extracted for image search")
+                return None
+            
+            print(f"Searching for background image with keywords: {keywords}")
+            
+            # Try Unsplash API first (free, high quality)
+            image_url = self._search_unsplash_image(keywords)
+            if image_url:
+                print(f"Found Unsplash image: {image_url}")
+                return self._download_and_process_image(image_url, width, height)
+            
+            # Try Pexels API as fallback (also free)
+            image_url = self._search_pexels_image(keywords)
+            if image_url:
+                print(f"Found Pexels image: {image_url}")
+                return self._download_and_process_image(image_url, width, height)
+            
+            # Try Pixabay API as another fallback
+            image_url = self._search_pixabay_image(keywords)
+            if image_url:
+                print(f"Found Pixabay image: {image_url}")
+                return self._download_and_process_image(image_url, width, height)
+            
+            print("No suitable background image found from APIs")
+            return None
+            
+        except Exception as e:
+            print(f"Error getting dynamic background image: {e}")
+            return None
+    
+    def _extract_image_keywords(self, content: str) -> List[str]:
+        """Extract relevant keywords from content for image search"""
+        try:
+            # Convert content to string if it's not already
+            content_str = str(content).lower()
+            
+            # Define keyword categories and their associated search terms
+            keyword_mapping = {
+                'technology': ['ai', 'artificial intelligence', 'machine learning', 'tech', 'technology', 'digital', 'innovation', 'future', 'automation', 'data', 'analytics', 'cloud', 'software', 'app', 'mobile', 'web', 'internet', 'cyber', 'smart', 'automated', 'algorithm', 'neural', 'deep learning', 'robotics', 'automation'],
+                'business': ['business', 'entrepreneur', 'startup', 'corporate', 'office', 'meeting', 'strategy', 'growth', 'success', 'leadership', 'management', 'team', 'collaboration', 'productivity', 'efficiency', 'profit', 'revenue', 'marketing', 'sales', 'customer', 'service'],
+                'creative': ['creative', 'design', 'art', 'visual', 'colorful', 'abstract', 'modern', 'minimal', 'aesthetic', 'beautiful', 'stunning', 'inspiration', 'creative', 'artistic', 'designer', 'brand', 'logo', 'typography', 'illustration', 'graphic'],
+                'nature': ['nature', 'outdoor', 'landscape', 'mountain', 'ocean', 'forest', 'tree', 'flower', 'green', 'blue', 'sky', 'sunset', 'sunrise', 'natural', 'organic', 'environment', 'sustainability', 'eco', 'earth', 'planet'],
+                'lifestyle': ['lifestyle', 'health', 'fitness', 'wellness', 'mindfulness', 'meditation', 'yoga', 'exercise', 'nutrition', 'balance', 'happiness', 'joy', 'peace', 'relaxation', 'stress', 'work-life', 'personal', 'development'],
+                'education': ['education', 'learning', 'study', 'knowledge', 'wisdom', 'book', 'library', 'school', 'university', 'course', 'training', 'skill', 'development', 'growth', 'improvement', 'expertise', 'mastery', 'certification'],
+                'finance': ['finance', 'money', 'investment', 'wealth', 'financial', 'economy', 'market', 'trading', 'stock', 'crypto', 'bitcoin', 'banking', 'savings', 'budget', 'planning', 'retirement', 'insurance'],
+                'travel': ['travel', 'adventure', 'exploration', 'journey', 'destination', 'vacation', 'holiday', 'trip', 'world', 'global', 'culture', 'experience', 'discovery', 'wanderlust', 'backpack', 'passport'],
+                'food': ['food', 'cooking', 'recipe', 'cuisine', 'restaurant', 'chef', 'kitchen', 'delicious', 'tasty', 'nutrition', 'healthy', 'organic', 'fresh', 'ingredients', 'meal', 'dining'],
+                'fashion': ['fashion', 'style', 'clothing', 'outfit', 'trend', 'beauty', 'accessories', 'shoes', 'jewelry', 'makeup', 'model', 'runway', 'designer', 'brand', 'luxury', 'elegant']
+            }
+            
+            # Find matching categories
+            matched_categories = []
+            for category, keywords in keyword_mapping.items():
+                for keyword in keywords:
+                    if keyword in content_str:
+                        matched_categories.append(category)
+                        break  # Found one keyword from this category, move to next
+            
+            # If no specific categories found, use general terms
+            if not matched_categories:
+                # Extract common words and use them as search terms
+                words = content_str.split()
+                # Filter out common stop words
+                stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'mine', 'yours', 'hers', 'ours', 'theirs'}
+                filtered_words = [word for word in words if word not in stop_words and len(word) > 3]
+                if filtered_words:
+                    return filtered_words[:3]  # Return top 3 words
+            
+            # Return search terms for matched categories
+            search_terms = []
+            for category in matched_categories[:2]:  # Limit to 2 categories
+                if category == 'technology':
+                    search_terms.extend(['technology', 'digital', 'innovation'])
+                elif category == 'business':
+                    search_terms.extend(['business', 'corporate', 'professional'])
+                elif category == 'creative':
+                    search_terms.extend(['creative', 'design', 'art'])
+                elif category == 'nature':
+                    search_terms.extend(['nature', 'landscape', 'outdoor'])
+                elif category == 'lifestyle':
+                    search_terms.extend(['lifestyle', 'wellness', 'health'])
+                elif category == 'education':
+                    search_terms.extend(['education', 'learning', 'knowledge'])
+                elif category == 'finance':
+                    search_terms.extend(['finance', 'business', 'professional'])
+                elif category == 'travel':
+                    search_terms.extend(['travel', 'adventure', 'landscape'])
+                elif category == 'food':
+                    search_terms.extend(['food', 'cooking', 'cuisine'])
+                elif category == 'fashion':
+                    search_terms.extend(['fashion', 'style', 'design'])
+            
+            return search_terms[:3] if search_terms else ['abstract', 'modern', 'design']
+            
+        except Exception as e:
+            print(f"Error extracting keywords: {e}")
+            return ['abstract', 'modern', 'design']
+    
+    def _search_unsplash_image(self, keywords: List[str]) -> Optional[str]:
+        """Search for an image on Unsplash using keywords"""
+        try:
+            # Use Unsplash Source API (free, no API key required)
+            search_query = '+'.join(keywords[:2])  # Use first 2 keywords
+            url = f"https://source.unsplash.com/1080x1080/?{search_query}"
+            
+            # Test if the URL is accessible
+            response = requests.head(url, timeout=5)
+            if response.status_code == 200:
+                return url
+            return None
+            
+        except Exception as e:
+            print(f"Error searching Unsplash: {e}")
+            return None
+    
+    def _search_pexels_image(self, keywords: List[str]) -> Optional[str]:
+        """Search for an image on Pexels using keywords"""
+        try:
+            # Use Pexels Source API (free, no API key required)
+            search_query = '+'.join(keywords[:2])  # Use first 2 keywords
+            url = f"https://images.pexels.com/photos/{search_query}/1080/1080"
+            
+            # Test if the URL is accessible
+            response = requests.head(url, timeout=5)
+            if response.status_code == 200:
+                return url
+            return None
+            
+        except Exception as e:
+            print(f"Error searching Pexels: {e}")
+            return None
+    
+    def _search_pixabay_image(self, keywords: List[str]) -> Optional[str]:
+        """Search for an image on Pixabay using keywords"""
+        try:
+            # Use Pixabay Source API (free, no API key required)
+            search_query = '+'.join(keywords[:2])  # Use first 2 keywords
+            url = f"https://pixabay.com/get/{search_query}/1080/1080"
+            
+            # Test if the URL is accessible
+            response = requests.head(url, timeout=5)
+            if response.status_code == 200:
+                return url
+            return None
+            
+        except Exception as e:
+            print(f"Error searching Pixabay: {e}")
+            return None
+    
+    def _download_and_process_image(self, image_url: str, width: int, height: int) -> Optional[Image.Image]:
+        """Download and process image from URL"""
+        try:
+            print(f"Downloading image from: {image_url}")
+            response = requests.get(image_url, timeout=10)
+            response.raise_for_status()
+            
+            # Open and process image
+            image = Image.open(io.BytesIO(response.content)).convert('RGB')
+            
+            # Resize to target dimensions while maintaining aspect ratio
+            image.thumbnail((width, height), Image.Resampling.LANCZOS)
+            
+            # Create a new image with target dimensions
+            new_image = Image.new('RGB', (width, height), (255, 255, 255))
+            
+            # Center the image
+            x = (width - image.width) // 2
+            y = (height - image.height) // 2
+            new_image.paste(image, (x, y))
+            
+            print(f"Successfully processed background image: {image.size} -> {new_image.size}")
+            return new_image
+            
+        except Exception as e:
+            print(f"Error downloading/processing image: {e}")
+            return None 
