@@ -201,7 +201,7 @@ class LangGraphWorkflowExecutor:
                 # Execute the node
                 node_result = self.execute_node(
                     node_data['type'], 
-                    node_data.get('config', {}), 
+                    node_data.get('data', {}).get('config', {}), 
                     current_state
                 )
                 
@@ -224,25 +224,33 @@ class LangGraphWorkflowExecutor:
                 'end_time': datetime.now().isoformat()
             }
             
-            # Include final state data but ensure it's serializable
-            for key, value in current_state.items():
-                if key not in ['workflow_id', 'start_time', 'input_data', 'current_node', 'status', 'execution_id', 'end_time']:
-                    # Ensure the value is JSON serializable
+            # Include only essential final state data to avoid serialization issues
+            essential_keys = ['result', 'output', 'content', 'status', 'timestamp', 'image_url', 'social_data', 'instagram_post']
+            for key in essential_keys:
+                if key in current_state:
+                    value = current_state[key]
+                    # Simple serialization for essential data
                     if isinstance(value, (str, int, float, bool, type(None))):
                         result[key] = value
-                    elif isinstance(value, list):
-                        # Convert list items to serializable format
-                        serializable_list = []
-                        for item in value:
-                            if isinstance(item, dict):
-                                serializable_list.append(self._make_serializable(item))
-                            else:
-                                serializable_list.append(str(item) if not isinstance(item, (str, int, float, bool, type(None))) else item)
-                        result[key] = serializable_list
                     elif isinstance(value, dict):
-                        result[key] = self._make_serializable(value)
+                        # Only serialize simple dict values
+                        simple_dict = {}
+                        for k, v in value.items():
+                            if isinstance(v, (str, int, float, bool, type(None))):
+                                simple_dict[k] = v
+                            else:
+                                simple_dict[k] = str(v)
+                        result[key] = simple_dict
+                    elif isinstance(value, list):
+                        # Only serialize simple list values
+                        simple_list = []
+                        for item in value:
+                            if isinstance(item, (str, int, float, bool, type(None))):
+                                simple_list.append(item)
+                            else:
+                                simple_list.append(str(item))
+                        result[key] = simple_list
                     else:
-                        # Convert to string if not serializable
                         result[key] = str(value)
             
             return result
@@ -277,9 +285,10 @@ class LangGraphWorkflowExecutor:
             
             # Execute node based on type
             if node_type == 'aiAgent':
-                # Extract task and topic from config
-                state['task'] = config.get('task', 'research')
-                state['topic'] = config.get('topic', 'general research')
+                # Extract prompt from config (this is the contextual prompt from workflow generator)
+                state['prompt'] = config.get('prompt', '')
+                state['task'] = config.get('task', 'generate')
+                state['topic'] = config.get('topic', 'content generation')
                 result = self.nodes.ai_agent_node(state)
             elif node_type == 'email':
                 result = self.nodes.email_node(state)
@@ -302,18 +311,10 @@ class LangGraphWorkflowExecutor:
                 # Handle Instagram post configuration
                 state['platform'] = 'instagram'
                 
-                # Get access token from config or fallback to environment variable
-                raw_access_token = config.get('access_token', '')
-                if raw_access_token:
-                    # If config has access token, resolve any environment variable references
-                    # Fallback to direct value if no resolver
-                    state['access_token'] = raw_access_token
-                    print(f"Instagram post node - using config access_token: {raw_access_token}")
-                else:
-                    # Fallback to environment variable if no config provided
-                    import os
-                    state['access_token'] = os.getenv('INSTAGRAM_ACCESS_TOKEN', '')
-                    print(f"Instagram post node - using environment variable INSTAGRAM_ACCESS_TOKEN: {state['access_token'][:10] + '...' if state['access_token'] else 'None'}")
+                # Always use environment variable for Instagram access token
+                import os
+                state['access_token'] = os.getenv('INSTAGRAM_ACCESS_TOKEN', '')
+                print(f"Instagram post node - using environment variable INSTAGRAM_ACCESS_TOKEN: {state['access_token'][:10] + '...' if state['access_token'] else 'None'}")
                 
                 state['post'] = config.get('post', '')
                 print(f"Instagram post node - final access_token: {state['access_token'][:10] + '...' if state['access_token'] else 'None'}, post: {state['post']}")
@@ -441,21 +442,25 @@ class LangGraphWorkflowExecutor:
         
         return result 
 
-    def _make_serializable(self, obj: Any) -> Any:
-        """Convert an object to JSON serializable format"""
+    def _make_serializable(self, obj: Any, depth: int = 0) -> Any:
+        """Convert an object to JSON serializable format with recursion protection"""
+        # Prevent infinite recursion
+        if depth > 10:
+            return str(obj)
+        
         if isinstance(obj, dict):
             serializable_dict = {}
             for key, value in obj.items():
                 if isinstance(value, (str, int, float, bool, type(None))):
                     serializable_dict[key] = value
                 elif isinstance(value, list):
-                    serializable_dict[key] = [self._make_serializable(item) for item in value]
+                    serializable_dict[key] = [self._make_serializable(item, depth + 1) for item in value]
                 elif isinstance(value, dict):
-                    serializable_dict[key] = self._make_serializable(value)
+                    serializable_dict[key] = self._make_serializable(value, depth + 1)
                 else:
                     serializable_dict[key] = str(value)
             return serializable_dict
         elif isinstance(obj, list):
-            return [self._make_serializable(item) for item in obj]
+            return [self._make_serializable(item, depth + 1) for item in obj]
         else:
             return str(obj) if not isinstance(obj, (str, int, float, bool, type(None))) else obj 

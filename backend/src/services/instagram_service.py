@@ -196,6 +196,9 @@ class InstagramService:
                 # Publish the media
                 publish_result = self.publish_media(creation_id)
                 
+                # Truncate caption for response
+                truncated_caption = self._truncate_caption(caption)
+                
                 return {
                     'status': 'success',
                     'instagram_post_id': publish_result.get('id'),

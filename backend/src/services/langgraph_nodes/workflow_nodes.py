@@ -16,19 +16,25 @@ import time
 
 class LangGraphWorkflowNodes:
     def __init__(self):
-        # Use Bedrock instead of OpenAI
-        model_id = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-8b-instruct-v1:0")
-        region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-        
-        try:
-            self.llm = ChatBedrock(
-                model_id=model_id,
-                region_name=region,
-                model_kwargs={"temperature": 0.1}
-            )
-        except Exception as e:
-            # Fallback to a mock LLM if Bedrock is not available
-            print(f"Warning: Could not initialize Bedrock: {e}")
+        # Use the same Bedrock implementation as aiWorkflowGenerator
+        bedrock_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+        if bedrock_token:
+            try:
+                model_id = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-8b-instruct-v1:0")
+                region = os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
+                print(f"Initializing Bedrock for AI Agent with model: {model_id} in region: {region}")
+                
+                # Set the Bearer token as environment variable for Bedrock
+                os.environ['AWS_BEARER_TOKEN_BEDROCK'] = bedrock_token
+                
+                # Create a simple object to identify this as a Bedrock client
+                self.llm = type('BedrockClient', (), {'converse': True})()
+                print("Bedrock LLM initialized successfully for AI Agent")
+            except Exception as e:
+                print(f"Warning: Could not initialize Bedrock for AI Agent: {e}")
+                self.llm = None
+        else:
+            print("Warning: No Bedrock token found, AI Agent will fail")
             self.llm = None
     
     def ai_agent_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -41,38 +47,113 @@ class LangGraphWorkflowNodes:
                 state['timestamp'] = datetime.now().isoformat()
                 return state
             
-            # Extract task and topic from state
-            task = state.get('task', 'research')
-            topic = state.get('topic', 'general research')
+            # Extract prompt from state (this should be the contextual prompt from workflow generator)
             prompt = state.get('prompt', '')
+            task = state.get('task', 'generate')
+            topic = state.get('topic', 'content generation')
             context = state.get('context', '')
             
-            # Build appropriate prompt based on task
-            if task == 'research':
-                system_prompt = f"You are an AI research agent. Research the topic: {topic}"
-                user_prompt = f"Please provide comprehensive research on: {topic}"
-            elif task == 'generate':
-                system_prompt = f"You are an AI content generation agent. Generate content about: {topic}"
-                user_prompt = f"Please generate engaging content about: {topic}"
-            elif task == 'analyze':
-                system_prompt = f"You are an AI analysis agent. Analyze the topic: {topic}"
-                user_prompt = f"Please provide detailed analysis of: {topic}"
+            # Use the contextual prompt if provided, otherwise fallback to generic prompts
+            if prompt:
+                # Use the contextual prompt from workflow generator
+                system_prompt = "You are an AI content generation agent. You MUST follow the instructions exactly and return ONLY the requested format. If the instructions ask for JSON, return ONLY valid JSON without any additional text, explanations, or formatting."
+                user_prompt = prompt
             else:
-                system_prompt = f"You are an intelligent AI agent. Process the given input and provide a helpful response."
-                user_prompt = f"Context: {context}\n\nTask: {prompt}\n\nTopic: {topic}"
+                # Fallback to generic prompts (for backward compatibility)
+                if task == 'research':
+                    system_prompt = f"You are an AI research agent. Research the topic: {topic}"
+                    user_prompt = f"Please provide comprehensive research on: {topic}"
+                elif task == 'generate':
+                    system_prompt = f"You are an AI content generation agent. Generate content about: {topic}"
+                    user_prompt = f"Please generate engaging content about: {topic}"
+                elif task == 'analyze':
+                    system_prompt = f"You are an AI analysis agent. Analyze the topic: {topic}"
+                    user_prompt = f"Please provide detailed analysis of: {topic}"
+                else:
+                    system_prompt = f"You are an intelligent AI agent. Process the given input and provide a helpful response."
+                    user_prompt = f"Context: {context}\n\nTask: {prompt}\n\nTopic: {topic}"
             
-            template = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", user_prompt)
-            ])
+            # Use the same Bedrock API call as aiWorkflowGenerator
+            if hasattr(self.llm, 'converse'):  # Bedrock client
+                # Create the full prompt
+                full_prompt = f"{system_prompt}\n\n{user_prompt}"
+                messages = [{"role": "user", "content": [{"text": full_prompt}]}]
+                
+                # Use requests library for API key authentication
+                import requests
+                bedrock_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+                region = os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
+                model_id = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-8b-instruct-v1:0")
+                
+                url = f"https://bedrock-runtime.{region}.amazonaws.com/model/{model_id}/converse"
+                
+                payload = {"messages": messages}
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {bedrock_token}"
+                }
+                
+                response = requests.post(url, json=payload, headers=headers)
+                
+                if response.status_code == 200:
+                    response_data = response.json()
+                    
+                    # Handle different response structures
+                    if 'content' in response_data:
+                        response_content = response_data['content'][0]['text']
+                    elif 'message' in response_data:
+                        response_content = response_data['message']['content'][0]['text']
+                    elif 'output' in response_data and 'message' in response_data['output']:
+                        response_content = response_data['output']['message']['content'][0]['text']
+                    elif 'generation' in response_data:
+                        response_content = response_data['generation']
+                    else:
+                        raise Exception(f"Unexpected response structure from Bedrock API")
+                else:
+                    raise Exception(f"Bedrock API error: {response.status_code} - {response.text}")
+            else:
+                # Fallback to template approach if not Bedrock
+                template = ChatPromptTemplate.from_messages([
+                    ("system", system_prompt),
+                    ("human", user_prompt)
+                ])
+                
+                chain = template | self.llm
+                response = chain.invoke({"context": context, "prompt": prompt, "topic": topic})
+                response_content = response.content
+            parsed_json = None
             
-            chain = template | self.llm
-            response = chain.invoke({"context": context, "prompt": prompt, "topic": topic})
+            print(f"AI Agent raw response (first 500 chars): {response_content[:500]}")
+            
+            try:
+                # Look for JSON in the response
+                json_start = response_content.find('{')
+                json_end = response_content.rfind('}') + 1
+                
+                if json_start != -1 and json_end > json_start:
+                    json_str = response_content[json_start:json_end]
+                    print(f"Attempting to parse JSON: {json_str[:200]}...")
+                    parsed_json = json.loads(json_str)
+                    print(f"Successfully parsed JSON response: {list(parsed_json.keys()) if isinstance(parsed_json, dict) else 'Not a dict'}")
+                else:
+                    print("No JSON braces found in response")
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"Could not parse JSON from response: {e}")
+                print(f"JSON string that failed: {json_str[:200] if 'json_str' in locals() else 'No json_str'}")
+                parsed_json = None
             
             # Store the AI response in multiple formats for flexibility
-            state['result'] = response.content
-            state['output'] = response.content
-            state['content'] = response.content
+            if parsed_json:
+                # If we have structured JSON, store it
+                state['result'] = parsed_json
+                state['output'] = parsed_json
+                state['content'] = response_content  # Keep original for backward compatibility
+                state['structured_data'] = parsed_json
+            else:
+                # Fallback to plain text
+                state['result'] = response_content
+                state['output'] = response_content
+                state['content'] = response_content
             state['task'] = task
             state['topic'] = topic
             state['status'] = 'completed'
@@ -358,6 +439,21 @@ class LangGraphWorkflowNodes:
                     elif isinstance(image, str):
                         image_url = image
                 
+                # Handle structured content from AI Agent (JSON with caption, hashtags, etc.)
+                if isinstance(content, dict):
+                    # Extract caption and hashtags from structured data
+                    caption = content.get('caption', '')
+                    hashtags = content.get('hashtags', [])
+                    
+                    # Combine caption with hashtags
+                    if hashtags:
+                        hashtag_text = ' '.join([f"#{tag.replace('#', '')}" for tag in hashtags])
+                        content = f"{caption}\n\n{hashtag_text}"
+                    else:
+                        content = caption
+                    
+                    print(f"Extracted structured content - Caption: {caption[:100]}..., Hashtags: {hashtags}")
+                
                 # Final fallback - check if we have any content at all
                 if not content:
                     print("ERROR: No content found for Instagram post!")
@@ -527,20 +623,46 @@ class LangGraphWorkflowNodes:
         - Reads text from overlay_text, or falls back to content/result.
         """
         try:
-            # Determine text to overlay
+            # Determine text to overlay - prioritize structured_data over content
             overlay_text = state.get('overlay_text')
             if not overlay_text:
-                for key in ['content', 'result', 'text', 'post_data', 'output']:
+                # Prioritize structured_data first, then other fields
+                for key in ['structured_data', 'result', 'output', 'content', 'text', 'post_data']:
                     if key in state and state[key]:
                         overlay_text = state[key]
+                        print(f"Text overlay using content from '{key}': {type(overlay_text)}")
                         break
+            
+            # Handle structured data from AI Agent
             if isinstance(overlay_text, dict):
-                # Join structured payload into a poster-friendly string
-                headline = overlay_text.get('headline') or ''
-                subhead = overlay_text.get('subhead') or ''
-                bullets = overlay_text.get('bullets') or []
-                bullet_text = "\n".join([f"• {str(b)}" for b in bullets])
-                overlay_text = "\n".join([t for t in [headline, subhead, bullet_text] if t])
+                print(f"Processing structured data: {list(overlay_text.keys())}")
+                print(f"Raw structured data: {overlay_text}")
+                # Extract structured content for image overlay
+                headline = overlay_text.get('headline', '')
+                subhead = overlay_text.get('subhead', '')
+                bullets = overlay_text.get('bullets', [])
+                
+                # Format bullets properly
+                bullet_text = ""
+                if bullets:
+                    bullet_text = "\n".join([f"• {str(b)}" for b in bullets])
+                
+                # Combine all parts
+                parts = []
+                if headline:
+                    parts.append(headline)
+                if subhead:
+                    parts.append(subhead)
+                if bullet_text:
+                    parts.append(bullet_text)
+                
+                overlay_text = "\n\n".join(parts)
+                print(f"Formatted overlay text: {overlay_text[:100]}...")
+            else:
+                print(f"Overlay text is not a dict, it's: {type(overlay_text)}")
+                print(f"Overlay text content: {str(overlay_text)[:200]}...")
+            
+            # Convert to string if needed
             overlay_text = str(overlay_text) if overlay_text is not None else ""
 
             if not overlay_text.strip():

@@ -48,7 +48,7 @@ class NodeRegistry:
             color='primary',
             required_inputs=['task', 'prompt'],
             optional_inputs=['model', 'temperature', 'max_tokens'],
-            output_schema={'type': 'object', 'properties': {'result': {'type': 'string'}}}
+            output_schema={'type': 'object', 'properties': {'dynamic': {'type': 'any'}}}
         )
         
         # Social Media Nodes
@@ -59,7 +59,7 @@ class NodeRegistry:
             category=NodeCategory.SOCIAL_MEDIA,
             icon='Instagram',
             color='pink',
-            required_inputs=['content', 'instagram_credentials'],
+            required_inputs=['ai_output', 'image_url', 'instagram_credentials'],  # Accept AI output + image URL
             optional_inputs=['scheduled_time', 'location', 'user_tags'],
             output_schema={'type': 'object', 'properties': {'post_id': {'type': 'string'}}}
         )
@@ -256,8 +256,8 @@ class NodeRegistry:
             category=NodeCategory.DATA,
             icon='FileText',
             color='secondary',
-            required_inputs=['overlay_text'],
-            optional_inputs=['image_url', 'image_width', 'image_height'],
+            required_inputs=['ai_output'],  # Accept AI Agent output directly
+            optional_inputs=['image_url', 'image_width', 'image_height', 'text_fields'],
             output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}}}
         )
         

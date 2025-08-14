@@ -192,15 +192,18 @@ The JSON must have this exact structure:
         }}
       }}
     ],
-    "edges": [
-      {{
-        "id": "edge_id",
-        "source": "source_node_id",
-        "target": "target_node_id",
-        "type": "default",
-        "label": ""
-      }}
-    ],
+         "edges": [
+       {{
+         "id": "edge_id",
+         "source": "source_node_id",
+         "target": "target_node_id",
+         "type": "default",
+         "label": "",
+         "data_mapping": {{
+           "target_field": "source_node.output.field_name"
+         }}
+       }}
+     ],
     "metadata": {{
       "title": "Workflow title",
       "description": "Detailed description",
@@ -225,16 +228,71 @@ CRITICAL: Return ONLY the JSON object. No other text, explanations, or formattin
             5. Include relevant metadata for user understanding
             6. Suggest improvements and ask clarifying questions
             7. Focus on practical, achievable automations
-            8. **CRITICAL: For Instagram posting, ALWAYS use 'instagram_post' node type. NEVER use 'aiAgent' or 'apiCall' for Instagram.**
-            9. For other social media platforms, use 'apiCall' node with appropriate configuration
-            10. For Instagram posts without a provided image, include this chain: 'aiAgent' → 'textOverlay' → 'imageUpload' → 'instagram_post'.
-            11. 'textOverlay' must render the message into the image (use 'content' or a structured payload with headline/subhead/bullets).
-            12. 'imageUpload' must produce a publicly accessible HTTPS image_url (Cloudinary) consumed by 'instagram_post'.
 
-EXAMPLE WORKFLOW STRUCTURE:
-- Use 'aiAgent' for content generation, research, analysis
-- Use 'instagram_post' for posting to Instagram (NOT 'aiAgent')
-- Use 'apiCall' for other external services (NOT Instagram)
+NODE CONFIGURATION GUIDELINES:
+
+For AI Agent nodes, you must generate contextual prompts based on the user's intent:
+
+1. ANALYZE the user's request to understand:
+   - Target platform (Instagram, LinkedIn, Twitter, Email, etc.)
+   - Content type (educational, promotional, entertaining, professional, etc.)
+   - Audience and tone requirements
+   - Specific constraints or requirements
+   - Workflow chain context (what comes after this node)
+
+2. GENERATE an appropriate prompt for the AI Agent that:
+   - Specifies the platform and content type
+   - Includes platform-specific requirements (character limits, hashtags, tone, etc.)
+   - Defines output format (JSON structure)
+   - Considers workflow chain (if content goes to other nodes like textOverlay, instagram_post, etc.)
+
+3. EXAMPLES of contextual prompt generation:
+   - Instagram with image overlay: "Create Instagram content optimized for image overlay. Generate headline (max 40 chars), bullet points (3-4 items, max 20 chars each), engaging caption (max 200 chars), and relevant hashtags. Content must be CRISP and VISUAL for image overlay. Return JSON: {{\\"headline\\": \\"...\\", \\"bullets\\": [...], \\"caption\\": \\"...\\", \\"hashtags\\": [...]}}"
+   - LinkedIn: "Write professional LinkedIn post with industry insights and business-focused tone. Include compelling headline, professional content, relevant hashtags, and call-to-action. Return JSON: {{\\"headline\\": \\"...\\", \\"content\\": \\"...\\", \\"hashtags\\": [...]}}"
+   - Email: "Compose professional email with subject line and body for business communication. Include clear subject, professional greeting, main content, and closing. Return JSON: {{\\"subject\\": \\"...\\", \\"body\\": \\"...\\"}}"
+   - Twitter: "Create engaging tweet with character limit and trending hashtags. Include main message, relevant hashtags, and call-to-action. Return JSON: {{\\"tweet\\": \\"...\\", \\"hashtags\\": [...]}}"
+
+4. CONFIGURATION STRUCTURE:
+   For AI Agent nodes, include in config:
+   {{
+     "prompt": "Your dynamically generated contextual prompt here",
+     "model": "gpt-4",
+     "temperature": 0.7,
+     "max_tokens": 1000
+   }}
+
+5. WORKFLOW CHAIN AWARENESS:
+   - If AI Agent → textOverlay: Generate content suitable for image overlay (headlines, bullets, not long paragraphs)
+   - If AI Agent → instagram_post: Generate Instagram-optimized content with hashtags
+   - If AI Agent → email: Generate professional email content
+   - If AI Agent → slack: Generate concise, team-friendly messages
+
+6. DATA MAPPING FOR EDGES:
+   When creating edges between nodes, include data_mapping to specify how data flows:
+   
+   For AI Agent → Text Overlay:
+   {{
+     "data_mapping": {{
+       "ai_output": "ai_agent_1.output"
+     }}
+   }}
+   
+   For Text Overlay → Image Upload:
+   {{
+     "data_mapping": {{
+       "image_data_url": "text_overlay_1.output.image_url"
+     }}
+   }}
+   
+   For AI Agent + Image Upload → Instagram Post:
+   {{
+     "data_mapping": {{
+       "ai_output": "ai_agent_1.output",
+       "image_url": "image_upload_1.output.image_url"
+     }}
+   }}
+
+CRITICAL: Use your intelligence to generate appropriate prompts based on the user's specific needs. Don't use generic prompts - make them contextual and platform-specific. Consider the entire workflow chain when generating AI Agent prompts.
 
 WORKFLOW VALIDATION:
 Before returning the response, verify:
@@ -243,7 +301,7 @@ Before returning the response, verify:
 - The workflow forms a complete execution chain
 - Parallel branches are properly connected to main flow
 - Every node has appropriate incoming and outgoing connections
-- **Instagram workflows MUST use 'instagram_post' node type, not 'aiAgent' or 'apiCall'**"""
+- AI Agent nodes have contextual, platform-specific prompts"""
 
     def _build_user_prompt(self, user_prompt: str) -> str:
         return f"""Please analyze this user request and generate a workflow:
@@ -376,10 +434,11 @@ Generate the workflow in the specified JSON format."""
                 "source": edge.get('source') or '',
                 "target": edge.get('target') or '',
                 "type": edge.get('type') or 'default',
-                "label": edge.get('label') or ''
+                "label": edge.get('label') or '',
+                "data_mapping": edge.get('data_mapping') or {}
             }
             enhanced_edges.append(enhanced_edge)
-            logger.debug(f"Enhanced edge {index + 1}: {enhanced_edge['source']} -> {enhanced_edge['target']}")
+            logger.debug(f"Enhanced edge {index + 1}: {enhanced_edge['source']} -> {enhanced_edge['target']} with mapping: {enhanced_edge['data_mapping']}")
 
         logger.info(f"Edge validation completed. Enhanced {len(enhanced_edges)} edges")
         return enhanced_edges
