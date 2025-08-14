@@ -27,7 +27,7 @@
       "type": "social_media",
       "config": {
         "platform": "instagram",
-        "access_token": "YOUR_REAL_INSTAGRAM_ACCESS_TOKEN_HERE",
+        "access_token": "${INSTAGRAM_ACCESS_TOKEN}",
         "post": "instagram_content"
       }
     }

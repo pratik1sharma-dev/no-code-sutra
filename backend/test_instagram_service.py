@@ -11,7 +11,7 @@ from datetime import datetime
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from services.instagram_service import InstagramService
-from config.instagram_config import InstagramConfig, SETUP_INSTRUCTIONS
+from config.instagram_config import InstagramConfig
 
 def test_instagram_config():
     """Test Instagram configuration validation"""

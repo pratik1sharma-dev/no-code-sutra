@@ -116,8 +116,6 @@ class LangGraphWorkflowExecutor:
                     node_functions[node_id] = self.nodes.schedule_node
                 elif node_type == 'blogWriter':
                     node_functions[node_id] = self.nodes.blog_writer_node
-                elif node_type == 'socialMedia':
-                    node_functions[node_id] = self.nodes.social_media_node
                 elif node_type == 'instagram_post':
                     node_functions[node_id] = self.nodes.social_media_node
                 elif node_type == 'imageGenerator':
@@ -201,7 +199,7 @@ class LangGraphWorkflowExecutor:
                 # Execute the node
                 node_result = self.execute_node(
                     node_data['type'], 
-                    node_data.get('data', {}).get('config', {}), 
+                    node_data.get('config', {}), 
                     current_state
                 )
                 
@@ -262,7 +260,7 @@ class LangGraphWorkflowExecutor:
         """Execute a single node"""
         try:
             # Extract configuration from the workflow node structure
-            config = node_config.get('config', {})
+            config = node_config if isinstance(node_config, dict) else {}
             
             # Prepare state with proper configuration - preserve existing state
             state = input_data.copy()
@@ -298,13 +296,24 @@ class LangGraphWorkflowExecutor:
                 result = self.nodes.schedule_node(state)
             elif node_type == 'blogWriter':
                 result = self.nodes.blog_writer_node(state)
-            elif node_type == 'socialMedia':
-                result = self.nodes.social_media_node(state)
             elif node_type == 'instagram_post':
                 # Handle Instagram post configuration
                 state['platform'] = 'instagram'
-                state['access_token'] = config.get('access_token', '')
+                
+                # Get access token from config or fallback to environment variable
+                raw_access_token = config.get('access_token', '')
+                if raw_access_token:
+                    # If config has access token, resolve any environment variable references
+                    state['access_token'] = self.nodes._resolve_environment_variables(raw_access_token)
+                    print(f"Instagram post node - using config access_token: {raw_access_token}")
+                else:
+                    # Fallback to environment variable if no config provided
+                    import os
+                    state['access_token'] = os.getenv('INSTAGRAM_ACCESS_TOKEN', '')
+                    print(f"Instagram post node - using environment variable INSTAGRAM_ACCESS_TOKEN: {state['access_token'][:10] + '...' if state['access_token'] else 'None'}")
+                
                 state['post'] = config.get('post', '')
+                print(f"Instagram post node - final access_token: {state['access_token'][:10] + '...' if state['access_token'] else 'None'}, post: {state['post']}")
                 
                 # Use improved data reference resolution
                 if state.get('post'):

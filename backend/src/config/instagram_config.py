@@ -11,7 +11,7 @@ class InstagramConfig:
     """Configuration class for Instagram API integration"""
     
     # Instagram Graph API version
-    API_VERSION = "v18.0"
+    API_VERSION = "v23.0"
     
     # Base URL for Instagram Graph API
     BASE_URL = f"https://graph.facebook.com/{API_VERSION}"
@@ -64,64 +64,7 @@ class InstagramConfig:
         
         return validation_result
 
-# Setup Instructions
-SETUP_INSTRUCTIONS = """
-🔧 Instagram API Setup Instructions:
-
-1. **Facebook Developer Account Setup:**
-   - Go to https://developers.facebook.com/
-   - Create a new app or use existing app
-   - Add Instagram Basic Display or Instagram Graph API product
-
-2. **Instagram Business Account:**
-   - Convert your Instagram account to Business Account
-   - Connect it to a Facebook Page
-   - Ensure the Facebook Page is also connected to your app
-
-3. **Permissions & Tokens:**
-   - Request required permissions: {permissions}
-   - Generate a long-lived access token
-   - Set INSTAGRAM_ACCESS_TOKEN environment variable
-
-4. **Environment Variables:**
-   - INSTAGRAM_ACCESS_TOKEN=your_actual_token_here
-   - INSTAGRAM_BUSINESS_ACCOUNT_ID=your_ig_business_id (optional)
-
-5. **Testing:**
-   - Start with test tokens to verify workflow
-   - Replace with real tokens for live posting
-   - Monitor API rate limits and usage
-
-⚠️  Important Notes:
-- Instagram API requires Business Account (not Personal)
-- Access tokens expire and need periodic renewal
-- Respect Instagram's content policies and rate limits
-- Test thoroughly before going live
-
-📚 Documentation:
-- Instagram Graph API: https://developers.facebook.com/docs/instagram-api
-- Facebook Graph API: https://developers.facebook.com/docs/graph-api
-""".format(permissions=", ".join(InstagramConfig.REQUIRED_PERMISSIONS))
-
-# Example workflow configuration
-EXAMPLE_WORKFLOW_CONFIG = {
-    "nodes": [
-        {
-            "id": "instagram_post",
-            "type": "social_media",
-            "config": {
-                "platform": "instagram",
-                "access_token": "your_real_access_token_here",
-                "post": "instagram_content"
-            }
-        }
-    ]
-}
-
 if __name__ == "__main__":
-    # Print setup instructions
-    print(SETUP_INSTRUCTIONS)
-    
     # Validate current setup
     validation = InstagramConfig.validate_setup()
     print(f"\n🔍 Setup Validation: {'✅ Valid' if validation['valid'] else '❌ Invalid'}")
@@ -140,3 +83,5 @@ if __name__ == "__main__":
         print("🔧 Setup Steps:")
         for step in validation['setup_steps']:
             print(f"  - {step}")
+    
+    print("\n📚 For complete setup instructions, see: INSTAGRAM_SETUP.md")
