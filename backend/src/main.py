@@ -171,57 +171,57 @@ async def get_available_executors():
         "executors": [
             {
                 "node_type": "aiAgent",
-                "class_name": "LangGraphWorkflowNodes.ai_agent_node",
+                "class_name": "nodes.ai_agent.execute",
                 "description": "AI-powered tasks (research, analysis, content generation)"
             },
             {
                 "node_type": "data",
-                "class_name": "LangGraphWorkflowNodes.data_node",
+                "class_name": "nodes.data_node.execute",
                 "description": "Data processing and transformation"
             },
             {
                 "node_type": "email",
-                "class_name": "LangGraphWorkflowNodes.email_node",
+                "class_name": "nodes.email.execute",
                 "description": "Email sending functionality"
             },
             {
                 "node_type": "slack",
-                "class_name": "LangGraphWorkflowNodes.slack_node",
+                "class_name": "nodes.slack.execute",
                 "description": "Slack messaging functionality"
             },
             {
                 "node_type": "condition",
-                "class_name": "LangGraphWorkflowNodes.condition_node",
+                "class_name": "nodes.condition.execute",
                 "description": "Conditional logic and routing"
             },
             {
                 "node_type": "delay",
-                "class_name": "LangGraphWorkflowNodes.delay_node",
+                "class_name": "nodes.delay.execute",
                 "description": "Delay and timing control"
             },
             {
                 "node_type": "schedule",
-                "class_name": "LangGraphWorkflowNodes.schedule_node",
+                "class_name": "nodes.schedule.execute",
                 "description": "Scheduled execution"
             },
             {
                 "node_type": "blogWriter",
-                "class_name": "LangGraphWorkflowNodes.blog_writer_node",
+                "class_name": "nodes.blog_writer.execute",
                 "description": "Blog content generation"
             },
             {
                 "node_type": "socialMedia",
-                "class_name": "LangGraphWorkflowNodes.social_media_node",
+                "class_name": "nodes.social_media.execute",
                 "description": "Social media content creation"
             },
             {
                 "node_type": "imageGenerator",
-                "class_name": "LangGraphWorkflowNodes.image_generator_node",
+                "class_name": "nodes.image_generator.execute",
                 "description": "AI image generation"
             },
             {
                 "node_type": "seoOptimizer",
-                "class_name": "LangGraphWorkflowNodes.seo_optimizer_node",
+                "class_name": "nodes.seo_optimizer.execute",
                 "description": "SEO optimization"
             }
         ],
