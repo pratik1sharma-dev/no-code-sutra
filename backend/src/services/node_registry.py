@@ -248,6 +248,30 @@ class NodeRegistry:
             optional_inputs=['fallback_action', 'retry_count'],
             output_schema={'type': 'object', 'properties': {'handled': {'type': 'boolean'}}}
         )
+
+		self._nodes['textOverlay'] = NodeMetadata(
+		    type='textOverlay',
+		    label='Text Overlay',
+		    description='Overlay text onto an image and output an image URL',
+		    category=NodeCategory.DATA,
+		    icon='FileText',
+		    color='secondary',
+		    required_inputs=['overlay_text'],
+		    optional_inputs=['image_url', 'image_width', 'image_height'],
+		    output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}}}
+		)
+    
+		self._nodes['imageUpload'] = NodeMetadata(
+		    type='imageUpload',
+		    label='Image Upload',
+		    description='Upload an image (data URL or URL) to Cloudinary and return a public URL',
+		    category=NodeCategory.INTEGRATION,
+		    icon='Share2',
+		    color='primary',
+		    required_inputs=['image_data_url'],
+		    optional_inputs=['image_url'],
+		    output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}}}
+		)
     
     def get_node_metadata(self, node_type: str) -> Optional[NodeMetadata]:
         """Get metadata for a specific node type"""

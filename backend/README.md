@@ -22,6 +22,12 @@ Create `.env` file:
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
 DATABASE_URL=postgresql://user:password@localhost/nocodesutra
+# Cloudinary (for real Instagram posting image hosting)
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+# Instagram Access Token (for real posting)
+INSTAGRAM_ACCESS_TOKEN=your_instagram_access_token
 ```
 
 ### 3. Run Development Server
@@ -47,16 +53,23 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 src/
 ├── main.py              # FastAPI application
-├── models/              # Pydantic models
-│   └── workflow.py      # Workflow data models
 ├── services/            # Business logic
-│   ├── workflow_generator.py  # AI workflow generation
-│   └── workflow_executor.py   # Workflow execution engine
-└── agents/              # AI agent implementations
-    ├── lead_researcher.py
-    ├── content_creator.py
-    └── email_campaigner.py
+│   ├── aiWorkflowGenerator.py     # AI workflow generation
+│   └── langgraph_workflows/
+│       └── workflow_executor.py   # Workflow execution engine
+└── services/langgraph_nodes/
+    └── workflow_nodes.py          # Node implementations
 ```
+
+## New Nodes (Instagram real posting flow)
+- `textOverlay` (Data): Renders AI text onto an image and outputs image_data_url/image_url
+- `imageUpload` (Integration): Uploads the generated image to Cloudinary and returns a public `image_url`
+- `instagram_post` (Social Media): Posts using the public `image_url` (real if token present, else simulation)
+
+Recommended chain when no user-provided image:
+- `aiAgent` → `textOverlay` → `imageUpload` → `instagram_post`
+
+See `INSTAGRAM_SETUP.md` for details on tokens and requirements.
 
 ## Agentic Workflow Types
 

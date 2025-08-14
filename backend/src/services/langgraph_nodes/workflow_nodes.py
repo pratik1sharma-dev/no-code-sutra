@@ -8,6 +8,11 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from ..instagram_service import InstagramService
+from PIL import Image, ImageDraw, ImageFont
+import io
+import base64
+import hashlib
+import time
 
 class LangGraphWorkflowNodes:
     def __init__(self):
@@ -312,8 +317,10 @@ class LangGraphWorkflowNodes:
             content = state.get('content', '')
             access_token = state.get('access_token', '')
             post = state.get('post', '')
+            image_url = state.get('image_url', '')
+            image = state.get('image', '')
             
-            print(f"Social media node - platform: {platform}, content: {content}, post: {post}")
+            print(f"Social media node - platform: {platform}, content: {content}, post: {post}, image_url: {image_url}")
             print(f"Available state keys: {list(state.keys())}")
             
             # Handle Instagram-specific posting
@@ -343,6 +350,14 @@ class LangGraphWorkflowNodes:
                         content = post
                         print(f"Using post as content: {content}")
                 
+                # Ensure we have an image URL if available in state
+                if not image_url and image:
+                    # Allow previous nodes to store image in various fields
+                    if isinstance(image, dict) and 'image_url' in image:
+                        image_url = image.get('image_url')
+                    elif isinstance(image, str):
+                        image_url = image
+                
                 # Final fallback - check if we have any content at all
                 if not content:
                     print("ERROR: No content found for Instagram post!")
@@ -360,7 +375,8 @@ class LangGraphWorkflowNodes:
                         instagram_service = InstagramService(access_token)
                         
                         # Post content to Instagram
-                        result = instagram_service.post_text_only(str(content))
+                        # Prefer image posting if image_url available; else fail back to text-only handler which now requires image_url
+                        result = instagram_service.post_text_only(str(content), image_url=image_url)
                         
                         if result['status'] == 'success':
                             social_data = {
@@ -404,7 +420,8 @@ class LangGraphWorkflowNodes:
                     'posted_at': datetime.now().isoformat(),
                     'post_id': f"ig_post_{datetime.now().timestamp()}",
                     'real_post': False,
-                    'simulation_mode': True
+                    'simulation_mode': True,
+                    'image_url_used': image_url or 'none'
                 }
                 
                 state['social_data'] = social_data
@@ -448,14 +465,18 @@ class LangGraphWorkflowNodes:
             # For demo purposes, we'll simulate image generation
             # In production, integrate with DALL-E, Midjourney, or similar APIs
             
+            image_url = f"https://picsum.photos/seed/{int(datetime.now().timestamp())}/1080/1080"
             image_data = {
                 'prompt': prompt,
                 'style': style,
-                'image_url': f"https://example.com/generated-image-{datetime.now().timestamp()}.jpg",
+                'image_url': image_url,
                 'generated_at': datetime.now().isoformat()
             }
             
+            # Store in multiple convenient locations for downstream nodes
             state['image_data'] = image_data
+            state['image_url'] = image_url
+            state['image'] = image_data
             state['status'] = 'completed'
             state['timestamp'] = datetime.now().isoformat()
             
@@ -499,6 +520,212 @@ class LangGraphWorkflowNodes:
             state['error'] = str(e)
             return state
     
+    def text_overlay_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Create an image with overlaid text and return a data URL as image_url.
+        - If image_url is provided in state, use it as background.
+        - Otherwise, use a generated solid/gradient background.
+        - Reads text from overlay_text, or falls back to content/result.
+        """
+        try:
+            # Determine text to overlay
+            overlay_text = state.get('overlay_text')
+            if not overlay_text:
+                for key in ['content', 'result', 'text', 'post_data', 'output']:
+                    if key in state and state[key]:
+                        overlay_text = state[key]
+                        break
+            if isinstance(overlay_text, dict):
+                # Join structured payload into a poster-friendly string
+                headline = overlay_text.get('headline') or ''
+                subhead = overlay_text.get('subhead') or ''
+                bullets = overlay_text.get('bullets') or []
+                bullet_text = "\n".join([f"• {str(b)}" for b in bullets])
+                overlay_text = "\n".join([t for t in [headline, subhead, bullet_text] if t])
+            overlay_text = str(overlay_text) if overlay_text is not None else ""
+
+            if not overlay_text.strip():
+                overlay_text = "Generated Post"
+
+            # Dimensions and style
+            width = int(state.get('image_width', 1080))
+            height = int(state.get('image_height', 1080))
+            background_url = state.get('image_url') or state.get('background_image_url')
+
+            # Prepare base image
+            base_image = None
+            try:
+                if background_url and isinstance(background_url, str) and background_url.startswith('http'):
+                    resp = requests.get(background_url, timeout=10)
+                    resp.raise_for_status()
+                    base_image = Image.open(io.BytesIO(resp.content)).convert('RGB')
+            except Exception as e:
+                print(f"Warning: Failed to fetch background image: {e}")
+                base_image = None
+
+            if base_image is None:
+                # Create a simple gradient background
+                base_image = Image.new('RGB', (width, height), (20, 24, 35))
+                # Simple vertical gradient overlay
+                gradient = Image.new('L', (1, height), color=0xFF)
+                for y in range(height):
+                    gradient.putpixel((0, y), int(255 * (y / height)))
+                alpha_gradient = gradient.resize((width, height))
+                black_img = Image.new('RGB', (width, height), color=(10, 12, 18))
+                base_image = Image.composite(base_image, black_img, alpha_gradient)
+
+            # Normalize to RGBA for overlays
+            image_rgba = base_image.convert('RGBA')
+
+            # Draw semi-transparent text panel
+            overlay = Image.new('RGBA', image_rgba.size, (255, 255, 255, 0))
+            draw_overlay = ImageDraw.Draw(overlay)
+            panel_margin = int(min(width, height) * 0.06)
+            panel_top = int(height * 0.25)
+            panel_bottom = int(height * 0.85)
+            draw_overlay.rectangle(
+                [(panel_margin, panel_top), (width - panel_margin, panel_bottom)],
+                fill=(0, 0, 0, 140),
+                outline=(255, 255, 255, 50),
+                width=2
+            )
+            image_rgba = Image.alpha_composite(image_rgba, overlay)
+
+            # Draw text
+            draw = ImageDraw.Draw(image_rgba)
+            try:
+                font_large = ImageFont.load_default()
+                font_small = ImageFont.load_default()
+            except Exception:
+                font_large = ImageFont.load_default()
+                font_small = ImageFont.load_default()
+
+            # Wrap text roughly to fit panel
+            import textwrap
+            max_text_width = width - (panel_margin * 2) - 40
+            # Estimate characters per line based on default font metrics
+            char_px = 7  # approx width per character in default font
+            max_chars_per_line = max(20, int(max_text_width / char_px))
+
+            lines = []
+            for paragraph in str(overlay_text).split('\n'):
+                paragraph = paragraph.strip()
+                if not paragraph:
+                    lines.append("")
+                    continue
+                wrapped = textwrap.wrap(paragraph, width=max_chars_per_line)
+                if not wrapped:
+                    lines.append("")
+                else:
+                    lines.extend(wrapped)
+
+            # Compute starting y to vertically center-ish within panel
+            line_height = 20
+            text_block_height = line_height * len(lines)
+            y = panel_top + ((panel_bottom - panel_top - text_block_height) // 2)
+            x = panel_margin + 20
+
+            for idx, line in enumerate(lines):
+                font = font_large if idx < 2 else font_small
+                draw.text((x, y + idx * line_height), line, fill=(255, 255, 255, 255), font=font)
+
+            # Export to data URL
+            output_image = image_rgba.convert('RGB')
+            buffer = io.BytesIO()
+            output_image.save(buffer, format='JPEG', quality=90)
+            encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            data_url = f"data:image/jpeg;base64,{encoded}"
+
+            state['image_url'] = data_url
+            state['image_data_url'] = data_url
+            state['overlay_text_used'] = overlay_text
+            state['status'] = 'completed'
+            state['timestamp'] = datetime.now().isoformat()
+
+            return state
+        except Exception as e:
+            print(f"Error in text overlay node: {e}")
+            state['status'] = 'failed'
+            state['error'] = str(e)
+            state['timestamp'] = datetime.now().isoformat()
+            return state
+
+    def image_upload_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Upload an image (data URL or URL) to Cloudinary and return a public URL.
+        Requires env: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.
+        Inputs: image_data_url or image_url; if both present and image_url is a data URL, prefer image_data_url.
+        Outputs: image_url (secure URL)
+        """
+        try:
+            cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME')
+            api_key = os.getenv('CLOUDINARY_API_KEY')
+            api_secret = os.getenv('CLOUDINARY_API_SECRET')
+            if not (cloud_name and api_key and api_secret):
+                raise ValueError('Cloudinary credentials not configured')
+
+            # Determine payload source
+            data_url = state.get('image_data_url')
+            image_url = state.get('image_url')
+
+            file_param = None
+            if data_url and isinstance(data_url, str) and data_url.startswith('data:image/'):
+                file_param = data_url
+            elif image_url and isinstance(image_url, str):
+                file_param = image_url
+            else:
+                raise ValueError('No image data provided for upload')
+
+            # Cloudinary signed upload
+            upload_url = f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
+            timestamp = str(int(time.time()))
+
+            # Optional: deterministic public_id by hashing content (for dedupe)
+            public_id = None
+            try:
+                if file_param.startswith('data:image/'):
+                    content_base64 = file_param.split(',', 1)[1]
+                    content_bytes = base64.b64decode(content_base64)
+                    public_id = hashlib.sha1(content_bytes).hexdigest()[:16]
+            except Exception:
+                public_id = None
+
+            # Signature
+            to_sign = {'timestamp': timestamp}
+            if public_id:
+                to_sign['public_id'] = public_id
+            # Cloudinary signature: sha1 of querystring of sorted params + api_secret
+            sorted_items = sorted(to_sign.items())
+            query = "&".join([f"{k}={v}" for k, v in sorted_items])
+            signature = hashlib.sha1((query + api_secret).encode('utf-8')).hexdigest()
+
+            data = {
+                'file': file_param,
+                'api_key': api_key,
+                'timestamp': timestamp,
+                'signature': signature
+            }
+            if public_id:
+                data['public_id'] = public_id
+
+            resp = requests.post(upload_url, data=data)
+            resp.raise_for_status()
+            result = resp.json()
+
+            secure_url = result.get('secure_url') or result.get('url')
+            if not secure_url:
+                raise ValueError('Cloudinary upload succeeded but no secure_url returned')
+
+            state['image_url'] = secure_url
+            state['cloudinary_result'] = {'public_id': result.get('public_id'), 'version': result.get('version')}
+            state['status'] = 'uploaded'
+            state['timestamp'] = datetime.now().isoformat()
+            return state
+        except Exception as e:
+            print(f"Error in image upload node: {e}")
+            state['status'] = 'failed'
+            state['error'] = str(e)
+            state['timestamp'] = datetime.now().isoformat()
+            return state
+
     # Helper methods
     def _transform_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Simple data transformation"""
