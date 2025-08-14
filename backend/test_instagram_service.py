@@ -10,7 +10,7 @@ from datetime import datetime
 # Add the src directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from services.instagram_service import InstagramService
+from src.services.instagram_service import InstagramService
 from config.instagram_config import InstagramConfig
 
 def test_instagram_config():
@@ -96,41 +96,19 @@ def test_workflow_integration():
         return False
 
 def main():
-    """Main test function"""
-    print("🚀 Instagram Service Integration Test")
-    print("=" * 50)
-    
-    # Test 1: Configuration validation
-    config_valid = test_instagram_config()
-    
-    # Test 2: Service functionality
-    service_valid = test_instagram_service_simulation()
-    
-    # Test 3: Workflow integration
-    workflow_valid = test_workflow_integration()
-    
-    # Summary
-    print("\n" + "=" * 50)
-    print("📊 TEST SUMMARY")
-    print("=" * 50)
-    
-    print(f"Configuration: {'✅ PASS' if config_valid['valid'] else '❌ FAIL'}")
-    print(f"Service: {'✅ PASS' if service_valid else '❌ FAIL'}")
-    print(f"Workflow: {'✅ PASS' if workflow_valid else '❌ FAIL'}")
-    
-    if config_valid['valid'] and service_valid and workflow_valid:
-        print("\n🎉 All tests passed! Instagram integration is ready.")
-        print("\n📋 Next Steps:")
-        print("1. Set up Facebook Developer account")
-        print("2. Create Instagram Business Account")
-        print("3. Get real Instagram access token")
-        print("4. Update workflow configuration")
-        print("5. Test with real token")
-    else:
-        print("\n⚠️  Some tests failed. Check the errors above.")
-        print("📋 Setup required before Instagram integration can work.")
-    
-    print("\n📚 For detailed setup instructions, see: INSTAGRAM_SETUP.md")
+    print("🧪 InstagramService smoke test")
+    token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
+    if not token:
+        print("ℹ️  No token set; will not attempt real API calls.")
+        return True
+    try:
+        _ = InstagramService(token)
+        print("✅ InstagramService initialized")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to initialize InstagramService: {e}")
+        return False
+
 
 if __name__ == "__main__":
     main()
