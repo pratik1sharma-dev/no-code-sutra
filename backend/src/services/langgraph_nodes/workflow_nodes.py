@@ -1053,6 +1053,12 @@ class LangGraphWorkflowNodes:
                 print(f"Found Pixabay image: {image_url}")
                 return self._download_and_process_image(image_url, width, height)
             
+            # Try Lorem Picsum as final fallback (always works)
+            image_url = self._search_lorem_picsum_image(keywords)
+            if image_url:
+                print(f"Found Lorem Picsum image: {image_url}")
+                return self._download_and_process_image(image_url, width, height)
+            
             print("No suitable background image found from APIs")
             return None
             
@@ -1135,10 +1141,16 @@ class LangGraphWorkflowNodes:
             search_query = '+'.join(keywords[:2])  # Use first 2 keywords
             url = f"https://source.unsplash.com/1080x1080/?{search_query}"
             
-            # Test if the URL is accessible
-            response = requests.head(url, timeout=5)
+            # Test if the URL is accessible and returns an image
+            response = requests.get(url, timeout=10, stream=True)
             if response.status_code == 200:
-                return url
+                # Check if it's actually an image
+                content_type = response.headers.get('content-type', '')
+                if 'image' in content_type:
+                    print(f"Found Unsplash image: {url}")
+                    return url
+                else:
+                    print(f"Unsplash returned non-image content: {content_type}")
             return None
             
         except Exception as e:
@@ -1152,10 +1164,16 @@ class LangGraphWorkflowNodes:
             search_query = '+'.join(keywords[:2])  # Use first 2 keywords
             url = f"https://images.pexels.com/photos/{search_query}/1080/1080"
             
-            # Test if the URL is accessible
-            response = requests.head(url, timeout=5)
+            # Test if the URL is accessible and returns an image
+            response = requests.get(url, timeout=10, stream=True)
             if response.status_code == 200:
-                return url
+                # Check if it's actually an image
+                content_type = response.headers.get('content-type', '')
+                if 'image' in content_type:
+                    print(f"Found Pexels image: {url}")
+                    return url
+                else:
+                    print(f"Pexels returned non-image content: {content_type}")
             return None
             
         except Exception as e:
@@ -1169,14 +1187,44 @@ class LangGraphWorkflowNodes:
             search_query = '+'.join(keywords[:2])  # Use first 2 keywords
             url = f"https://pixabay.com/get/{search_query}/1080/1080"
             
-            # Test if the URL is accessible
-            response = requests.head(url, timeout=5)
+            # Test if the URL is accessible and returns an image
+            response = requests.get(url, timeout=10, stream=True)
             if response.status_code == 200:
-                return url
+                # Check if it's actually an image
+                content_type = response.headers.get('content-type', '')
+                if 'image' in content_type:
+                    print(f"Found Pixabay image: {url}")
+                    return url
+                else:
+                    print(f"Pixabay returned non-image content: {content_type}")
             return None
             
         except Exception as e:
             print(f"Error searching Pixabay: {e}")
+            return None
+    
+    def _search_lorem_picsum_image(self, keywords: List[str]) -> Optional[str]:
+        """Search for an image on Lorem Picsum using keywords"""
+        try:
+            # Lorem Picsum provides random images with specific IDs
+            # We'll use the first keyword to generate a consistent image ID
+            if keywords:
+                # Create a hash from the first keyword to get a consistent image ID
+                import hashlib
+                keyword_hash = hashlib.md5(keywords[0].encode()).hexdigest()
+                image_id = int(keyword_hash[:8], 16) % 1000  # Get a number between 0-999
+                
+                url = f"https://picsum.photos/id/{image_id}/1080/1080"
+                print(f"Generated Lorem Picsum URL with ID {image_id} from keyword '{keywords[0]}'")
+                return url
+            else:
+                # Fallback to random image
+                url = f"https://picsum.photos/1080/1080"
+                print("Using random Lorem Picsum image")
+                return url
+            
+        except Exception as e:
+            print(f"Error searching Lorem Picsum: {e}")
             return None
     
     def _download_and_process_image(self, image_url: str, width: int, height: int) -> Optional[Image.Image]:
