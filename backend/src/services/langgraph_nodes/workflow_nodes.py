@@ -623,15 +623,10 @@ class LangGraphWorkflowNodes:
         - Reads text from overlay_text, or falls back to content/result.
         """
         try:
-            # Determine text to overlay - prioritize structured_data over content
-            overlay_text = state.get('overlay_text')
-            if not overlay_text:
-                # Prioritize structured_data first, then other fields
-                for key in ['structured_data', 'result', 'output', 'content', 'text', 'post_data']:
-                    if key in state and state[key]:
-                        overlay_text = state[key]
-                        print(f"Text overlay using content from '{key}': {type(overlay_text)}")
-                        break
+            # Get text to overlay - use structured_data from AI Agent
+            overlay_text = state.get('overlay_text') or state.get('structured_data')
+            if overlay_text:
+                print(f"Text overlay using: {type(overlay_text)}")
             
             # Handle structured data from AI Agent
             if isinstance(overlay_text, dict):
@@ -668,8 +663,8 @@ class LangGraphWorkflowNodes:
             if not overlay_text.strip():
                 overlay_text = "Generated Post"
 
-            # Dimensions and style
-            width = int(state.get('image_width', 1080))
+            # Instagram-optimized dimensions (square format for best engagement)
+            width = int(state.get('image_width', 1080))  # Instagram recommended: 1080x1080
             height = int(state.get('image_height', 1080))
             background_url = state.get('image_url') or state.get('background_image_url')
 
@@ -685,70 +680,150 @@ class LangGraphWorkflowNodes:
                 base_image = None
 
             if base_image is None:
-                # Create a simple gradient background
-                base_image = Image.new('RGB', (width, height), (20, 24, 35))
-                # Simple vertical gradient overlay
-                gradient = Image.new('L', (1, height), color=0xFF)
+                # Create a visually appealing gradient background for Instagram
+                # Use modern Instagram-style colors
+                base_image = Image.new('RGB', (width, height), (255, 255, 255))
+                
+                # Create a beautiful gradient background
                 for y in range(height):
-                    gradient.putpixel((0, y), int(255 * (y / height)))
-                alpha_gradient = gradient.resize((width, height))
-                black_img = Image.new('RGB', (width, height), color=(10, 12, 18))
-                base_image = Image.composite(base_image, black_img, alpha_gradient)
+                    for x in range(width):
+                        # Create a modern gradient from top to bottom
+                        progress = y / height
+                        
+                        # Instagram-style gradient: light blue to purple to pink
+                        if progress < 0.33:
+                            # Top: Light blue to purple
+                            r = int(135 + (147 - 135) * (progress * 3))
+                            g = int(206 + (112 - 206) * (progress * 3))
+                            b = int(250 + (219 - 250) * (progress * 3))
+                        elif progress < 0.66:
+                            # Middle: Purple to pink
+                            r = int(147 + (255 - 147) * ((progress - 0.33) * 3))
+                            g = int(112 + (182 - 112) * ((progress - 0.33) * 3))
+                            b = int(219 + (193 - 219) * ((progress - 0.33) * 3))
+                        else:
+                            # Bottom: Pink to light pink
+                            r = int(255 + (255 - 255) * ((progress - 0.66) * 3))
+                            g = int(182 + (192 - 182) * ((progress - 0.66) * 3))
+                            b = int(193 + (203 - 193) * ((progress - 0.66) * 3))
+                        
+                        base_image.putpixel((x, y), (r, g, b))
 
             # Normalize to RGBA for overlays
             image_rgba = base_image.convert('RGBA')
 
-            # Draw semi-transparent text panel
+            # Draw modern Instagram-style text panel
             overlay = Image.new('RGBA', image_rgba.size, (255, 255, 255, 0))
             draw_overlay = ImageDraw.Draw(overlay)
-            panel_margin = int(min(width, height) * 0.06)
-            panel_top = int(height * 0.25)
-            panel_bottom = int(height * 0.85)
+            panel_margin = int(min(width, height) * 0.08)
+            panel_top = int(height * 0.2)
+            panel_bottom = int(height * 0.8)
+            
+            # Create a modern rounded rectangle effect with gradient
+            # Main panel with subtle transparency
             draw_overlay.rectangle(
                 [(panel_margin, panel_top), (width - panel_margin, panel_bottom)],
-                fill=(0, 0, 0, 140),
-                outline=(255, 255, 255, 50),
-                width=2
+                fill=(255, 255, 255, 200),  # White with transparency
+                outline=(255, 255, 255, 100),
+                width=3
             )
             image_rgba = Image.alpha_composite(image_rgba, overlay)
 
-            # Draw text
+            # Draw text with Instagram-optimized fonts and sizing
             draw = ImageDraw.Draw(image_rgba)
+            
+            # Calculate optimal font sizes for Instagram (1080x1080)
+            # Headline: 48-60px, Subhead: 32-40px, Body: 24-28px
+            headline_size = int(width * 0.055)  # ~60px for 1080px width
+            subhead_size = int(width * 0.037)   # ~40px for 1080px width
+            body_size = int(width * 0.025)      # ~27px for 1080px width
+            
             try:
-                font_large = ImageFont.load_default()
-                font_small = ImageFont.load_default()
+                # Try to load better fonts if available
+                font_large = ImageFont.truetype("arial.ttf", headline_size)
+                font_medium = ImageFont.truetype("arial.ttf", subhead_size)
+                font_small = ImageFont.truetype("arial.ttf", body_size)
             except Exception:
-                font_large = ImageFont.load_default()
-                font_small = ImageFont.load_default()
+                # Fallback to default fonts with calculated sizes
+                try:
+                    font_large = ImageFont.load_default()
+                    font_medium = ImageFont.load_default()
+                    font_small = ImageFont.load_default()
+                except Exception:
+                    # Ultimate fallback
+                    font_large = ImageFont.load_default()
+                    font_medium = ImageFont.load_default()
+                    font_small = ImageFont.load_default()
 
-            # Wrap text roughly to fit panel
+            # Wrap text with Instagram-optimized line lengths
             import textwrap
-            max_text_width = width - (panel_margin * 2) - 40
-            # Estimate characters per line based on default font metrics
-            char_px = 7  # approx width per character in default font
-            max_chars_per_line = max(20, int(max_text_width / char_px))
+            max_text_width = width - (panel_margin * 2) - 60  # More padding for better readability
+            
+            # Calculate characters per line based on font size
+            # Approximate: 1 character = font_size * 0.6 pixels
+            char_px_large = headline_size * 0.6
+            char_px_medium = subhead_size * 0.6
+            char_px_small = body_size * 0.6
+            
+            max_chars_headline = max(15, int(max_text_width / char_px_large))
+            max_chars_subhead = max(20, int(max_text_width / char_px_medium))
+            max_chars_body = max(25, int(max_text_width / char_px_small))
 
+            # Process text with Instagram-optimized formatting
             lines = []
-            for paragraph in str(overlay_text).split('\n'):
+            line_types = []  # Track if each line is headline, subhead, or body
+            
+            paragraphs = str(overlay_text).split('\n')
+            for i, paragraph in enumerate(paragraphs):
                 paragraph = paragraph.strip()
                 if not paragraph:
-                    lines.append("")
                     continue
-                wrapped = textwrap.wrap(paragraph, width=max_chars_per_line)
-                if not wrapped:
-                    lines.append("")
-                else:
+                
+                # Determine text type based on position and content
+                if i == 0:  # First paragraph = headline
+                    wrapped = textwrap.wrap(paragraph, width=max_chars_headline)
                     lines.extend(wrapped)
+                    line_types.extend(['headline'] * len(wrapped))
+                elif i == 1 and len(paragraphs) > 2:  # Second paragraph = subhead (if we have bullets)
+                    wrapped = textwrap.wrap(paragraph, width=max_chars_subhead)
+                    lines.extend(wrapped)
+                    line_types.extend(['subhead'] * len(wrapped))
+                else:  # Bullets and other content = body
+                    wrapped = textwrap.wrap(paragraph, width=max_chars_body)
+                    lines.extend(wrapped)
+                    line_types.extend(['body'] * len(wrapped))
 
-            # Compute starting y to vertically center-ish within panel
-            line_height = 20
-            text_block_height = line_height * len(lines)
-            y = panel_top + ((panel_bottom - panel_top - text_block_height) // 2)
-            x = panel_margin + 20
+            # Calculate Instagram-optimized line heights and positioning
+            line_heights = {
+                'headline': int(headline_size * 1.3),  # ~78px for 60px font
+                'subhead': int(subhead_size * 1.2),    # ~48px for 40px font
+                'body': int(body_size * 1.4)           # ~38px for 27px font
+            }
+            
+            # Calculate total text block height
+            total_height = sum(line_heights.get(line_type, line_heights['body']) for line_type in line_types)
+            
+            # Center text vertically in panel
+            y = panel_top + ((panel_bottom - panel_top - total_height) // 2)
+            x = panel_margin + 30  # More left padding for better Instagram aesthetics
 
-            for idx, line in enumerate(lines):
-                font = font_large if idx < 2 else font_small
-                draw.text((x, y + idx * line_height), line, fill=(255, 255, 255, 255), font=font)
+            # Render text with Instagram-optimized styling
+            for idx, (line, line_type) in enumerate(zip(lines, line_types)):
+                if line_type == 'headline':
+                    font = font_large
+                    text_color = (30, 30, 30, 255)  # Darker for headlines
+                    line_height = line_heights['headline']
+                elif line_type == 'subhead':
+                    font = font_medium
+                    text_color = (50, 50, 50, 255)  # Medium for subheads
+                    line_height = line_heights['subhead']
+                else:  # body
+                    font = font_small
+                    text_color = (70, 70, 70, 255)  # Lighter for body text
+                    line_height = line_heights['body']
+                
+                draw.text((x, y), line, fill=text_color, font=font)
+                y += line_height
 
             # Export to data URL
             output_image = image_rgba.convert('RGB')
