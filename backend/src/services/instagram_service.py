@@ -22,7 +22,7 @@ class InstagramService:
         """
         self.access_token = access_token
         self.instagram_business_account_id = instagram_business_account_id
-        self.base_url = "https://graph.facebook.com/v18.0"
+        self.base_url = "https://graph.facebook.com/v23.0"
         
         # Validate access token
         if not self._validate_access_token():
@@ -38,7 +38,7 @@ class InstagramService:
             url = f"{self.base_url}/me"
             params = {
                 'access_token': self.access_token,
-                'fields': 'id,name,accounts'
+                'fields': 'id,name'
             }
             
             response = requests.get(url, params=params)
@@ -79,13 +79,14 @@ class InstagramService:
             logger.error(f"Failed to get Instagram Business Account ID: {e}")
             raise
     
-    def create_media_container(self, caption: str, media_type: str = "CAROUSEL_ALBUM") -> Dict[str, Any]:
+    def create_media_container(self, caption: str, media_type: str = "IMAGE", image_url: str = None) -> Dict[str, Any]:
         """
         Create a media container for Instagram post
         
         Args:
             caption: Post caption text
             media_type: Type of media (CAROUSEL_ALBUM, IMAGE, VIDEO)
+            image_url: URL of the image (required for IMAGE type)
         
         Returns:
             Response data from Instagram API
@@ -99,6 +100,10 @@ class InstagramService:
                 'media_type': media_type
             }
             
+            # Add image_url if provided
+            if image_url:
+                data['image_url'] = image_url
+            
             response = requests.post(url, data=data)
             response.raise_for_status()
             
@@ -108,6 +113,8 @@ class InstagramService:
             
         except Exception as e:
             logger.error(f"Failed to create media container: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response content: {e.response.text}")
             raise
     
     def publish_media(self, creation_id: str) -> Dict[str, Any]:
@@ -139,22 +146,28 @@ class InstagramService:
             logger.error(f"Failed to publish media: {e}")
             raise
     
-    def post_text_only(self, caption: str) -> Dict[str, Any]:
+    def post_text_only(self, caption: str, image_url: str = None) -> Dict[str, Any]:
         """
         Post text-only content to Instagram
         
         Args:
             caption: Post caption text
+            image_url: Optional image URL (required since Instagram needs media)
         
         Returns:
             Response data from Instagram API
         """
         try:
-            # Instagram requires at least one media item, so we'll create a simple text post
-            # using a placeholder image or text overlay
+            # Instagram requires at least one media item
+            if not image_url:
+                return {
+                    'status': 'failed',
+                    'error': 'Instagram requires media for posts. Please provide an image_url parameter.',
+                    'posted_at': datetime.now().isoformat()
+                }
             
-            # For now, we'll create a media container with text
-            media_result = self.create_media_container(caption, "IMAGE")
+            # Create a media container with the provided image
+            media_result = self.create_media_container(caption, "IMAGE", image_url)
             creation_id = media_result.get('id')
             
             if creation_id:
@@ -174,6 +187,8 @@ class InstagramService:
                 
         except Exception as e:
             logger.error(f"Failed to post text-only content: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response content: {e.response.text}")
             return {
                 'status': 'failed',
                 'error': str(e),
