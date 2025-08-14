@@ -287,16 +287,19 @@ The JSON must have this exact structure:
 
 CRITICAL: Return ONLY the JSON object. No other text, explanations, or formatting.
 
-GUIDELINES:
-1. Keep workflows simple and focused
-2. Use clear, descriptive node labels
-3. Position nodes logically (left to right flow)
-4. ENSURE ALL NODES ARE CONNECTED IN EXECUTION ORDER
-5. Include relevant metadata for user understanding
-6. Suggest improvements and ask clarifying questions
-7. Focus on practical, achievable automations
-8. **CRITICAL: For Instagram posting, ALWAYS use 'instagram_post' node type. NEVER use 'aiAgent' or 'apiCall' for Instagram.**
-9. For other social media platforms, use 'apiCall' node with appropriate configuration
+            GUIDELINES:
+            1. Keep workflows simple and focused
+            2. Use clear, descriptive node labels
+            3. Position nodes logically (left to right flow)
+            4. ENSURE ALL NODES ARE CONNECTED IN EXECUTION ORDER
+            5. Include relevant metadata for user understanding
+            6. Suggest improvements and ask clarifying questions
+            7. Focus on practical, achievable automations
+            8. **CRITICAL: For Instagram posting, ALWAYS use 'instagram_post' node type. NEVER use 'aiAgent' or 'apiCall' for Instagram.**
+            9. For other social media platforms, use 'apiCall' node with appropriate configuration
+            10. For Instagram posts without a provided image, include this chain: 'aiAgent' → 'textOverlay' → 'imageUpload' → 'instagram_post'.
+            11. 'textOverlay' must render the message into the image (use 'content' or a structured payload with headline/subhead/bullets).
+            12. 'imageUpload' must produce a publicly accessible HTTPS image_url (Cloudinary) consumed by 'instagram_post'.
 
 EXAMPLE WORKFLOW STRUCTURE:
 - Use 'aiAgent' for content generation, research, analysis
