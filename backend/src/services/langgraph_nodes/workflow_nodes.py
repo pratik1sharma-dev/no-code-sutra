@@ -1027,43 +1027,51 @@ class LangGraphWorkflowNodes:
         Tries multiple sources: Unsplash, Pexels, then falls back to gradient.
         """
         try:
+            print(f"🎨 Starting dynamic background image search...")
+            print(f"   Content: {content[:100]}...")
+            print(f"   Target dimensions: {width}x{height}")
+            
             # Extract keywords from content for image search
             keywords = self._extract_image_keywords(content)
             if not keywords:
-                print("No keywords extracted for image search")
+                print("❌ No keywords extracted for image search")
                 return None
             
-            print(f"Searching for background image with keywords: {keywords}")
+            print(f"🔑 Extracted keywords: {keywords}")
             
             # Try Unsplash API first (free, high quality)
+            print(f"\n📸 Trying Unsplash API...")
             image_url = self._search_unsplash_image(keywords)
             if image_url:
-                print(f"Found Unsplash image: {image_url}")
+                print(f"✅ Found Unsplash image: {image_url}")
                 return self._download_and_process_image(image_url, width, height)
             
             # Try Pexels API as fallback (also free)
+            print(f"\n📸 Trying Pexels API...")
             image_url = self._search_pexels_image(keywords)
             if image_url:
-                print(f"Found Pexels image: {image_url}")
+                print(f"✅ Found Pexels image: {image_url}")
                 return self._download_and_process_image(image_url, width, height)
             
             # Try Pixabay API as another fallback
+            print(f"\n📸 Trying Pixabay API...")
             image_url = self._search_pixabay_image(keywords)
             if image_url:
-                print(f"Found Pixabay image: {image_url}")
+                print(f"✅ Found Pixabay image: {image_url}")
                 return self._download_and_process_image(image_url, width, height)
             
             # Try Lorem Picsum as final fallback (always works)
+            print(f"\n📸 Trying Lorem Picsum API...")
             image_url = self._search_lorem_picsum_image(keywords)
             if image_url:
-                print(f"Found Lorem Picsum image: {image_url}")
+                print(f"✅ Found Lorem Picsum image: {image_url}")
                 return self._download_and_process_image(image_url, width, height)
             
-            print("No suitable background image found from APIs")
+            print("❌ No suitable background image found from APIs")
             return None
             
         except Exception as e:
-            print(f"Error getting dynamic background image: {e}")
+            print(f"❌ Error getting dynamic background image: {e}")
             return None
     
     def _extract_image_keywords(self, content: str) -> List[str]:
@@ -1141,20 +1149,31 @@ class LangGraphWorkflowNodes:
             search_query = '+'.join(keywords[:2])  # Use first 2 keywords
             url = f"https://source.unsplash.com/1080x1080/?{search_query}"
             
+            print(f"🔍 Searching Unsplash with URL: {url}")
+            print(f"   Keywords: {keywords[:2]}")
+            
             # Test if the URL is accessible and returns an image
             response = requests.get(url, timeout=10, stream=True)
+            print(f"   Response status: {response.status_code}")
+            print(f"   Response headers: {dict(response.headers)}")
+            
             if response.status_code == 200:
                 # Check if it's actually an image
                 content_type = response.headers.get('content-type', '')
+                print(f"   Content-Type: {content_type}")
+                
                 if 'image' in content_type:
-                    print(f"Found Unsplash image: {url}")
+                    print(f"✅ Found Unsplash image: {url}")
                     return url
                 else:
-                    print(f"Unsplash returned non-image content: {content_type}")
+                    print(f"❌ Unsplash returned non-image content: {content_type}")
+            else:
+                print(f"❌ Unsplash API error: {response.status_code}")
+                print(f"   Response text: {response.text[:200]}...")
             return None
             
         except Exception as e:
-            print(f"Error searching Unsplash: {e}")
+            print(f"❌ Error searching Unsplash: {e}")
             return None
     
     def _search_pexels_image(self, keywords: List[str]) -> Optional[str]:
@@ -1164,39 +1183,39 @@ class LangGraphWorkflowNodes:
             search_query = '+'.join(keywords[:2])  # Use first 2 keywords
             url = f"https://images.pexels.com/photos/{search_query}/1080/1080"
             
+            print(f"🔍 Searching Pexels with URL: {url}")
+            print(f"   Keywords: {keywords[:2]}")
+            
             # Test if the URL is accessible and returns an image
             response = requests.get(url, timeout=10, stream=True)
+            print(f"   Response status: {response.status_code}")
+            print(f"   Response headers: {dict(response.headers)}")
+            
             if response.status_code == 200:
                 # Check if it's actually an image
                 content_type = response.headers.get('content-type', '')
+                print(f"   Content-Type: {content_type}")
+                
                 if 'image' in content_type:
-                    print(f"Found Pexels image: {url}")
+                    print(f"✅ Found Pexels image: {url}")
                     return url
                 else:
-                    print(f"Pexels returned non-image content: {content_type}")
+                    print(f"❌ Pexels returned non-image content: {content_type}")
+            else:
+                print(f"❌ Pexels API error: {response.status_code}")
+                print(f"   Response text: {response.text[:200]}...")
             return None
             
         except Exception as e:
-            print(f"Error searching Pexels: {e}")
+            print(f"❌ Error searching Pexels: {e}")
             return None
     
     def _search_pixabay_image(self, keywords: List[str]) -> Optional[str]:
         """Search for an image on Pixabay using keywords"""
         try:
-            # Use Pixabay Source API (free, no API key required)
-            search_query = '+'.join(keywords[:2])  # Use first 2 keywords
-            url = f"https://pixabay.com/get/{search_query}/1080/1080"
-            
-            # Test if the URL is accessible and returns an image
-            response = requests.get(url, timeout=10, stream=True)
-            if response.status_code == 200:
-                # Check if it's actually an image
-                content_type = response.headers.get('content-type', '')
-                if 'image' in content_type:
-                    print(f"Found Pixabay image: {url}")
-                    return url
-                else:
-                    print(f"Pixabay returned non-image content: {content_type}")
+            # Pixabay requires API key, so we'll skip it for now
+            # TODO: Add Pixabay API key support in the future
+            print("Skipping Pixabay - requires API key")
             return None
             
         except Exception as e:
@@ -1215,27 +1234,32 @@ class LangGraphWorkflowNodes:
                 image_id = int(keyword_hash[:8], 16) % 1000  # Get a number between 0-999
                 
                 url = f"https://picsum.photos/id/{image_id}/1080/1080"
-                print(f"Generated Lorem Picsum URL with ID {image_id} from keyword '{keywords[0]}'")
+                print(f"🔍 Generated Lorem Picsum URL with ID {image_id} from keyword '{keywords[0]}'")
+                print(f"   URL: {url}")
                 return url
             else:
                 # Fallback to random image
                 url = f"https://picsum.photos/1080/1080"
-                print("Using random Lorem Picsum image")
+                print(f"🔍 Using random Lorem Picsum image: {url}")
                 return url
             
         except Exception as e:
-            print(f"Error searching Lorem Picsum: {e}")
+            print(f"❌ Error searching Lorem Picsum: {e}")
             return None
     
     def _download_and_process_image(self, image_url: str, width: int, height: int) -> Optional[Image.Image]:
         """Download and process image from URL"""
         try:
-            print(f"Downloading image from: {image_url}")
+            print(f"📥 Downloading image from: {image_url}")
             response = requests.get(image_url, timeout=10)
             response.raise_for_status()
             
+            print(f"   Download successful - Content-Type: {response.headers.get('content-type', 'unknown')}")
+            print(f"   Content length: {len(response.content)} bytes")
+            
             # Open and process image
             image = Image.open(io.BytesIO(response.content)).convert('RGB')
+            print(f"   Original image size: {image.size}")
             
             # Resize to target dimensions while maintaining aspect ratio
             image.thumbnail((width, height), Image.Resampling.LANCZOS)
@@ -1248,9 +1272,9 @@ class LangGraphWorkflowNodes:
             y = (height - image.height) // 2
             new_image.paste(image, (x, y))
             
-            print(f"Successfully processed background image: {image.size} -> {new_image.size}")
+            print(f"✅ Successfully processed background image: {image.size} -> {new_image.size}")
             return new_image
             
         except Exception as e:
-            print(f"Error downloading/processing image: {e}")
+            print(f"❌ Error downloading/processing image: {e}")
             return None 
