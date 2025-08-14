@@ -312,8 +312,10 @@ class LangGraphWorkflowNodes:
             content = state.get('content', '')
             access_token = state.get('access_token', '')
             post = state.get('post', '')
+            image_url = state.get('image_url', '')
+            image = state.get('image', '')
             
-            print(f"Social media node - platform: {platform}, content: {content}, post: {post}")
+            print(f"Social media node - platform: {platform}, content: {content}, post: {post}, image_url: {image_url}")
             print(f"Available state keys: {list(state.keys())}")
             
             # Handle Instagram-specific posting
@@ -343,6 +345,14 @@ class LangGraphWorkflowNodes:
                         content = post
                         print(f"Using post as content: {content}")
                 
+                # Ensure we have an image URL if available in state
+                if not image_url and image:
+                    # Allow previous nodes to store image in various fields
+                    if isinstance(image, dict) and 'image_url' in image:
+                        image_url = image.get('image_url')
+                    elif isinstance(image, str):
+                        image_url = image
+                
                 # Final fallback - check if we have any content at all
                 if not content:
                     print("ERROR: No content found for Instagram post!")
@@ -360,7 +370,8 @@ class LangGraphWorkflowNodes:
                         instagram_service = InstagramService(access_token)
                         
                         # Post content to Instagram
-                        result = instagram_service.post_text_only(str(content))
+                        # Prefer image posting if image_url available; else fail back to text-only handler which now requires image_url
+                        result = instagram_service.post_text_only(str(content), image_url=image_url)
                         
                         if result['status'] == 'success':
                             social_data = {
@@ -404,7 +415,8 @@ class LangGraphWorkflowNodes:
                     'posted_at': datetime.now().isoformat(),
                     'post_id': f"ig_post_{datetime.now().timestamp()}",
                     'real_post': False,
-                    'simulation_mode': True
+                    'simulation_mode': True,
+                    'image_url_used': image_url or 'none'
                 }
                 
                 state['social_data'] = social_data
@@ -448,14 +460,18 @@ class LangGraphWorkflowNodes:
             # For demo purposes, we'll simulate image generation
             # In production, integrate with DALL-E, Midjourney, or similar APIs
             
+            image_url = f"https://picsum.photos/seed/{int(datetime.now().timestamp())}/1080/1080"
             image_data = {
                 'prompt': prompt,
                 'style': style,
-                'image_url': f"https://example.com/generated-image-{datetime.now().timestamp()}.jpg",
+                'image_url': image_url,
                 'generated_at': datetime.now().isoformat()
             }
             
+            # Store in multiple convenient locations for downstream nodes
             state['image_data'] = image_data
+            state['image_url'] = image_url
+            state['image'] = image_data
             state['status'] = 'completed'
             state['timestamp'] = datetime.now().isoformat()
             
