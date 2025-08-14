@@ -1,13 +1,8 @@
-import openai
 import json
 import logging
-import boto3
 from typing import Dict, Any, List, Optional
 import os
 from dotenv import load_dotenv
-# Removed unused LLM imports - only using Bedrock
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.language_models import BaseLanguageModel
 import asyncio
 
 # Load environment variables
@@ -15,146 +10,76 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+	level=logging.INFO,
+	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
+from .llm.base import LLMClient
+from .llm.bedrock_client import BedrockClient
+try:
+	from .llm.openai_client import OpenAIClient  # Optional fallback
+except Exception:  # pragma: no cover
+	OpenAIClient = None  # type: ignore
+
+
 class AIWorkflowGenerator:
-    def __init__(self):
-        logger.info("Initializing AIWorkflowGenerator")
-        self.llm = self._initialize_llm()
-        self.client = None  # Keep for backward compatibility
-        logger.info(f"AIWorkflowGenerator initialized with LLM: {type(self.llm).__name__ if self.llm else 'None'}")
-
-    def _initialize_llm(self) -> Optional[BaseLanguageModel]:
-        """Initialize Amazon Bedrock LLM"""
-        logger.info("Initializing Amazon Bedrock LLM")
-        
-        bedrock_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
-        if bedrock_token:
-            logger.info("Attempting to initialize Amazon Bedrock LLM")
-            try:
-                model_id = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-8b-instruct-v1:0")
-                region = os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
-                logger.info(f"Using Bedrock model: {model_id} in region: {region}")
-                
-                # Set the Bearer token as environment variable for Bedrock
-                os.environ['AWS_BEARER_TOKEN_BEDROCK'] = bedrock_token
-                
-                # Create a simple object to identify this as a Bedrock client
-                llm = type('BedrockClient', (), {'converse': True})()
-                logger.info("Amazon Bedrock LLM initialized successfully")
-                return llm
-            except Exception as e:
-                logger.warning(f"Amazon Bedrock not available: {e}")
-        
-        logger.warning("Amazon Bedrock not configured, using fallback workflow generation")
-        return None
-
-    async def generateWorkflow(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        prompt = request.get('prompt', '')
-        logger.info(f"Starting workflow generation for prompt: '{prompt[:50]}...'")
-        
-        try:
-            # Check if LLM is available
-            if self.llm is None:
-                logger.warning("No LLM provider configured, using fallback workflow")
-                return self._generate_fallback_workflow(prompt)
-            
-            logger.info("Building prompts for LLM")
-            system_prompt = self._build_system_prompt()
-            user_prompt = self._build_user_prompt(prompt)
-
-            # Create the full prompt
-            full_prompt = f"{system_prompt}\n\n{user_prompt}"
-            
-            logger.info("Invoking LLM")
-            try:
-                # Use simple boto3 approach
-                if hasattr(self.llm, 'converse'):  # Bedrock client
-                    messages = [{"role": "user", "content": [{"text": full_prompt}]}]
-                    
-                    # Use requests library for API key authentication as per AWS docs
-                    import requests
-                    bedrock_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
-                    region = os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
-                    model_id = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-8b-instruct-v1:0")
-                    
-                    url = f"https://bedrock-runtime.{region}.amazonaws.com/model/{model_id}/converse"
-                    
-                    payload = {"messages": messages}
-                    headers = {
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {bedrock_token}"
-                    }
-                    
-                    response = await asyncio.to_thread(
-                        requests.post,
-                        url,
-                        json=payload,
-                        headers=headers
-                    )
-                    
-                    if response.status_code == 200:
-                        response_data = response.json()
-                        logger.info(f"Bedrock response structure: {list(response_data.keys())}")
-                        
-                        # Handle different response structures
-                        if 'content' in response_data:
-                            response_content = response_data['content'][0]['text']
-                        elif 'message' in response_data:
-                            response_content = response_data['message']['content'][0]['text']
-                        elif 'output' in response_data and 'message' in response_data['output']:
-                            response_content = response_data['output']['message']['content'][0]['text']
-                        elif 'generation' in response_data:
-                            response_content = response_data['generation']
-                        else:
-                            # Log the full response for debugging
-                            logger.error(f"Unexpected response structure: {response_data}")
-                            raise Exception(f"Unexpected response structure from Bedrock API")
-                    else:
-                        raise Exception(f"Bedrock API error: {response.status_code} - {response.text}")
-                else:  # Other LLM providers
-                    response_content = await asyncio.wait_for(
-                        self.llm._acall(full_prompt),
-                        timeout=30.0
-                    )
-            except asyncio.TimeoutError:
-                logger.error("LLM request timed out after 30 seconds")
-                raise Exception('LLM request timed out')
-
-            if not response_content:
-                logger.error("No response content from AI service")
-                raise Exception('No response from AI service')
-
-            logger.info(f"Received response from LLM (length: {len(response_content)})")
-            logger.info(f"LLM response: {response_content[100:]}")
-            
-            result = self._parse_ai_response(response_content, prompt)
-            logger.info("Workflow generation completed successfully")
-            return result
-            
-        except Exception as error:
-            logger.error(f'Error generating workflow: {error}', exc_info=True)
-            # Return fallback workflow instead of raising exception
-            logger.info("Returning fallback workflow due to error")
-            return self._generate_fallback_workflow(prompt)
-
-    def _build_system_prompt(self) -> str:
-        # Import centralized node registry
-        from .node_registry import node_registry
-        
-        # Build node types list dynamically
-        node_types_list = []
-        for node_type, metadata in node_registry._nodes.items():
-            if metadata.is_active:
-                node_types_list.append(f"- {node_type}: {metadata.description}")
-        
-        node_types_text = "\n".join(node_types_list)
-        node_count = node_registry.get_node_count()
-        
-        return f"""You are an expert AI workflow designer for No Code Sutra, a platform that creates automation workflows from natural language descriptions.
+	def __init__(self):
+		logger.info("Initializing AIWorkflowGenerator")
+		self.llm_client: Optional[LLMClient] = self._initialize_llm_client()
+		logger.info(f"AIWorkflowGenerator initialized with LLM client: {type(self.llm_client).__name__ if self.llm_client else 'None'}")
+	
+	def _initialize_llm_client(self) -> Optional[LLMClient]:
+		"""Initialize LLM client: prefer Bedrock; fallback to OpenAI if configured; else None."""
+		provider = os.getenv("LLM_PROVIDER", "bedrock").lower()
+		if provider == "bedrock":
+			if os.getenv("AWS_BEARER_TOKEN_BEDROCK"):
+				return BedrockClient()
+			logger.warning("Bedrock not configured. Falling back to OpenAI if available.")
+		if provider == "openai" or not os.getenv("AWS_BEARER_TOKEN_BEDROCK"):
+			if OpenAIClient and os.getenv("OPENAI_API_KEY"):
+				return OpenAIClient()
+			logger.warning("OpenAI not configured.")
+		logger.warning("No LLM provider configured. Will use fallback workflow generation.")
+		return None
+	
+	async def generateWorkflow(self, request: Dict[str, Any]) -> Dict[str, Any]:
+		prompt = request.get('prompt', '')
+		logger.info(f"Starting workflow generation for prompt: '{prompt[:50]}...'")
+		try:
+			if self.llm_client is None:
+				logger.warning("No LLM provider configured, using fallback workflow")
+				return self._generate_fallback_workflow(prompt)
+			logger.info("Building prompts for LLM")
+			system_prompt = self._build_system_prompt()
+			user_prompt = self._build_user_prompt(prompt)
+			full_prompt = f"{system_prompt}\n\n{user_prompt}"
+			logger.info("Invoking LLM client")
+			# Run blocking call in thread to keep FastAPI happy if used async
+			response_content = await asyncio.to_thread(self.llm_client.generate, full_prompt)
+			if not response_content:
+				logger.error("No response content from LLM client")
+				raise Exception('No response from AI service')
+			logger.info(f"Received response from LLM (length: {len(response_content)})")
+			result = self._parse_ai_response(response_content, prompt)
+			logger.info("Workflow generation completed successfully")
+			return result
+		except Exception as error:
+			logger.error(f'Error generating workflow: {error}', exc_info=True)
+			logger.info("Returning fallback workflow due to error")
+			return self._generate_fallback_workflow(prompt)
+	
+	def _build_system_prompt(self) -> str:
+		# Import centralized node registry
+		from .node_registry import node_registry
+		# Build node types list dynamically
+		node_types_list = []
+		for node_type, metadata in node_registry._nodes.items():
+			if metadata.is_active:
+				node_types_list.append(f"- {node_type}: {metadata.description}")
+		node_types_text = "\n".join(node_types_list)
+		node_count = node_registry.get_node_count()
+		return f"""You are an expert AI workflow designer for No Code Sutra, a platform that creates automation workflows from natural language descriptions.
 
 Your task is to analyze user requests and generate structured workflow definitions that can be executed by our platform.
 
@@ -247,10 +172,10 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - Considers workflow chain (if content goes to other nodes like textOverlay, instagram_post, etc.)
 
 3. EXAMPLES of contextual prompt generation:
-   - Instagram with image overlay: "Create Instagram content optimized for image overlay. Generate headline (max 40 chars), bullet points (3-4 items, max 20 chars each), engaging caption (max 200 chars), and relevant hashtags. Content must be CRISP and VISUAL for image overlay. Return JSON: {{\\"headline\\": \\"...\\", \\"bullets\\": [...], \\"caption\\": \\"...\\", \\"hashtags\\": [...]}}"
-   - LinkedIn: "Write professional LinkedIn post with industry insights and business-focused tone. Include compelling headline, professional content, relevant hashtags, and call-to-action. Return JSON: {{\\"headline\\": \\"...\\", \\"content\\": \\"...\\", \\"hashtags\\": [...]}}"
-   - Email: "Compose professional email with subject line and body for business communication. Include clear subject, professional greeting, main content, and closing. Return JSON: {{\\"subject\\": \\"...\\", \\"body\\": \\"...\\"}}"
-   - Twitter: "Create engaging tweet with character limit and trending hashtags. Include main message, relevant hashtags, and call-to-action. Return JSON: {{\\"tweet\\": \\"...\\", \\"hashtags\\": [...]}}"
+   - Instagram with image overlay: "Create Instagram content optimized for image overlay. Generate headline (max 40 chars), bullet points (3-4 items, max 20 chars each), engaging caption (max 200 chars), and relevant hashtags. Content must be CRISP and VISUAL for image overlay. Return JSON: {{\"headline\": \"...\", \"bullets\": [...], \"caption\": \"...\", \"hashtags\": [...]}}"
+   - LinkedIn: "Write professional LinkedIn post with industry insights and business-focused tone. Include compelling headline, professional content, relevant hashtags, and call-to-action. Return JSON: {{\"headline\": \"...\", \"content\": \"...\", \"hashtags\": [...]}}"
+   - Email: "Compose professional email with subject line and body for business communication. Include clear subject, professional greeting, main content, and closing. Return JSON: {{\"subject\": \"...\", \"body\": \"...\"}}"
+   - Twitter: "Create engaging tweet with character limit and trending hashtags. Include main message, relevant hashtags, and call-to-action. Return JSON: {{\"tweet\": \"...\", \"hashtags\": [...]}}"
 
 4. CONFIGURATION STRUCTURE:
    For AI Agent nodes, include in config:
@@ -302,9 +227,9 @@ Before returning the response, verify:
 - Parallel branches are properly connected to main flow
 - Every node has appropriate incoming and outgoing connections
 - AI Agent nodes have contextual, platform-specific prompts"""
-
-    def _build_user_prompt(self, user_prompt: str) -> str:
-        return f"""Please analyze this user request and generate a workflow:
+	
+	def _build_user_prompt(self, user_prompt: str) -> str:
+		return f"""Please analyze this user request and generate a workflow:
 
 USER REQUEST: "{user_prompt}"
 
@@ -315,186 +240,145 @@ Please create a workflow that accomplishes this goal. Consider:
 - How can we make it more robust?
 
 Generate the workflow in the specified JSON format."""
-
-    def _parse_ai_response(self, response: str, original_prompt: str) -> Dict[str, Any]:
-        logger.info("Parsing AI response")
-        try:
-            # Try to extract JSON from the response
-            json_match = response.find('{')
-            if json_match == -1:
-                logger.error("No JSON found in response")
-                raise Exception('No JSON found in response')
-
-            logger.info(f"Found JSON start at position {json_match}")
-            
-            # Find the closing brace by counting braces
-            brace_count = 0
-            end_pos = json_match
-            for i, char in enumerate(response[json_match:], json_match):
-                if char == '{':
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end_pos = i + 1
-                        break
-            
-            json_str = response[json_match:end_pos]
-            logger.info(f"Extracted JSON string (length: {len(json_str)})")
-            
-            # Clean up the JSON string - remove any trailing content after the closing brace
-            json_str = json_str.strip()
-            
-            # Try to parse the JSON
-            try:
-                parsed = json.loads(json_str)
-            except json.JSONDecodeError as e:
-                logger.warning(f"JSON parsing failed, attempting to fix common issues: {e}")
-                # Try to fix common JSON issues
-                # Remove any trailing text after the last closing brace
-                last_brace = json_str.rfind('}')
-                if last_brace != -1:
-                    json_str = json_str[:last_brace + 1]
-                    try:
-                        parsed = json.loads(json_str)
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to fix JSON: {json_str}")
-                        raise
-            logger.info("JSON parsed successfully")
-            
-            # Validate and enhance the response
-            logger.info("Validating and enhancing parsed response")
-            result = {
-                "name": parsed.get('workflow', {}).get('name') or self._generate_workflow_name(original_prompt),
-                "description": parsed.get('workflow', {}).get('description') or original_prompt,
-                "nodes": self._validate_and_enhance_nodes(parsed.get('workflow', {}).get('nodes', [])),
-                "edges": self._validate_and_enhance_edges(parsed.get('workflow', {}).get('edges', [])),
-                "metadata": {
-                    "title": parsed.get('workflow', {}).get('metadata', {}).get('title') or parsed.get('workflow', {}).get('name') or 'Generated Workflow',
-                    "description": parsed.get('workflow', {}).get('metadata', {}).get('description') or original_prompt,
-                    "estimatedCost": parsed.get('workflow', {}).get('metadata', {}).get('estimatedCost') or 'Free to $20/month',
-                    "requiredIntegrations": parsed.get('workflow', {}).get('metadata', {}).get('requiredIntegrations') or [],
-                    "authRequirements": parsed.get('workflow', {}).get('metadata', {}).get('authRequirements') or [],
-                    "complexity": parsed.get('workflow', {}).get('metadata', {}).get('complexity') or 'simple',
-                    "estimatedTime": parsed.get('workflow', {}).get('metadata', {}).get('estimatedTime') or '5-10 minutes'
-                },
-                "suggestions": parsed.get('suggestions', []),
-                "questions": parsed.get('questions', [])
-            }
-            logger.info(f"Response validation completed. Workflow: {result['name']}, Nodes: {len(result['nodes'])}, Edges: {len(result['edges'])}")
-            return result
-        except Exception as error:
-            logger.error(f'Error parsing AI response: {error}', exc_info=True)
-            # Fallback to a simple workflow
-            logger.info("Falling back to simple workflow due to parsing error")
-            return self._generate_fallback_workflow(original_prompt)
-
-    def _validate_and_enhance_nodes(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        logger.info(f"Validating and enhancing {len(nodes)} nodes")
-        
-        # Import centralized node registry
-        from .node_registry import node_registry
-        
-        # Get valid node types from centralized registry
-        valid_node_types = node_registry.get_active_node_types()
-
-        enhanced_nodes = []
-        for index, node in enumerate(nodes):
-            original_type = node.get('type', 'unknown')
-            
-            if original_type not in valid_node_types:
-                logger.warning(f"Invalid node type '{original_type}' for node {index + 1}, defaulting to 'aiAgent'")
-                original_type = 'aiAgent'
-            
-            enhanced_node = {
-                "id": node.get('id') or f"node_{index + 1}",
-                "type": original_type,
-                "label": node.get('label') or f"Step {index + 1}",
-                "position": node.get('position') or {"x": 100 + (index * 200), "y": 100},
-                "data": {
-                    "label": node.get('data', {}).get('label') or node.get('label') or f"Step {index + 1}",
-                    "type": original_type,
-                    "config": node.get('data', {}).get('config') or {},
-                    "status": "idle",
-                    "executionCount": 0
-                }
-            }
-            enhanced_nodes.append(enhanced_node)
-            logger.debug(f"Enhanced node {index + 1}: {enhanced_node['type']} - {enhanced_node['label']}")
-
-        logger.info(f"Node validation completed. Enhanced {len(enhanced_nodes)} nodes")
-        return enhanced_nodes
-
-    def _validate_and_enhance_edges(self, edges: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        logger.info(f"Validating and enhancing {len(edges)} edges")
-        enhanced_edges = []
-        for index, edge in enumerate(edges):
-            enhanced_edge = {
-                "id": edge.get('id') or f"edge_{index + 1}",
-                "source": edge.get('source') or '',
-                "target": edge.get('target') or '',
-                "type": edge.get('type') or 'default',
-                "label": edge.get('label') or '',
-                "data_mapping": edge.get('data_mapping') or {}
-            }
-            enhanced_edges.append(enhanced_edge)
-            logger.debug(f"Enhanced edge {index + 1}: {enhanced_edge['source']} -> {enhanced_edge['target']} with mapping: {enhanced_edge['data_mapping']}")
-
-        logger.info(f"Edge validation completed. Enhanced {len(enhanced_edges)} edges")
-        return enhanced_edges
-
-    def _generate_workflow_name(self, prompt: str) -> str:
-        logger.debug(f"Generating workflow name from prompt: '{prompt[:50]}...'")
-        words = prompt.lower().split()
-        key_words = [word for word in words if word in ['find', 'send', 'create', 'process', 'automate', 'generate']]
-        name = f"{key_words[0].capitalize()} Workflow" if key_words else 'Automation Workflow'
-        logger.debug(f"Generated workflow name: {name}")
-        return name
-
-    def _generate_fallback_workflow(self, prompt: str) -> Dict[str, Any]:
-        logger.info(f"Generating fallback workflow for prompt: '{prompt[:50]}...'")
-        workflow_name = self._generate_workflow_name(prompt)
-        
-        fallback_workflow = {
-            "workflow": {
-                "name": workflow_name,
-                "description": f"Automation workflow for: {prompt}",
-                "nodes": [
-                    {
-                        "id": "1",
-                        "type": "aiAgent",
-                        "label": "Process Request",
-                        "position": {"x": 100, "y": 100},
-                        "data": {
-                            "label": "Process Request",
-                            "type": "aiAgent",
-                            "config": {"prompt": prompt},
-                            "status": "idle",
-                            "executionCount": 0
-                        }
-                    }
-                ],
-                "edges": [],
-                "metadata": {
-                    "title": workflow_name,
-                    "description": f"Basic automation for: {prompt}",
-                    "estimatedCost": "Free",
-                    "requiredIntegrations": [],
-                    "authRequirements": [],
-                    "complexity": "simple",
-                    "estimatedTime": "5 minutes"
-                }
-            },
-            "suggestions": [
-                "Consider adding more specific steps to make this workflow more robust",
-                "You may need to connect external services for full functionality"
-            ],
-            "questions": [
-                "What specific outcome are you looking for?",
-                "Do you have any existing tools or services you'd like to integrate?"
-            ]
-        }
-        
-        logger.info(f"Fallback workflow generated: {workflow_name} with 1 node")
-        return fallback_workflow 
+	
+	def _parse_ai_response(self, response: str, original_prompt: str) -> Dict[str, Any]:
+		logger.info("Parsing AI response")
+		try:
+			json_match = response.find('{')
+			if json_match == -1:
+				logger.error("No JSON found in response")
+				raise Exception('No JSON found in response')
+			brace_count = 0
+			end_pos = json_match
+			for i, char in enumerate(response[json_match:], json_match):
+				if char == '{':
+					brace_count += 1
+				elif char == '}':
+					brace_count -= 1
+					if brace_count == 0:
+						end_pos = i + 1
+						break
+			json_str = response[json_match:end_pos].strip()
+			try:
+				parsed = json.loads(json_str)
+			except json.JSONDecodeError as e:
+				logger.warning(f"JSON parsing failed, attempting to fix common issues: {e}")
+				last_brace = json_str.rfind('}')
+				if last_brace != -1:
+					json_str = json_str[:last_brace + 1]
+					parsed = json.loads(json_str)
+			result = {
+				"name": parsed.get('workflow', {}).get('name') or self._generate_workflow_name(original_prompt),
+				"description": parsed.get('workflow', {}).get('description') or original_prompt,
+				"nodes": self._validate_and_enhance_nodes(parsed.get('workflow', {}).get('nodes', [])),
+				"edges": self._validate_and_enhance_edges(parsed.get('workflow', {}).get('edges', [])),
+				"metadata": {
+					"title": parsed.get('workflow', {}).get('metadata', {}).get('title') or parsed.get('workflow', {}).get('name') or 'Generated Workflow',
+					"description": parsed.get('workflow', {}).get('metadata', {}).get('description') or original_prompt,
+					"estimatedCost": parsed.get('workflow', {}).get('metadata', {}).get('estimatedCost') or 'Free to $20/month',
+					"requiredIntegrations": parsed.get('workflow', {}).get('metadata', {}).get('requiredIntegrations') or [],
+					"authRequirements": parsed.get('workflow', {}).get('metadata', {}).get('authRequirements') or [],
+					"complexity": parsed.get('workflow', {}).get('metadata', {}).get('complexity') or 'simple',
+					"estimatedTime": parsed.get('workflow', {}).get('metadata', {}).get('estimatedTime') or '5-10 minutes'
+				},
+				"suggestions": parsed.get('suggestions', []),
+				"questions": parsed.get('questions', [])
+			}
+			logger.info(f"Response validation completed. Workflow: {result['name']}, Nodes: {len(result['nodes'])}, Edges: {len(result['edges'])}")
+			return result
+		except Exception as error:
+			logger.error(f'Error parsing AI response: {error}', exc_info=True)
+			return self._generate_fallback_workflow(original_prompt)
+	
+	def _validate_and_enhance_nodes(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+		logger.info(f"Validating and enhancing {len(nodes)} nodes")
+		from .node_registry import node_registry
+		valid_node_types = node_registry.get_active_node_types()
+		enhanced_nodes: List[Dict[str, Any]] = []
+		for index, node in enumerate(nodes):
+			original_type = node.get('type', 'unknown')
+			if original_type not in valid_node_types:
+				logger.warning(f"Invalid node type '{original_type}' for node {index + 1}, defaulting to 'aiAgent'")
+				original_type = 'aiAgent'
+			enhanced_node = {
+				"id": node.get('id') or f"node_{index + 1}",
+				"type": original_type,
+				"label": node.get('label') or f"Step {index + 1}",
+				"position": node.get('position') or {"x": 100 + (index * 200), "y": 100},
+				"data": {
+					"label": node.get('data', {}).get('label') or node.get('label') or f"Step {index + 1}",
+					"type": original_type,
+					"config": node.get('data', {}).get('config') or {},
+					"status": "idle",
+					"executionCount": 0
+				}
+			}
+			enhanced_nodes.append(enhanced_node)
+		return enhanced_nodes
+	
+	def _validate_and_enhance_edges(self, edges: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+		logger.info(f"Validating and enhancing {len(edges)} edges")
+		enhanced_edges: List[Dict[str, Any]] = []
+		for index, edge in enumerate(edges):
+			enhanced_edge = {
+				"id": edge.get('id') or f"edge_{index + 1}",
+				"source": edge.get('source') or '',
+				"target": edge.get('target') or '',
+				"type": edge.get('type') or 'default',
+				"label": edge.get('label') or '',
+				"data_mapping": edge.get('data_mapping') or {}
+			}
+			enhanced_edges.append(enhanced_edge)
+		return enhanced_edges
+	
+	def _generate_workflow_name(self, prompt: str) -> str:
+		words = prompt.lower().split()
+		key_words = [word for word in words if word in ['find', 'send', 'create', 'process', 'automate', 'generate']]
+		name = f"{key_words[0].capitalize()} Workflow" if key_words else 'Automation Workflow'
+		return name
+	
+	def _generate_fallback_workflow(self, prompt: str) -> Dict[str, Any]:
+		logger.info(f"Generating fallback workflow for prompt: '{prompt[:50]}...'")
+		workflow_name = self._generate_workflow_name(prompt)
+		fallback_workflow = {
+			"workflow": {
+				"name": workflow_name,
+				"description": f"Automation workflow for: {prompt}",
+				"nodes": [
+					{
+						"id": "1",
+						"type": "aiAgent",
+						"label": "Process Request",
+						"position": {"x": 100, "y": 100},
+						"data": {
+							"label": "Process Request",
+							"type": "aiAgent",
+							"config": {"prompt": prompt},
+							"status": "idle",
+							"executionCount": 0
+						}
+					}
+				],
+				"edges": [],
+				"metadata": {
+					"title": workflow_name,
+					"description": f"Basic automation for: {prompt}",
+					"estimatedCost": "Free",
+					"requiredIntegrations": [],
+					"authRequirements": [],
+					"complexity": "simple",
+					"estimatedTime": "5 minutes"
+				}
+			},
+			"suggestions": [
+				"Consider adding more specific steps to make this workflow more robust",
+				"You may need to connect external services for full functionality"
+			],
+			"questions": [
+				"What specific outcome are you looking for?",
+				"Do you have any existing tools or services you'd like to integrate?"
+			]
+		}
+		logger.info(f"Fallback workflow generated: {workflow_name} with 1 node")
+		return fallback_workflow 
         
