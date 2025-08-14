@@ -518,6 +518,135 @@ class LangGraphWorkflowNodes:
             state['error'] = str(e)
             return state
     
+    def text_overlay_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Create an image with overlaid text and return a data URL as image_url.
+        - If image_url is provided in state, use it as background.
+        - Otherwise, use a generated solid/gradient background.
+        - Reads text from overlay_text, or falls back to content/result.
+        """
+        try:
+            # Determine text to overlay
+            overlay_text = state.get('overlay_text')
+            if not overlay_text:
+                for key in ['content', 'result', 'text', 'post_data', 'output']:
+                    if key in state and state[key]:
+                        overlay_text = state[key]
+                        break
+            if isinstance(overlay_text, dict):
+                # Join structured payload into a poster-friendly string
+                headline = overlay_text.get('headline') or ''
+                subhead = overlay_text.get('subhead') or ''
+                bullets = overlay_text.get('bullets') or []
+                bullet_text = "\n".join([f"• {str(b)}" for b in bullets])
+                overlay_text = "\n".join([t for t in [headline, subhead, bullet_text] if t])
+            overlay_text = str(overlay_text) if overlay_text is not None else ""
+
+            if not overlay_text.strip():
+                overlay_text = "Generated Post"
+
+            # Dimensions and style
+            width = int(state.get('image_width', 1080))
+            height = int(state.get('image_height', 1080))
+            background_url = state.get('image_url') or state.get('background_image_url')
+
+            # Prepare base image
+            base_image = None
+            try:
+                if background_url and isinstance(background_url, str) and background_url.startswith('http'):
+                    resp = requests.get(background_url, timeout=10)
+                    resp.raise_for_status()
+                    base_image = Image.open(io.BytesIO(resp.content)).convert('RGB')
+            except Exception as e:
+                print(f"Warning: Failed to fetch background image: {e}")
+                base_image = None
+
+            if base_image is None:
+                # Create a simple gradient background
+                base_image = Image.new('RGB', (width, height), (20, 24, 35))
+                # Simple vertical gradient overlay
+                gradient = Image.new('L', (1, height), color=0xFF)
+                for y in range(height):
+                    gradient.putpixel((0, y), int(255 * (y / height)))
+                alpha_gradient = gradient.resize((width, height))
+                black_img = Image.new('RGB', (width, height), color=(10, 12, 18))
+                base_image = Image.composite(base_image, black_img, alpha_gradient)
+
+            # Normalize to RGBA for overlays
+            image_rgba = base_image.convert('RGBA')
+
+            # Draw semi-transparent text panel
+            overlay = Image.new('RGBA', image_rgba.size, (255, 255, 255, 0))
+            draw_overlay = ImageDraw.Draw(overlay)
+            panel_margin = int(min(width, height) * 0.06)
+            panel_top = int(height * 0.25)
+            panel_bottom = int(height * 0.85)
+            draw_overlay.rectangle(
+                [(panel_margin, panel_top), (width - panel_margin, panel_bottom)],
+                fill=(0, 0, 0, 140),
+                outline=(255, 255, 255, 50),
+                width=2
+            )
+            image_rgba = Image.alpha_composite(image_rgba, overlay)
+
+            # Draw text
+            draw = ImageDraw.Draw(image_rgba)
+            try:
+                font_large = ImageFont.load_default()
+                font_small = ImageFont.load_default()
+            except Exception:
+                font_large = ImageFont.load_default()
+                font_small = ImageFont.load_default()
+
+            # Wrap text roughly to fit panel
+            import textwrap
+            max_text_width = width - (panel_margin * 2) - 40
+            # Estimate characters per line based on default font metrics
+            char_px = 7  # approx width per character in default font
+            max_chars_per_line = max(20, int(max_text_width / char_px))
+
+            lines = []
+            for paragraph in str(overlay_text).split('\n'):
+                paragraph = paragraph.strip()
+                if not paragraph:
+                    lines.append("")
+                    continue
+                wrapped = textwrap.wrap(paragraph, width=max_chars_per_line)
+                if not wrapped:
+                    lines.append("")
+                else:
+                    lines.extend(wrapped)
+
+            # Compute starting y to vertically center-ish within panel
+            line_height = 20
+            text_block_height = line_height * len(lines)
+            y = panel_top + ((panel_bottom - panel_top - text_block_height) // 2)
+            x = panel_margin + 20
+
+            for idx, line in enumerate(lines):
+                font = font_large if idx < 2 else font_small
+                draw.text((x, y + idx * line_height), line, fill=(255, 255, 255, 255), font=font)
+
+            # Export to data URL
+            output_image = image_rgba.convert('RGB')
+            buffer = io.BytesIO()
+            output_image.save(buffer, format='JPEG', quality=90)
+            encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            data_url = f"data:image/jpeg;base64,{encoded}"
+
+            state['image_url'] = data_url
+            state['image_data_url'] = data_url
+            state['overlay_text_used'] = overlay_text
+            state['status'] = 'completed'
+            state['timestamp'] = datetime.now().isoformat()
+
+            return state
+        except Exception as e:
+            print(f"Error in text overlay node: {e}")
+            state['status'] = 'failed'
+            state['error'] = str(e)
+            state['timestamp'] = datetime.now().isoformat()
+            return state
+
     # Helper methods
     def _transform_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Simple data transformation"""
