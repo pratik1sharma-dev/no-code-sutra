@@ -118,6 +118,8 @@ class LangGraphWorkflowExecutor:
                     node_functions[node_id] = self.nodes.blog_writer_node
                 elif node_type == 'instagram_post':
                     node_functions[node_id] = self.nodes.social_media_node
+                elif node_type == 'textOverlay':
+                    node_functions[node_id] = self.nodes.text_overlay_node
                 elif node_type == 'imageGenerator':
                     node_functions[node_id] = self.nodes.image_generator_node
                 elif node_type == 'seoOptimizer':
@@ -304,7 +306,8 @@ class LangGraphWorkflowExecutor:
                 raw_access_token = config.get('access_token', '')
                 if raw_access_token:
                     # If config has access token, resolve any environment variable references
-                    state['access_token'] = self.nodes._resolve_environment_variables(raw_access_token)
+                    # Fallback to direct value if no resolver
+                    state['access_token'] = raw_access_token
                     print(f"Instagram post node - using config access_token: {raw_access_token}")
                 else:
                     # Fallback to environment variable if no config provided
@@ -328,6 +331,13 @@ class LangGraphWorkflowExecutor:
                     state['content'] = ''
                 
                 result = self.nodes.social_media_node(state)
+            elif node_type == 'textOverlay':
+                # Configure overlay text and optional background image
+                state['overlay_text'] = config.get('overlay_text', state.get('overlay_text', ''))
+                state['image_url'] = config.get('image_url', state.get('image_url', ''))
+                state['image_width'] = config.get('image_width', state.get('image_width', 1080))
+                state['image_height'] = config.get('image_height', state.get('image_height', 1080))
+                result = self.nodes.text_overlay_node(state)
             elif node_type == 'imageGenerator':
                 result = self.nodes.image_generator_node(state)
             elif node_type == 'seoOptimizer':
