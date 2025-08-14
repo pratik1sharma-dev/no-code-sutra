@@ -6,14 +6,12 @@ import json
 from datetime import datetime
 import uuid
 
-from ..langgraph_nodes.workflow_nodes import LangGraphWorkflowNodes
 from ..node_dispatcher import NodeDispatcher
 
 
 class LangGraphWorkflowExecutor:
     def __init__(self):
-        self.nodes = LangGraphWorkflowNodes()
-        self.dispatcher = NodeDispatcher(self.nodes)
+        self.dispatcher = NodeDispatcher()
         self.memory = MemorySaver()
     
     def resolve_data_reference(self, reference: str, state: Dict[str, Any]) -> Any:
@@ -214,9 +212,7 @@ class LangGraphWorkflowExecutor:
             })
             print(f"Executing {node_type} with config: {config}")
             print(f"Input state keys: {list(input_data.keys())}")
-            # Dispatch
             executor = self.dispatcher.get_executor(node_type)
-            # Special-case adornments for known nodes
             if node_type == 'aiAgent':
                 state['prompt'] = config.get('prompt', '')
                 state['task'] = config.get('task', 'generate')
@@ -240,7 +236,6 @@ class LangGraphWorkflowExecutor:
                 state['image_url'] = config.get('image_url', state.get('image_url', ''))
                 state['image_width'] = config.get('image_width', state.get('image_width', 1080))
                 state['image_height'] = config.get('image_height', state.get('image_height', 1080))
-            # Execute
             result = executor(state)
             result['end_time'] = datetime.now().isoformat()
             result['node_type'] = node_type
@@ -265,7 +260,8 @@ class LangGraphWorkflowExecutor:
     def _create_default_workflow(self) -> StateGraph:
         """Create a default workflow for fallback"""
         workflow = StateGraph(Dict[str, Any])
-        workflow.add_node("default", self.nodes.ai_agent_node)
+        from ..nodes import ai_agent as _ai
+        workflow.add_node("default", _ai.execute)
         workflow.set_entry_point("default")
         workflow.add_edge("default", END)
         return workflow.compile(checkpointer=self.memory)

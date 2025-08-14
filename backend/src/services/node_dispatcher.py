@@ -1,47 +1,40 @@
 from typing import Callable, Dict
 
-from .nodes import ai as ai_nodes
-from .nodes import communication as comm_nodes
-from .nodes import data as data_nodes
-from .nodes import media as media_nodes
-from .nodes import social as social_nodes
-from .langgraph_nodes.workflow_nodes import LangGraphWorkflowNodes
+from .nodes import ai_agent
+from .nodes import email as email_node
+from .nodes import slack as slack_node
+from .nodes import data_node as data_exec
+from .nodes import condition as condition_exec
+from .nodes import delay as delay_exec
+from .nodes import schedule as schedule_exec
+from .nodes import blog_writer as blog_exec
+from .nodes import social_media as social_exec
+from .nodes import image_generator as image_gen_exec
+from .nodes import seo_optimizer as seo_exec
+from .nodes import text_overlay as text_overlay_exec
+from .nodes import image_upload as image_upload_exec
 
 
 class NodeDispatcher:
-    """Maps node types to executor callables.
+    """Maps node types to executor callables (SRP/OCP)."""
 
-    This enables extensibility (OCP) by centralizing the mapping between a
-    string node type and the function that can execute that node. The mapping
-    can be extended without changing core executor logic.
-    """
-
-    def __init__(self, nodes: LangGraphWorkflowNodes) -> None:
-        # nodes retained for backward compat; modular executors delegate via shared context
-        self._nodes = nodes
+    def __init__(self) -> None:
         self._dispatch: Dict[str, Callable] = {
-            "aiAgent": ai_nodes.ai_agent_node,
-            "email": comm_nodes.email_node,
-            "slack": comm_nodes.slack_node,
-            "notification": comm_nodes.notification_node,
-            "data": data_nodes.data_node,
-            "condition": data_nodes.condition_node,
-            "delay": data_nodes.delay_node,
-            "schedule": data_nodes.schedule_node,
-            "transform": data_nodes.transform_node,
-            "filter": data_nodes.filter_node,
-            "aggregate": data_nodes.aggregate_node,
-            "errorHandler": data_nodes.error_handler_node,
-            "textOverlay": media_nodes.text_overlay_node,
-            "imageGenerator": media_nodes.image_generator_node,
-            "imageUpload": media_nodes.image_upload_node,
-            "socialMedia": social_nodes.social_media_node,
-            "instagram_post": social_nodes.instagram_post_node,
+            "aiAgent": ai_agent.execute,
+            "email": email_node.execute,
+            "slack": slack_node.execute,
+            "data": data_exec.execute,
+            "condition": condition_exec.execute,
+            "delay": delay_exec.execute,
+            "schedule": schedule_exec.execute,
+            "blogWriter": blog_exec.execute,
+            "socialMedia": social_exec.execute,
+            "instagram_post": social_exec.execute_instagram,
+            "textOverlay": text_overlay_exec.execute,
+            "imageGenerator": image_gen_exec.execute,
+            "imageUpload": image_upload_exec.execute,
+            "seoOptimizer": seo_exec.execute,
         }
 
     def get_executor(self, node_type: str) -> Callable:
-        """Return the callable that can execute the given node type.
-
-        Falls back to ai_agent_node to retain current permissive behavior.
-        """
-        return self._dispatch.get(node_type, ai_nodes.ai_agent_node)
+        return self._dispatch.get(node_type, ai_agent.execute)
