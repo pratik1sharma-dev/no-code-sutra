@@ -56,7 +56,8 @@ const WorkflowBuilder: React.FC = () => {
     updateNodePosition,
     executeWorkflow,
     isExecuting,
-    currentExecution
+    currentExecution,
+    saveCurrentWorkflow
   } = useWorkflowStore();
   
   const { getNodeComponent } = useNodeRegistry();
@@ -236,10 +237,15 @@ const WorkflowBuilder: React.FC = () => {
     });
   }, [onNodesChange, updateNodePosition]);
 
-  // Handle workflow execution
+  // Handlers for save and execute
+  const handleSaveDraft = useCallback(async () => {
+    await saveCurrentWorkflow();
+  }, [saveCurrentWorkflow]);
+
   const handleExecute = useCallback(async () => {
+    await saveCurrentWorkflow();
     await executeWorkflow();
-  }, [executeWorkflow]);
+  }, [executeWorkflow, saveCurrentWorkflow]);
 
   // Handle node selection
   const handleNodeSelect = useCallback((nodeType: NodeType) => {
@@ -373,7 +379,7 @@ const WorkflowBuilder: React.FC = () => {
               </div>
               
               <div className="flex items-center gap-2">
-                <button className="btn btn-outline btn-sm">
+                <button className="btn btn-outline btn-sm" onClick={handleSaveDraft}>
                   <Save className="w-4 h-4 mr-1" />
                   Save Draft
                 </button>

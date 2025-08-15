@@ -314,23 +314,30 @@ async def execute_workflow(request: WorkflowExecutionRequest):
 	Execute a workflow using LangGraph
 	"""
 	try:
+		import time
+		start_time = time.time()
 		print(f"Executing workflow with {len(request.workflow.get('nodes', []))} nodes")
 		result = langgraph_executor.execute_workflow(
 			workflow_data=request.workflow,
 			input_data=request.input_data
 		)
+		execution_time = time.time() - start_time
 		if result.get('status') == 'failed':
 			return {
 				"success": False,
+				"data": result,
 				"execution_id": result.get("execution_id"),
 				"status": result.get("status"),
 				"error": result.get("error"),
+				"execution_time": execution_time,
 				"timestamp": datetime.utcnow().isoformat()
 			}
 		response_data = {
 			"success": True,
+			"data": result,
 			"execution_id": result.get("execution_id"),
 			"status": result.get("status"),
+			"execution_time": execution_time,
 			"timestamp": datetime.utcnow().isoformat()
 		}
 		if 'node_results' in result:

@@ -125,6 +125,18 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     set({ currentWorkflow: updatedWorkflow });
   },
 
+  // Persist current workflow to backend
+  saveCurrentWorkflow: async () => {
+    const { currentWorkflow } = get();
+    if (!currentWorkflow) return { success: false };
+    try {
+      const res = await apiService.saveWorkflow(currentWorkflow);
+      return res;
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed to save' } as any;
+    }
+  },
+
   executeWorkflow: async () => {
     const { currentWorkflow } = get();
     if (!currentWorkflow) return;
@@ -147,12 +159,22 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
 
     try {
+      // Ensure workflow is saved before execution
+      await apiService.saveWorkflow(currentWorkflow);
+
       // Execute workflow using LangGraph
       const result = await apiService.executeWorkflow({
         workflow: currentWorkflow,
         input_data: {},
         user_id: 'demo-user'
       });
+
+      // Persist execution summary
+      try {
+        if (result && result.data) {
+          await apiService.saveExecution(result.data);
+        }
+      } catch {}
 
       // Update execution with real results
       set(state => ({
