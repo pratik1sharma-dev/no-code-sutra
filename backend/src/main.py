@@ -58,11 +58,6 @@ app = FastAPI(
 async def _startup_init_db():
 	init_db()
 
-@app.on_event("shutdown")
-async def _shutdown_close_db():
-	from services.db import close_db
-	await close_db()
-
 # CORS middleware
 app.add_middleware(
 	CORSMiddleware,
@@ -293,6 +288,71 @@ async def save_execution(result: Dict[str, Any]):
 		return {"success": False, "error": str(e)}
 	finally:
 		db.close()
+
+@app.get("/api/nodes/registry")
+async def get_node_registry():
+	"""Get centralized node registry configuration"""
+	try:
+		# Get unique categories from the node registry
+		categories = set()
+		for node_type, metadata in node_registry._nodes.items():
+			if metadata.is_active:
+				categories.add(metadata.category.value)
+		
+		return {
+			"success": True,
+			"nodes": node_registry.get_frontend_config(),
+			"count": node_registry.get_node_count(),
+			"categories": list(categories)
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Error getting node registry: {str(e)}")
+
+@app.post("/api/workflows/execute")
+async def execute_workflow(request: WorkflowExecutionRequest):
+	"""
+	Execute a workflow using LangGraph
+	"""
+	try:
+		print(f"Executing workflow with {len(request.workflow.get('nodes', []))} nodes")
+		result = langgraph_executor.execute_workflow(
+			workflow_data=request.workflow,
+			input_data=request.input_data
+		)
+		if result.get('status') == 'failed':
+			return {
+				"success": False,
+				"execution_id": result.get("execution_id"),
+				"status": result.get("status"),
+				"error": result.get("error"),
+				"timestamp": datetime.utcnow().isoformat()
+			}
+		response_data = {
+			"success": True,
+			"execution_id": result.get("execution_id"),
+			"status": result.get("status"),
+			"timestamp": datetime.utcnow().isoformat()
+		}
+		if 'node_results' in result:
+			response_data['node_results'] = result['node_results']
+		if 'nodes_executed' in result:
+			response_data['nodes_executed'] = result['nodes_executed']
+		for key, value in result.items():
+			if key not in ['execution_id', 'status', 'node_results', 'nodes_executed']:
+				if isinstance(value, (str, int, float, bool, type(None))):
+					response_data[key] = value
+				elif isinstance(value, list):
+					response_data[key] = [str(item) if not isinstance(item, (str, int, float, bool, type(None))) else item for item in value]
+				elif isinstance(value, dict):
+					response_data[key] = {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v for k, v in value.items()}
+				else:
+					response_data[key] = str(value)
+		return response_data
+	except Exception as e:
+		print(f"Error in workflow execution endpoint: {e}")
+		import traceback
+		traceback.print_exc()
+		raise HTTPException(status_code=500, detail=f"Workflow execution failed: {str(e)}")
 
 if __name__ == "__main__":
 	import uvicorn
