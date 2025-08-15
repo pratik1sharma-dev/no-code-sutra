@@ -15,6 +15,12 @@ load_dotenv()
 from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
 from services.aiWorkflowGenerator import AIWorkflowGenerator
 from services.node_registry import node_registry
+from services.db import init_db, SessionLocal
+from services.models import Workflow as WorkflowModel, Execution as ExecutionModel
+from sqlalchemy.exc import SQLAlchemyError
+
+# Initialize DB on startup
+init_db()
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -38,6 +44,12 @@ class NodeExecutionRequest(BaseModel):
     node_config: Dict[str, Any]
     input_data: Dict[str, Any]
     user_id: Optional[str] = None
+
+class SaveWorkflowRequest(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = ""
+    data: Dict[str, Any]
 
 app = FastAPI(
     title="No Code Sutra API",
@@ -332,6 +344,43 @@ async def execute_node(request: NodeExecutionRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/workflows/save")
+async def save_workflow(req: SaveWorkflowRequest):
+    try:
+        db = SessionLocal()
+        wf = WorkflowModel(
+            id=req.id,
+            name=req.name,
+            description=req.description or "",
+            data=req.data,
+        )
+        db.merge(wf)
+        db.commit()
+        return {"success": True}
+    except SQLAlchemyError as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+@app.post("/api/executions/save")
+async def save_execution(result: Dict[str, Any]):
+    try:
+        db = SessionLocal()
+        exec_model = ExecutionModel(
+            id=result.get("execution_id"),
+            workflow_id=result.get("workflow_id", ""),
+            status=result.get("status", "completed"),
+            result=result,
+            nodes_executed=len(result.get("nodes_executed", [])) if isinstance(result.get("nodes_executed"), list) else 0,
+        )
+        db.merge(exec_model)
+        db.commit()
+        return {"success": True}
+    except SQLAlchemyError as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     import uvicorn

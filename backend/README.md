@@ -64,6 +64,13 @@ Server will be available at: http://localhost:8000
 ### Health Check
 - `GET /health` - API health status
 
+## Persistence (New)
+
+- Env: `DATABASE_URL` (defaults to `sqlite:///./nocodesutra.db`)
+- Endpoints:
+  - `POST /api/workflows/save` — Save or update a workflow
+  - `POST /api/executions/save` — Save execution result summary
+
 ## Architecture
 
 ```
