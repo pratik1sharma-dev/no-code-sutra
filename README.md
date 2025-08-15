@@ -271,6 +271,10 @@ cd backend
 - **[Implementation Summary](backend/IMPLEMENTATION_SUMMARY.md)** - Technical implementation overview
 - **[Backend README](backend/README.md)** - Backend-specific documentation
 
+## 📚 Additional Docs
+- Project Concerns & Actions: `docs/PROJECT_CONCERNS_AND_ACTIONS.md`
+- Workflow Builder UI Improvements: `docs/WORKFLOW_BUILDER_UI_IMPROVEMENTS.md`
+
 ## 🤝 Contributing
 
 1. Fork the repository
