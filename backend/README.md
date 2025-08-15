@@ -33,6 +33,12 @@ AWS_BEARER_TOKEN_BEDROCK=your_bedrock_bearer_token_here
 AWS_DEFAULT_REGION=ap-southeast-1
 BEDROCK_MODEL_ID=meta.llama3-1-8b-instruct-v1:0
 
+# Database (Postgres)
+# Local
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nocodesutra
+# Supabase example (ensure sslmode=require)
+# DATABASE_URL=postgresql://USER:PASSWORD@HOST:6543/postgres?sslmode=require
+
 # Instagram Integration
 INSTAGRAM_ACCESS_TOKEN=your_instagram_access_token
 
@@ -66,10 +72,10 @@ Server will be available at: http://localhost:8000
 
 ## Persistence (New)
 
-- Env: `DATABASE_URL` (defaults to `sqlite:///./nocodesutra.db`)
+- Env: `DATABASE_URL` (defaults to local Postgres)
 - Endpoints:
-  - `POST /api/workflows/save` — Save or update a workflow
-  - `POST /api/executions/save` — Save execution result summary
+  - `POST /api/workflows/save` — Save or update a workflow (Postgres upsert)
+  - `POST /api/executions/save` — Save execution result summary (Postgres upsert)
 
 ## Architecture
 
