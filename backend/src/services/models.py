@@ -1,12 +1,12 @@
 from sqlalchemy import Column, String, DateTime, JSON, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
-from .db import Base
+from .db import Base, engine
 
 
 def _json_type():
     try:
-        return JSONB
+        return JSONB if engine.dialect.name == "postgresql" else JSON
     except Exception:
         return JSON
 
