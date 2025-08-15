@@ -15,6 +15,12 @@ load_dotenv()
 from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
 from services.aiWorkflowGenerator import AIWorkflowGenerator
 from services.node_registry import node_registry
+from services.db import init_db, SessionLocal
+from services.models import Workflow as WorkflowModel, Execution as ExecutionModel
+from sqlalchemy.exc import SQLAlchemyError
+
+# Initialize DB on startup
+init_db()
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -38,6 +44,12 @@ class NodeExecutionRequest(BaseModel):
     node_config: Dict[str, Any]
     input_data: Dict[str, Any]
     user_id: Optional[str] = None
+
+class SaveWorkflowRequest(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = ""
+    data: Dict[str, Any]
 
 app = FastAPI(
     title="No Code Sutra API",
@@ -171,57 +183,57 @@ async def get_available_executors():
         "executors": [
             {
                 "node_type": "aiAgent",
-                "class_name": "LangGraphWorkflowNodes.ai_agent_node",
+                "class_name": "nodes.ai_agent.execute",
                 "description": "AI-powered tasks (research, analysis, content generation)"
             },
             {
                 "node_type": "data",
-                "class_name": "LangGraphWorkflowNodes.data_node",
+                "class_name": "nodes.data_node.execute",
                 "description": "Data processing and transformation"
             },
             {
                 "node_type": "email",
-                "class_name": "LangGraphWorkflowNodes.email_node",
+                "class_name": "nodes.email.execute",
                 "description": "Email sending functionality"
             },
             {
                 "node_type": "slack",
-                "class_name": "LangGraphWorkflowNodes.slack_node",
+                "class_name": "nodes.slack.execute",
                 "description": "Slack messaging functionality"
             },
             {
                 "node_type": "condition",
-                "class_name": "LangGraphWorkflowNodes.condition_node",
+                "class_name": "nodes.condition.execute",
                 "description": "Conditional logic and routing"
             },
             {
                 "node_type": "delay",
-                "class_name": "LangGraphWorkflowNodes.delay_node",
+                "class_name": "nodes.delay.execute",
                 "description": "Delay and timing control"
             },
             {
                 "node_type": "schedule",
-                "class_name": "LangGraphWorkflowNodes.schedule_node",
+                "class_name": "nodes.schedule.execute",
                 "description": "Scheduled execution"
             },
             {
                 "node_type": "blogWriter",
-                "class_name": "LangGraphWorkflowNodes.blog_writer_node",
+                "class_name": "nodes.blog_writer.execute",
                 "description": "Blog content generation"
             },
             {
                 "node_type": "socialMedia",
-                "class_name": "LangGraphWorkflowNodes.social_media_node",
+                "class_name": "nodes.social_media.execute",
                 "description": "Social media content creation"
             },
             {
                 "node_type": "imageGenerator",
-                "class_name": "LangGraphWorkflowNodes.image_generator_node",
+                "class_name": "nodes.image_generator.execute",
                 "description": "AI image generation"
             },
             {
                 "node_type": "seoOptimizer",
-                "class_name": "LangGraphWorkflowNodes.seo_optimizer_node",
+                "class_name": "nodes.seo_optimizer.execute",
                 "description": "SEO optimization"
             }
         ],
@@ -332,6 +344,43 @@ async def execute_node(request: NodeExecutionRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/workflows/save")
+async def save_workflow(req: SaveWorkflowRequest):
+    try:
+        db = SessionLocal()
+        wf = WorkflowModel(
+            id=req.id,
+            name=req.name,
+            description=req.description or "",
+            data=req.data,
+        )
+        db.merge(wf)
+        db.commit()
+        return {"success": True}
+    except SQLAlchemyError as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+@app.post("/api/executions/save")
+async def save_execution(result: Dict[str, Any]):
+    try:
+        db = SessionLocal()
+        exec_model = ExecutionModel(
+            id=result.get("execution_id"),
+            workflow_id=result.get("workflow_id", ""),
+            status=result.get("status", "completed"),
+            result=result,
+            nodes_executed=len(result.get("nodes_executed", [])) if isinstance(result.get("nodes_executed"), list) else 0,
+        )
+        db.merge(exec_model)
+        db.commit()
+        return {"success": True}
+    except SQLAlchemyError as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     import uvicorn

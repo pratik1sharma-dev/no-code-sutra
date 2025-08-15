@@ -31,8 +31,8 @@ Amazon Bedrock (LLaMA) + Instagram Graph API
 
 ### Backend  
 - **FastAPI** for high-performance async API
-- **LangGraph** for agentic workflow orchestration
-- **Amazon Bedrock (LLaMA)** for intelligent decision making
+- **LangGraph** for agentic workflow orchestration (with a modular NodeDispatcher)
+- **Amazon Bedrock/OpenAI via LLMClient** for intelligent decision making
 - **Instagram Graph API** for social media automation
 - **Dynamic Image APIs** (Unsplash, Pexels, Lorem Picsum) for content generation
 
@@ -83,9 +83,10 @@ Backend will be available at: http://localhost:8000
 ## 📸 Instagram Integration Features
 
 ### ✅ **Working Features**
-- **AI Content Generation** - Creates engaging captions and hashtags
+- **AI Content Generation** - Uses LLMClient (Bedrock/OpenAI) with structured outputs
 - **Dynamic Background Images** - Automatically selects relevant images from free APIs
 - **Text Overlay** - Professional text formatting with Instagram-optimized styling
+- **Cloudinary Upload** - Image hosting with signed uploads
 - **Real Instagram Posting** - Posts directly to Instagram Business accounts
 - **Fallback Mechanisms** - Graceful handling of API failures
 - **Security** - Proper credential management and git history cleaning
@@ -269,6 +270,10 @@ cd backend
 ### Implementation Details
 - **[Implementation Summary](backend/IMPLEMENTATION_SUMMARY.md)** - Technical implementation overview
 - **[Backend README](backend/README.md)** - Backend-specific documentation
+
+## 📚 Additional Docs
+- Project Concerns & Actions: `docs/PROJECT_CONCERNS_AND_ACTIONS.md`
+- Workflow Builder UI Improvements: `docs/WORKFLOW_BUILDER_UI_IMPROVEMENTS.md`
 
 ## 🤝 Contributing
 
