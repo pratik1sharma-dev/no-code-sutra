@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 # Prevent duplicate loggers
 if logger.handlers:
 	logger.handlers.clear()
-
 from .llm.base import LLMClient
 from .llm.bedrock_client import BedrockClient
 try:
