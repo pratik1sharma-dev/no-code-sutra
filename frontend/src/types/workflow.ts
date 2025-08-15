@@ -146,8 +146,12 @@ export interface WorkflowStore {
   isExecuting: boolean;
   currentExecution: WorkflowExecution | null;
   selectedNode: string | null;
-  selectedEdge: string | null;
-
+    selectedEdge: string | null;
+ 
+  // Selection
+  setSelectedNode: (nodeId: string | null) => void;
+  setSelectedEdge: (edgeId: string | null) => void;
+ 
   // Actions
   setCurrentWorkflow: (workflow: WorkflowState) => void;
   addNode: (node: WorkflowNode) => void;
