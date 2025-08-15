@@ -15,6 +15,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Prevent duplicate loggers
+if logger.handlers:
+	logger.handlers.clear()
 from .llm.base import LLMClient
 from .llm.bedrock_client import BedrockClient
 try:
@@ -24,10 +27,19 @@ except Exception:  # pragma: no cover
 
 
 class AIWorkflowGenerator:
+	_instance = None
+	
+	def __new__(cls):
+		if cls._instance is None:
+			cls._instance = super().__new__(cls)
+		return cls._instance
+	
 	def __init__(self):
-		logger.info("Initializing AIWorkflowGenerator")
-		self.llm_client: Optional[LLMClient] = self._initialize_llm_client()
-		logger.info(f"AIWorkflowGenerator initialized with LLM client: {type(self.llm_client).__name__ if self.llm_client else 'None'}")
+		if not hasattr(self, '_initialized'):
+			logger.info("Initializing AIWorkflowGenerator")
+			self.llm_client: Optional[LLMClient] = self._initialize_llm_client()
+			logger.info(f"AIWorkflowGenerator initialized with LLM client: {type(self.llm_client).__name__ if self.llm_client else 'None'}")
+			self._initialized = True
 	
 	def _initialize_llm_client(self) -> Optional[LLMClient]:
 		"""Initialize LLM client: prefer Bedrock; fallback to OpenAI if configured; else None."""
