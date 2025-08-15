@@ -15,7 +15,8 @@ load_dotenv()
 from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
 from services.aiWorkflowGenerator import AIWorkflowGenerator
 from services.node_registry import node_registry
-from services.db import init_db, save_workflow_row, save_execution_row
+from services.db import init_db, SessionLocal
+from services.models import Workflow as WorkflowModel, Execution as ExecutionModel
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -55,7 +56,7 @@ app = FastAPI(
 # Ensure DB is initialized at startup
 @app.on_event("startup")
 async def _startup_init_db():
-	await init_db()
+	init_db()
 
 @app.on_event("shutdown")
 async def _shutdown_close_db():
@@ -259,35 +260,39 @@ async def execute_node(request: NodeExecutionRequest):
 @app.post("/api/workflows/save")
 async def save_workflow(req: SaveWorkflowRequest):
 	try:
-		await save_workflow_row(
-			workflow_id=req.id,
+		db = SessionLocal()
+		wf = WorkflowModel(
+			id=req.id,
 			name=req.name,
 			description=req.description or "",
 			data=req.data,
 		)
+		db.merge(wf)
+		db.commit()
 		return {"success": True}
 	except Exception as e:
 		return {"success": False, "error": str(e)}
+	finally:
+		db.close()
 
 @app.post("/api/executions/save")
 async def save_execution(result: Dict[str, Any]):
 	try:
-		nodes_executed_count = (
-			len(result.get("nodes_executed", []))
-			if isinstance(result.get("nodes_executed"), list)
-			else int(result.get("nodes_executed", 0) or 0)
-		)
-		await save_execution_row(
-			execution_id=result.get("execution_id"),
+		db = SessionLocal()
+		exec_model = ExecutionModel(
+			id=result.get("execution_id"),
 			workflow_id=result.get("workflow_id", ""),
 			status=result.get("status", "completed"),
 			result=result,
-			nodes_executed=nodes_executed_count,
-			finished_at=result.get("finished_at"),
+			nodes_executed=len(result.get("nodes_executed", [])) if isinstance(result.get("nodes_executed"), list) else int(result.get("nodes_executed", 0) or 0),
 		)
+		db.merge(exec_model)
+		db.commit()
 		return {"success": True}
 	except Exception as e:
 		return {"success": False, "error": str(e)}
+	finally:
+		db.close()
 
 if __name__ == "__main__":
 	import uvicorn

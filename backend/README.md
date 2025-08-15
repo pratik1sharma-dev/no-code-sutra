@@ -74,8 +74,8 @@ Server will be available at: http://localhost:8000
 
 - Env: `DATABASE_URL` (defaults to local Postgres)
 - Endpoints:
-  - `POST /api/workflows/save` — Save or update a workflow (Postgres upsert)
-  - `POST /api/executions/save` — Save execution result summary (Postgres upsert)
+  - `POST /api/workflows/save` — Save or update a workflow (ORM upsert via merge)
+  - `POST /api/executions/save` — Save execution result summary (ORM upsert via merge)
 
 ## Architecture
 
