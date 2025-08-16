@@ -21,8 +21,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   selectedEdge: null,
 
   // Selection
-  setSelectedNode: (nodeId) => set({ selectedNode: nodeId, selectedEdge: null }),
-  setSelectedEdge: (edgeId) => set({ selectedEdge: edgeId, selectedNode: null }),
+  setSelectedNode: (nodeId) => set((state) => (
+    state.selectedNode === nodeId ? state : { selectedNode: nodeId, selectedEdge: null }
+  )),
+  setSelectedEdge: (edgeId) => set((state) => (
+    state.selectedEdge === edgeId ? state : { selectedEdge: edgeId, selectedNode: null }
+  )),
 
   // Actions
   setCurrentWorkflow: (workflow) => {

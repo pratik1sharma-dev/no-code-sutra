@@ -52,10 +52,12 @@ const DroppableReactFlow: React.FC<{
 const InspectorPanel: React.FC = () => {
   const { currentWorkflow, selectedNode, updateNode } = useWorkflowStore();
   const node = useMemo(() => currentWorkflow?.nodes.find(n => n.id === selectedNode), [currentWorkflow, selectedNode]);
-  const [label, setLabel] = useState(node?.data.label || '');
+  const [label, setLabel] = useState('');
+  const [configText, setConfigText] = useState('');
 
   useEffect(() => {
     setLabel(node?.data.label || '');
+    setConfigText(JSON.stringify(node?.data.config || {}, null, 2));
   }, [node?.id]);
 
   if (!node) {
@@ -82,9 +84,10 @@ const InspectorPanel: React.FC = () => {
       <div>
         <div className="text-[11px] text-gray-500 mb-1">Config (JSON)</div>
         <textarea
-          defaultValue={JSON.stringify(node.data.config || {}, null, 2)}
-          onBlur={(e) => {
-            try { updateNode(node.id, { config: JSON.parse(e.target.value || '{}') }); } catch {}
+          value={configText}
+          onChange={(e) => setConfigText(e.target.value)}
+          onBlur={() => {
+            try { updateNode(node.id, { config: JSON.parse(configText || '{}') }); } catch {}
           }}
           className="w-full h-40 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/5 focus:bg-white font-mono"
         />
@@ -254,6 +257,16 @@ const WorkflowBuilder: React.FC = () => {
   // Canvas toolbar controls
   const [showGrid, setShowGrid] = useState(true);
 
+  const handleNodeClick = useCallback((_: any, node: any) => {
+    setSelectedNode(node?.id || null);
+  }, [setSelectedNode]);
+
+  const handleSelectionChange = useCallback((params: any) => {
+    const nextId = params?.nodes?.[0]?.id || null;
+    setSelectedNode((prev => prev) as any); // no-op to use store guard against redundant sets
+    if (nextId !== null) setSelectedNode(nextId);
+  }, [setSelectedNode]);
+
   return (
     <DndContext onDragEnd={onDragEnd}>
       <div className="flex h-full w-full">
@@ -328,8 +341,8 @@ const WorkflowBuilder: React.FC = () => {
                 onNodesChange={handleNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
-                onNodeClick={(_e: any, node: any) => setSelectedNode(node.id)}
-                onSelectionChange={(p: any) => setSelectedNode(p.nodes?.[0]?.id || null)}
+                onNodeClick={handleNodeClick}
+                onSelectionChange={handleSelectionChange}
                 nodeTypes={nodeTypes}
                 fitView
                 snapToGrid
