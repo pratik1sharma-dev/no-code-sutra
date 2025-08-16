@@ -21,7 +21,10 @@ describe('workflowStore selection and execution stability', () => {
         name: 'Test WF',
         description: '',
         nodes: [
-          { id: 'n1', type: 'aiAgent', position: { x: 0, y: 0 }, data: { id: 'n1', label: 'Node 1', type: 'aiAgent', config: {}, status: 'idle', executionCount: 0 } }
+          { id: 'n1', type: 'aiAgent', position: { x: 0, y: 0 }, data: { id: 'n1', label: 'Node 1', type: 'aiAgent', config: {}, status: 'idle', executionCount: 0 } },
+          { id: 'n2', type: 'textOverlay', position: { x: 100, y: 0 }, data: { id: 'n2', label: 'Text Overlay', type: 'textOverlay', config: {}, status: 'idle', executionCount: 0 } },
+          { id: 'n3', type: 'imageUpload', position: { x: 200, y: 0 }, data: { id: 'n3', label: 'Image Upload', type: 'imageUpload', config: {}, status: 'idle', executionCount: 0 } },
+          { id: 'n4', type: 'instagram_post', position: { x: 300, y: 0 }, data: { id: 'n4', label: 'Instagram Post', type: 'instagram_post', config: {}, status: 'idle', executionCount: 0 } },
         ],
         edges: [],
         status: 'draft',
@@ -59,10 +62,14 @@ describe('workflowStore selection and execution stability', () => {
     expect(s2).toBe('e1');
   });
 
-  it('executeWorkflow should save then execute without throwing', async () => {
+  it('executeWorkflow should save then execute without throwing and keep 4 steps', async () => {
     const a = useWorkflowStore.getState();
     await expect(a.executeWorkflow()).resolves.not.toThrow();
-    expect(useWorkflowStore.getState().isExecuting).toBe(false);
-    expect(useWorkflowStore.getState().currentExecution?.status).toBe('completed');
+    const state = useWorkflowStore.getState();
+    expect(state.isExecuting).toBe(false);
+    expect(state.currentExecution?.status).toBe('completed');
+    expect(state.currentExecution?.steps.length).toBe(4);
+    const ids = state.currentExecution?.steps.map(s => s.nodeId);
+    expect(ids).toEqual(['n1', 'n2', 'n3', 'n4']);
   });
 });
