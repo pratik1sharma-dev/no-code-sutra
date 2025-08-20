@@ -1,2 +1,2 @@
---requirement backend/requirements.txt
+--requirement backend/requirements.prod.txt
 
