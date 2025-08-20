@@ -46,7 +46,7 @@ export interface NodeExecutionRequest {
 export interface WorkflowExecutionResponse {
 	success: boolean;
 	data: any;
-	execution_time: number;
+	execution_time?: number;
 	timestamp: string;
 }
 
@@ -95,6 +95,28 @@ class ApiService {
 		return this.request<WorkflowExecutionResponse>('/api/workflows/execute', {
 			method: 'POST',
 			body: JSON.stringify(request),
+		});
+	}
+
+	// Save Workflow
+	async saveWorkflow(workflow: any): Promise<{ success: boolean; error?: string }> {
+		const payload = {
+			id: workflow.id,
+			name: workflow.name,
+			description: workflow.description || '',
+			data: workflow,
+		};
+		return this.request<{ success: boolean; error?: string }>('/api/workflows/save', {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		});
+	}
+
+	// Save Execution Result
+	async saveExecution(result: any): Promise<{ success: boolean; error?: string }> {
+		return this.request<{ success: boolean; error?: string }>('/api/executions/save', {
+			method: 'POST',
+			body: JSON.stringify(result),
 		});
 	}
 

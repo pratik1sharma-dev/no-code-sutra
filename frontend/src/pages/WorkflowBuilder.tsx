@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useEffect } from 'react';
+import React, { useCallback, useMemo, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   ReactFlow,
@@ -14,7 +14,7 @@ import 'reactflow/dist/style.css';
 import { DndContext, DragOverlay, useDroppable } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { v4 as uuidv4 } from 'uuid';
-import { Play, Save, Settings, Sparkles } from 'lucide-react';
+import { Play, Save, Settings, Sparkles, ZoomIn, ZoomOut, Maximize2, Grid } from 'lucide-react';
 import { useWorkflowStore } from '../stores/workflowStore';
 import { useNodeRegistry, NODE_TYPES } from '../components/workflow/nodes/NodeRegistry';
 import { NodePalette } from '../components/workflow/NodePalette';
@@ -26,10 +26,14 @@ const DroppableReactFlow: React.FC<{
   onNodesChange: any;
   onEdgesChange: any;
   onConnect: any;
+  onNodeClick?: any;
+  onSelectionChange?: any;
   nodeTypes: NodeTypes;
   nodes: any[];
   edges: any[];
   fitView?: boolean;
+  snapToGrid?: boolean;
+  snapGrid?: [number, number];
   attributionPosition?: PanelPosition;
 }> = ({ children, fitView, attributionPosition, ...props }) => {
   const { setNodeRef } = useDroppable({
@@ -45,6 +49,53 @@ const DroppableReactFlow: React.FC<{
   );
 };
 
+const InspectorPanel: React.FC = () => {
+  const { currentWorkflow, selectedNode, updateNode } = useWorkflowStore();
+  const node = useMemo(() => currentWorkflow?.nodes.find(n => n.id === selectedNode), [currentWorkflow, selectedNode]);
+  const [label, setLabel] = useState('');
+  const [configText, setConfigText] = useState('');
+
+  useEffect(() => {
+    setLabel(node?.data.label || '');
+    setConfigText(JSON.stringify(node?.data.config || {}, null, 2));
+  }, [node?.id]);
+
+  if (!node) {
+    return (
+      <div className="w-80 border-l border-gray-100 bg-white p-4 text-xs text-gray-600">Select a node to edit</div>
+    );
+  }
+
+  return (
+    <div className="w-80 border-l border-gray-100 bg-white p-4 space-y-3">
+      <div>
+        <div className="text-[11px] text-gray-500 mb-1">Label</div>
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          onBlur={() => updateNode(node.id, { label })}
+          className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/5 focus:bg-white"
+        />
+      </div>
+      <div>
+        <div className="text-[11px] text-gray-500 mb-1">Type</div>
+        <div className="text-sm text-gray-900">{node.data.type}</div>
+      </div>
+      <div>
+        <div className="text-[11px] text-gray-500 mb-1">Config (JSON)</div>
+        <textarea
+          value={configText}
+          onChange={(e) => setConfigText(e.target.value)}
+          onBlur={() => {
+            try { updateNode(node.id, { config: JSON.parse(configText || '{}') }); } catch {}
+          }}
+          className="w-full h-40 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/5 focus:bg-white font-mono"
+        />
+      </div>
+    </div>
+  );
+};
+
 const WorkflowBuilder: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams(); // Added for generated workflow import
@@ -56,7 +107,9 @@ const WorkflowBuilder: React.FC = () => {
     updateNodePosition,
     executeWorkflow,
     isExecuting,
-    currentExecution
+    currentExecution,
+    saveCurrentWorkflow,
+    setSelectedNode
   } = useWorkflowStore();
   
   const { getNodeComponent } = useNodeRegistry();
@@ -83,7 +136,6 @@ const WorkflowBuilder: React.FC = () => {
           });
         } catch (error) {
           console.error('Failed to parse generated workflow:', error);
-          // Fallback to new empty workflow if parsing fails
           setCurrentWorkflow({
             id: id || uuidv4(),
             name: 'New Workflow',
@@ -127,9 +179,6 @@ const WorkflowBuilder: React.FC = () => {
   // Sync React Flow state with Zustand store when nodes/edges change
   useEffect(() => {
     if (currentWorkflow) {
-      console.log('Syncing React Flow state with workflow:', currentWorkflow);
-      
-      // Convert backend format to React Flow format
       const reactFlowNodes = currentWorkflow.nodes.map((node: any) => ({
         id: node.id,
         type: node.type,
@@ -143,33 +192,23 @@ const WorkflowBuilder: React.FC = () => {
           lastExecution: node.lastExecution
         }
       }));
-      
-      console.log('Setting React Flow nodes:', reactFlowNodes);
       setNodes(reactFlowNodes);
-      
-      // Convert edges to React Flow format with proper handles
       const reactFlowEdges = currentWorkflow.edges.map((edge: any) => ({
         ...edge,
-        sourceHandle: null, // Use default source handle
-        targetHandle: null  // Use default target handle
+        sourceHandle: null,
+        targetHandle: null
       }));
-      
       setEdges(reactFlowEdges);
     }
   }, [currentWorkflow?.id, currentWorkflow?.nodes, currentWorkflow?.edges, setNodes, setEdges]);
 
-  // Node types for React Flow - memoized to prevent recreation
   const nodeTypes: NodeTypes = useMemo(() => {
     const types: NodeTypes = {};
-    // Get all available node types from the registry
     const allNodeTypes = Object.keys(NODE_TYPES);
-    allNodeTypes.forEach(type => {
-      types[type] = getNodeComponent(type as NodeType);
-    });
+    allNodeTypes.forEach(type => { types[type] = getNodeComponent(type as NodeType); });
     return types;
   }, [getNodeComponent]);
 
-  // Handle new connections
   const onConnect = useCallback((connection: Connection) => {
     if (connection.source && connection.target) {
       const newEdge: WorkflowEdge = {
@@ -183,52 +222,27 @@ const WorkflowBuilder: React.FC = () => {
     }
   }, [addWorkflowEdge]);
 
-  // Handle drag and drop with proper positioning
   const onDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
-    
-    console.log('Drag end event:', { active, over });
-    
     if (active && over && over.id === 'workflow-canvas') {
       const nodeType = active.data?.current?.nodeType as NodeType;
-      console.log('Node type to add:', nodeType);
-      
       if (nodeType) {
-        // Calculate position based on existing nodes
         const existingNodes = currentWorkflow?.nodes || [];
-        const baseX = 100;
-        const baseY = 100;
-        const offsetX = existingNodes.length * 50;
-        const offsetY = existingNodes.length * 30;
-        
+        const baseX = 100; const baseY = 100;
+        const offsetX = existingNodes.length * 50; const offsetY = existingNodes.length * 30;
         const newNode: WorkflowNode = {
           id: uuidv4(),
           type: nodeType,
-          position: { 
-            x: baseX + offsetX, 
-            y: baseY + offsetY 
-          },
-          data: {
-            label: `New ${nodeType}`,
-            type: nodeType,
-            config: {},
-            status: 'idle',
-            executionCount: 0
-          }
+          position: { x: baseX + offsetX, y: baseY + offsetY },
+          data: { label: `New ${nodeType}`, type: nodeType, config: {}, status: 'idle', executionCount: 0 }
         };
-        
-        console.log('Adding new node:', newNode);
         addNode(newNode);
-        console.log('Node added to store');
       }
     }
   }, [addNode, currentWorkflow?.nodes]);
 
-  // Handle node changes from React Flow
   const handleNodesChange = useCallback((changes: any[]) => {
     onNodesChange(changes);
-    
-    // Update Zustand store with position changes
     changes.forEach(change => {
       if (change.type === 'position' && change.position) {
         updateNodePosition(change.id, change.position);
@@ -236,105 +250,22 @@ const WorkflowBuilder: React.FC = () => {
     });
   }, [onNodesChange, updateNodePosition]);
 
-  // Handle workflow execution
-  const handleExecute = useCallback(async () => {
-    await executeWorkflow();
-  }, [executeWorkflow]);
+  // Save / Execute
+  const handleSaveDraft = useCallback(async () => { await saveCurrentWorkflow(); }, [saveCurrentWorkflow]);
+  const handleExecute = useCallback(async () => { await saveCurrentWorkflow(); await executeWorkflow(); }, [executeWorkflow, saveCurrentWorkflow]);
 
-  // Handle node selection
-  const handleNodeSelect = useCallback((nodeType: NodeType) => {
-    console.log('Selected node type:', nodeType);
-    // TODO: Implement node selection logic
-  }, []);
+  // Canvas toolbar controls
+  const [showGrid, setShowGrid] = useState(true);
 
-  // Component for displaying generated workflow info
-  const GeneratedWorkflowInfo: React.FC<{ workflow: any }> = ({ workflow }) => {
-    const metadata = workflow.metadata || {};
-    const originalPrompt = workflow.prompt;
-    
-    return (
-      <div className="mb-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="w-5 h-5 text-blue-600" />
-          <h3 className="text-sm font-semibold text-blue-900">
-            AI-Generated Workflow
-          </h3>
-        </div>
-        
-        <div className="space-y-3">
-          {originalPrompt && (
-            <div>
-              <p className="text-xs font-medium text-blue-700 mb-1">Original Request:</p>
-              <p className="text-sm text-blue-800 italic">"{originalPrompt}"</p>
-            </div>
-          )}
-          
-          {workflow.description && (
-            <div>
-              <p className="text-xs font-medium text-blue-700 mb-1">Description:</p>
-              <p className="text-sm text-blue-800">{workflow.description}</p>
-            </div>
-          )}
-          
-          {metadata.estimatedCost && (
-            <div className="flex items-center gap-4 text-xs">
-              <span className="text-blue-700">
-                <span className="font-medium">Estimated Cost:</span> {metadata.estimatedCost}
-              </span>
-              {metadata.estimatedTime && (
-                <span className="text-blue-700">
-                  <span className="font-medium">Setup Time:</span> {metadata.estimatedTime}
-                </span>
-              )}
-            </div>
-          )}
-          
-          {metadata.requiredIntegrations && metadata.requiredIntegrations.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-blue-700 mb-1">Required Integrations:</p>
-              <div className="flex flex-wrap gap-1">
-                {metadata.requiredIntegrations.map((integration: string, index: number) => (
-                  <span
-                    key={index}
-                    className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs border border-orange-200"
-                  >
-                    {integration}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {metadata.authRequirements && metadata.authRequirements.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-blue-700 mb-1">Authentication Required:</p>
-              <div className="flex flex-wrap gap-1">
-                {metadata.authRequirements.map((auth: string, index: number) => (
-                  <span
-                    key={index}
-                    className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs border border-red-200"
-                  >
-                    {auth}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
+  const handleNodeClick = useCallback((_: any, node: any) => {
+    setSelectedNode(node?.id || null);
+  }, [setSelectedNode]);
 
-  if (!currentWorkflow) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading workflow...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleSelectionChange = useCallback((params: any) => {
+    const nextId = params?.nodes?.[0]?.id || null;
+    setSelectedNode((prev => prev) as any); // no-op to use store guard against redundant sets
+    if (nextId !== null) setSelectedNode(nextId);
+  }, [setSelectedNode]);
 
   return (
     <DndContext onDragEnd={onDragEnd}>
@@ -347,33 +278,29 @@ const WorkflowBuilder: React.FC = () => {
           </div>
         </DragOverlay>
         {/* Node Palette Sidebar */}
-        <NodePalette onNodeSelect={handleNodeSelect} />
+        <NodePalette />
         
         {/* Main Canvas Area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
           <div className="bg-white border-b border-gray-200 px-6 py-4">
-            {/* Show generated workflow info if available */}
-            {searchParams.get('generated') && currentWorkflow && (
-              <GeneratedWorkflowInfo workflow={currentWorkflow} />
-            )}
-            
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h1 className="text-lg font-semibold text-gray-900">
-                  {currentWorkflow.name}
+                  {currentWorkflow?.name}
                 </h1>
-                <span className={`px-2 py-1 text-xs rounded-full ${
-                  currentWorkflow.status === 'active' ? 'bg-green-100 text-green-800' :
-                  currentWorkflow.status === 'draft' ? 'bg-gray-100 text-gray-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {currentWorkflow.status}
-                </span>
+                {currentWorkflow && (
+                  <span className={`px-2 py-1 text-xs rounded-full ${
+                    currentWorkflow.status === 'active' ? 'bg-green-100 text-green-800' :
+                    currentWorkflow.status === 'draft' ? 'bg-gray-100 text-gray-800' :
+                    'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {currentWorkflow.status}
+                  </span>
+                )}
               </div>
-              
               <div className="flex items-center gap-2">
-                <button className="btn btn-outline btn-sm">
+                <button className="btn btn-outline btn-sm" onClick={handleSaveDraft}>
                   <Save className="w-4 h-4 mr-1" />
                   Save Draft
                 </button>
@@ -385,46 +312,51 @@ const WorkflowBuilder: React.FC = () => {
                   <Play className="w-4 h-4 mr-1" />
                   {isExecuting ? 'Running...' : 'Save & Run'}
                 </button>
-                <button className="btn btn-outline btn-sm">
-                  <Settings className="w-4 h-4" />
-                </button>
               </div>
             </div>
-            
-            {/* Execution Status */}
-            {currentExecution && (
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm font-medium text-blue-900">
-                      Execution {currentExecution.status}
-                    </span>
-                  </div>
-                  <span className="text-xs text-blue-700">
-                    {currentExecution.steps.filter(s => s.status === 'completed').length} / {currentExecution.steps.length} steps
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
           
-          {/* React Flow Canvas */}
-          <div className="flex-1 min-w-0">
-            <DroppableReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              nodeTypes={nodeTypes}
-              fitView
-              attributionPosition="bottom-left"
-            >
-              <Controls />
-              <Background />
-              <MiniMap />
-            </DroppableReactFlow>
+          {/* Canvas + Inspector */}
+          <div className="flex-1 min-w-0 flex">
+            <div className="relative flex-1">
+              {/* Canvas Toolbar */}
+              <div className="absolute right-3 top-3 z-10 flex items-center gap-1 bg-white/80 backdrop-blur border border-gray-200 rounded-md p-1">
+                <button className="icon-btn" onClick={() => document.querySelector('[data-id="rf__controls-fitview"]')?.dispatchEvent(new Event('click', { bubbles: true }))} title="Fit to view">
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+                <button className="icon-btn" onClick={() => document.querySelector('[data-id="rf__controls-zoom-in"]')?.dispatchEvent(new Event('click', { bubbles: true }))} title="Zoom in">
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button className="icon-btn" onClick={() => document.querySelector('[data-id="rf__controls-zoom-out"]')?.dispatchEvent(new Event('click', { bubbles: true }))} title="Zoom out">
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <button className={`icon-btn ${showGrid ? 'bg-gray-100' : ''}`} onClick={() => setShowGrid(v => !v)} title="Toggle grid">
+                  <Grid className="w-4 h-4" />
+                </button>
+              </div>
+
+              <DroppableReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={handleNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeClick={handleNodeClick}
+                onSelectionChange={handleSelectionChange}
+                nodeTypes={nodeTypes}
+                fitView
+                snapToGrid
+                snapGrid={[10, 10]}
+                attributionPosition="bottom-left"
+              >
+                <Controls />
+                {showGrid && <Background gap={20} color="#f0f0f0" />}
+                <MiniMap />
+              </DroppableReactFlow>
+            </div>
+
+            {/* Inspector */}
+            <InspectorPanel />
           </div>
         </div>
       </div>

@@ -2,16 +2,24 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nocodesutra.db")
+# Use Postgres only
+DATABASE_URL = os.getenv(
+	"DATABASE_URL",
+	"postgresql+psycopg://postgres:postgres@localhost:5432/nocodesutra",
+)
+
+# SQLAlchemy engine and session (Postgres)
 engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
-    future=True,
+	DATABASE_URL,
+	future=True,
+	pool_pre_ping=True,
+	echo=False,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 Base = declarative_base()
 
 
 def init_db() -> None:
-    from . import models  # noqa: F401
-    Base.metadata.create_all(bind=engine)
+	"""Create tables if not existing (no migrations)."""
+	from . import models  # noqa: F401
+	Base.metadata.create_all(bind=engine)
