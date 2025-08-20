@@ -1,0 +1,9 @@
+[phases.install]
+cmds = ["pip install -r requirements.prod.txt"]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "python -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT}"
+
