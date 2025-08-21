@@ -1,9 +1,0 @@
-[phases.install]
-cmds = ["/opt/venv/bin/pip install --no-cache-dir -r requirements.prod.txt"]
-
-[phases.build]
-cmds = []
-
-[start]
-cmd = "python -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT}"
-
