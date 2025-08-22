@@ -261,6 +261,18 @@ class NodeRegistry:
             output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}}}
         )
         
+        self._nodes['imageGenerator'] = NodeMetadata(
+            type='imageGenerator',
+            label='Image Generator',
+            description='Generate or fetch background images from public sources (Unsplash, Pexels, Lorem Picsum) with AI-powered keyword extraction',
+            category=NodeCategory.AI_ML,
+            icon='Image',
+            color='primary',
+            required_inputs=['structured_data'],  # Accept AI Agent output for keyword extraction
+            optional_inputs=['prompt', 'style', 'user_image_url'],
+            output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}, 'source': {'type': 'string'}, 'keywords': {'type': 'array'}}}
+        )
+        
         self._nodes['imageUpload'] = NodeMetadata(
             type='imageUpload',
             label='Image Upload',

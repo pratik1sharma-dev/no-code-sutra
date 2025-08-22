@@ -231,6 +231,11 @@ class LangGraphWorkflowExecutor:
                         state['content'] = resolved_content
                     else:
                         state['content'] = state.get('post', '')
+            elif node_type == 'imageGenerator':
+                state['structured_data'] = config.get('structured_data', state.get('structured_data', {}))
+                state['prompt'] = config.get('prompt', state.get('prompt', ''))
+                state['style'] = config.get('style', state.get('style', 'modern'))
+                state['user_image_url'] = config.get('user_image_url', state.get('user_image_url', ''))
             elif node_type == 'textOverlay':
                 state['overlay_text'] = config.get('overlay_text', state.get('overlay_text', ''))
                 state['image_url'] = config.get('image_url', state.get('image_url', ''))

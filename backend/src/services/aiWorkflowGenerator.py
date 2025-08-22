@@ -237,6 +237,27 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
 
 CRITICAL: Use your intelligence to generate appropriate prompts based on the user's specific needs. Don't use generic prompts - make them contextual and platform-specific. Consider the entire workflow chain when generating AI Agent prompts.
 
+IMAGE GENERATION WORKFLOW PATTERNS:
+
+For Instagram posts with dynamic backgrounds, use this optimal pattern:
+1. aiAgent → imageGenerator → textOverlay → imageUpload → instagram_post
+
+This pattern provides:
+- AI-generated content (headlines, bullets, captions)
+- Dynamic background images from public sources (Unsplash, Pexels, Lorem Picsum)
+- Professional text overlay with mobile-optimized fonts
+- Cloudinary hosting for public Instagram URLs
+- Direct Instagram posting
+
+For other social media with images:
+1. aiAgent → imageGenerator → textOverlay → imageUpload → [social_media_node]
+
+IMAGE GENERATOR CONFIGURATION:
+- The imageGenerator node automatically extracts keywords from AI content
+- It searches multiple free APIs in order: Unsplash → Pexels → Lorem Picsum
+- No configuration needed - it works automatically with AI content
+- Optional: Add "prompt" or "style" for specific image preferences
+
 WORKFLOW VALIDATION:
 Before returning the response, verify:
 - All nodes are connected in a logical sequence
@@ -244,7 +265,8 @@ Before returning the response, verify:
 - The workflow forms a complete execution chain
 - Parallel branches are properly connected to main flow
 - Every node has appropriate incoming and outgoing connections
-- AI Agent nodes have contextual, platform-specific prompts"""
+- AI Agent nodes have contextual, platform-specific prompts
+- Image workflows include imageGenerator for dynamic backgrounds"""
 	
 	def _build_user_prompt(self, user_prompt: str) -> str:
 		return f"""Please analyze this user request and generate a workflow:

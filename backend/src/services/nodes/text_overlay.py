@@ -206,6 +206,9 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         width = int(state.get('image_width', 1080))
         height = int(state.get('image_height', 1080))
         background_url = state.get('image_url') or state.get('background_image_url')
+        
+        print(f"Text overlay - Background URL: {background_url}")
+        print(f"Text overlay - Available state keys: {list(state.keys())}")
 
         # Initialize font system
         font_system = FontSystem(width, height)
