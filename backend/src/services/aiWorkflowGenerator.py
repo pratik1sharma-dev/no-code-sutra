@@ -98,6 +98,12 @@ Your task is to analyze user requests and generate structured workflow definitio
 AVAILABLE NODE TYPES ({node_count} Core Types):
 {node_types_text}
 
+CRITICAL: You MUST use the EXACT node type names listed above. Do not create variations or use camelCase versions. For example:
+- Use "instagram_post" (not "instagramPost")
+- Use "textOverlay" (not "text_overlay") 
+- Use "imageUpload" (not "image_upload")
+- Use "aiAgent" (not "ai_agent")
+
 CRITICAL WORKFLOW RULES:
 1. EVERY node must be connected in execution order
 2. Each node (except the first) must have at least one incoming edge
@@ -306,9 +312,13 @@ Generate the workflow in the specified JSON format."""
 		logger.info(f"Validating and enhancing {len(nodes)} nodes")
 		from .node_registry import node_registry
 		valid_node_types = node_registry.get_active_node_types()
+		
 		enhanced_nodes: List[Dict[str, Any]] = []
 		for index, node in enumerate(nodes):
 			original_type = node.get('type', 'unknown')
+			
+			# Validate node type (AI should now generate correct names)
+			
 			if original_type not in valid_node_types:
 				logger.warning(f"Invalid node type '{original_type}' for node {index + 1}, defaulting to 'aiAgent'")
 				original_type = 'aiAgent'
