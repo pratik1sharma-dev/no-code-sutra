@@ -12,7 +12,9 @@ import {
   GitBranch, 
   Clock, 
   Globe,
-  Instagram
+  Instagram,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { useNodeRegistry, NODE_TYPES } from './nodes/NodeRegistry';
 import type { NodeType } from '../../types/workflow';
@@ -31,9 +33,15 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
 
 interface NodePaletteProps {
   onNodeSelect?: (nodeType: NodeType) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export const NodePalette: React.FC<NodePaletteProps> = ({ onNodeSelect }) => {
+export const NodePalette: React.FC<NodePaletteProps> = ({ 
+  onNodeSelect, 
+  isCollapsed = false, 
+  onToggleCollapse 
+}) => {
   const { getNodeTypesByCategory } = useNodeRegistry();
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => {
     const categories = getNodeTypesByCategory();
@@ -50,12 +58,12 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onNodeSelect }) => {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return categories;
-    const result: Record<string, typeof NODE_TYPES[keyof typeof NODE_TYPES][]> = {};
+    const result: Record<string, any[]> = {};
     Object.entries(categories).forEach(([cat, nodes]) => {
-      const matches = nodes.filter(n =>
-        n.label.toLowerCase().includes(q) ||
-        n.description.toLowerCase().includes(q) ||
-        n.type.toLowerCase().includes(q)
+      const matches = nodes.filter((n: any) =>
+        n.label?.toLowerCase().includes(q) ||
+        n.description?.toLowerCase().includes(q) ||
+        n.type?.toLowerCase().includes(q)
       );
       if (matches.length) result[cat] = matches;
     });
@@ -69,10 +77,37 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onNodeSelect }) => {
     }));
   };
 
+  if (isCollapsed) {
+    return (
+      <div className="w-12 bg-white border-r border-gray-100 flex flex-col items-center py-4">
+        <button
+          onClick={onToggleCollapse}
+          className="p-2 hover:bg-gray-50 rounded-md transition-colors"
+          title="Expand Node Library"
+        >
+          <PanelLeftOpen className="w-5 h-5 text-gray-600" />
+        </button>
+        <div className="mt-4 text-xs text-gray-500 text-center leading-tight">
+          Node<br />Library
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-72 bg-white border-r border-gray-100 p-4">
-      <div className="sticky top-0 z-10 bg-white pb-3">
-        <h3 className="text-xs font-semibold text-gray-900 mb-2 tracking-wide">Node Library</h3>
+    <div className="w-72 bg-white border-r border-gray-100 flex flex-col">
+      {/* Header with collapse button */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-100 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-semibold text-gray-900 tracking-wide">Node Library</h3>
+          <button
+            onClick={onToggleCollapse}
+            className="p-1 hover:bg-gray-50 rounded-md transition-colors"
+            title="Collapse Node Library"
+          >
+            <PanelLeftClose className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
         <div className="relative">
           <input
             value={query}
@@ -84,36 +119,39 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onNodeSelect }) => {
         </div>
       </div>
 
-      <div className="space-y-2">
-        {Object.entries(filtered).map(([category, nodes]) => (
-          <div key={category} className="border border-gray-100 rounded-lg overflow-hidden">
-            <button
-              className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
-              onClick={() => toggleCategory(category)}
-            >
-              <span className="truncate">{category}</span>
-              {expandedCategories[category] ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="space-y-2">
+          {Object.entries(filtered).map(([category, nodes]) => (
+            <div key={category} className="border border-gray-100 rounded-lg overflow-hidden">
+              <button
+                className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+                onClick={() => toggleCategory(category)}
+              >
+                <span className="truncate">{category}</span>
+                {expandedCategories[category] ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </button>
+              {expandedCategories[category] && (
+                <div className="border-t border-gray-100 p-1.5 space-y-1">
+                  {nodes.map((nodeType) => (
+                    <DraggableNodeItem
+                      key={nodeType.type}
+                      nodeType={nodeType}
+                      onNodeSelect={onNodeSelect}
+                    />
+                  ))}
+                </div>
               )}
-            </button>
-            {expandedCategories[category] && (
-              <div className="border-t border-gray-100 p-1.5 space-y-1">
-                {nodes.map((nodeType) => (
-                  <DraggableNodeItem
-                    key={nodeType.type}
-                    nodeType={nodeType}
-                    onNodeSelect={onNodeSelect}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-        {Object.keys(filtered).length === 0 && (
-          <div className="text-[11px] text-gray-500 px-1.5">No nodes found</div>
-        )}
+            </div>
+          ))}
+          {Object.keys(filtered).length === 0 && (
+            <div className="text-[11px] text-gray-500 px-1.5">No nodes found</div>
+          )}
+        </div>
       </div>
     </div>
   );

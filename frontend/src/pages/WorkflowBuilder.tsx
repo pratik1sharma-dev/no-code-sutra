@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useEffect, useState } from 'react';
+import React, { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   ReactFlow,
@@ -8,6 +8,7 @@ import {
   addEdge,
   useNodesState,
   useEdgesState,
+  useReactFlow,
 } from 'reactflow';
 import type { Node, Edge, Connection, NodeTypes, EdgeTypes, PanelPosition } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -45,6 +46,47 @@ const DroppableReactFlow: React.FC<{
       <ReactFlow {...props} fitView={fitView} attributionPosition={attributionPosition}>
         {children}
       </ReactFlow>
+    </div>
+  );
+};
+
+// Canvas Controls Component
+const CanvasControls: React.FC<{ showGrid: boolean; onToggleGrid: () => void }> = ({ 
+  showGrid, 
+  onToggleGrid 
+}) => {
+  const { zoomIn, zoomOut, fitView } = useReactFlow();
+
+  return (
+    <div className="absolute right-3 top-3 z-10 flex items-center gap-1 bg-white/80 backdrop-blur border border-gray-200 rounded-md p-1">
+      <button 
+        className="icon-btn" 
+        onClick={() => fitView()} 
+        title="Fit to view"
+      >
+        <Maximize2 className="w-4 h-4" />
+      </button>
+      <button 
+        className="icon-btn" 
+        onClick={() => zoomIn()} 
+        title="Zoom in"
+      >
+        <ZoomIn className="w-4 h-4" />
+      </button>
+      <button 
+        className="icon-btn" 
+        onClick={() => zoomOut()} 
+        title="Zoom out"
+      >
+        <ZoomOut className="w-4 h-4" />
+      </button>
+      <button 
+        className={`icon-btn ${showGrid ? 'bg-gray-100' : ''}`} 
+        onClick={onToggleGrid} 
+        title="Toggle grid"
+      >
+        <Grid className="w-4 h-4" />
+      </button>
     </div>
   );
 };
@@ -99,6 +141,7 @@ const InspectorPanel: React.FC = () => {
 const WorkflowBuilder: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams(); // Added for generated workflow import
+  const [isNodePaletteCollapsed, setIsNodePaletteCollapsed] = useState(false);
   const { 
     currentWorkflow, 
     setCurrentWorkflow, 
@@ -277,8 +320,12 @@ const WorkflowBuilder: React.FC = () => {
             </div>
           </div>
         </DragOverlay>
-        {/* Node Palette Sidebar */}
-        <NodePalette />
+        
+        {/* Collapsible Node Palette Sidebar */}
+        <NodePalette 
+          isCollapsed={isNodePaletteCollapsed}
+          onToggleCollapse={() => setIsNodePaletteCollapsed(!isNodePaletteCollapsed)}
+        />
         
         {/* Main Canvas Area */}
         <div className="flex-1 flex flex-col min-w-0">
@@ -319,22 +366,6 @@ const WorkflowBuilder: React.FC = () => {
           {/* Canvas + Inspector */}
           <div className="flex-1 min-w-0 flex">
             <div className="relative flex-1">
-              {/* Canvas Toolbar */}
-              <div className="absolute right-3 top-3 z-10 flex items-center gap-1 bg-white/80 backdrop-blur border border-gray-200 rounded-md p-1">
-                <button className="icon-btn" onClick={() => document.querySelector('[data-id="rf__controls-fitview"]')?.dispatchEvent(new Event('click', { bubbles: true }))} title="Fit to view">
-                  <Maximize2 className="w-4 h-4" />
-                </button>
-                <button className="icon-btn" onClick={() => document.querySelector('[data-id="rf__controls-zoom-in"]')?.dispatchEvent(new Event('click', { bubbles: true }))} title="Zoom in">
-                  <ZoomIn className="w-4 h-4" />
-                </button>
-                <button className="icon-btn" onClick={() => document.querySelector('[data-id="rf__controls-zoom-out"]')?.dispatchEvent(new Event('click', { bubbles: true }))} title="Zoom out">
-                  <ZoomOut className="w-4 h-4" />
-                </button>
-                <button className={`icon-btn ${showGrid ? 'bg-gray-100' : ''}`} onClick={() => setShowGrid(v => !v)} title="Toggle grid">
-                  <Grid className="w-4 h-4" />
-                </button>
-              </div>
-
               <DroppableReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -352,6 +383,7 @@ const WorkflowBuilder: React.FC = () => {
                 <Controls />
                 {showGrid && <Background gap={20} color="#f0f0f0" />}
                 <MiniMap />
+                <CanvasControls showGrid={showGrid} onToggleGrid={() => setShowGrid(v => !v)} />
               </DroppableReactFlow>
             </div>
 

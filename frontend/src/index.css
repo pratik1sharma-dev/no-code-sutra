@@ -85,6 +85,10 @@
     @apply bg-danger-600 text-white hover:bg-danger-700 active:bg-danger-800;
   }
 
+  .icon-btn {
+    @apply p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900;
+  }
+
   .card {
     @apply rounded-lg border border-secondary-200 bg-white shadow-sm;
   }
