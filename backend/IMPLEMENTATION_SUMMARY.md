@@ -9,12 +9,13 @@
 - **Error Handling**: Comprehensive error handling with fallback to simulation
 - **Rate Limiting**: Respects Instagram API limits and quotas
 
-### 2. **Dynamic Background Image System**
-- **Multi-API Image Search**: Unsplash, Pexels, Lorem Picsum integration
-- **Keyword Extraction**: AI-powered content analysis for relevant image selection
-- **Fallback Chain**: Robust fallback system when APIs are unavailable
+### 2. **Enhanced Dynamic Background Image System**
+- **Multi-API Image Search**: Unsplash, Pexels, Pixabay, Unsplash Source API integration
+- **Smart Keyword Extraction**: AI-powered content analysis for relevant image selection
+- **Robust Fallback Chain**: Multiple reliable sources including curated stock images
+- **Content-Aware Selection**: Intelligent category matching for business, tech, AI, modern themes
 - **Image Processing**: Automatic resizing, cropping, and optimization
-- **Content-Aware Selection**: Context-aware background image matching
+- **No API Key Required**: Works without any external API keys
 
 ### 3. **Enhanced Workflow Nodes (Modularized)**
 - **Per-node executors**: SRP-compliant modules in `services/nodes/*`
@@ -43,17 +44,19 @@
 ### **Complete Instagram Posting Flow:**
 ```
 1. AI Agent Node → Generates structured content (headline, bullets, caption, hashtags)
-2. Text Overlay Node → Creates image with dynamic background + text overlay
-3. Image Upload Node → Uploads to Cloudinary for public hosting
-4. Instagram Post Node → Posts to Instagram with image and caption
+2. Image Generator Node → Fetches relevant background image from multiple sources
+3. Text Overlay Node → Creates image with professional text overlay
+4. Image Upload Node → Uploads to Cloudinary for public hosting
+5. Instagram Post Node → Posts to Instagram with image and caption
 ```
 
-### **Dynamic Background Image Process:**
+### **Enhanced Dynamic Background Image Process:**
 1. **Content Analysis**: Extract keywords from AI-generated content
-2. **Image Search**: Query multiple free APIs (Unsplash → Pexels → Lorem Picsum)
-3. **Image Selection**: Choose most relevant background image
-4. **Text Overlay**: Apply professional text formatting with Instagram optimization
-5. **Image Processing**: Resize, crop, and optimize for Instagram
+2. **Image Search**: Query multiple APIs (Unsplash → Pexels → Pixabay → Unsplash Source)
+3. **Smart Fallback**: Curated stock images for business, tech, AI, modern themes
+4. **Image Selection**: Choose most relevant background image
+5. **Text Overlay**: Apply professional text formatting with mobile-optimized fonts
+6. **Image Processing**: Resize, crop, and optimize for Instagram
 
 ### **Automatic Mode Detection:**
 - **Real Token** → Real Instagram posting with full API integration
@@ -85,6 +88,11 @@ INSTAGRAM_ACCESS_TOKEN=your_instagram_access_token
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
+
+# Dynamic Background Image APIs (Optional - for enhanced image selection)
+UNSPLASH_ACCESS_KEY=your_unsplash_access_key_here
+PEXELS_API_KEY=your_pexels_api_key_here
+PIXABAY_API_KEY=your_pixabay_api_key_here
 ```
 
 ## 📊 Current Status
@@ -93,7 +101,7 @@ CLOUDINARY_API_SECRET=your_api_secret
 |-----------|--------|-------|
 | Amazon Bedrock Integration | ✅ Complete | LLaMA-powered content generation |
 | Instagram Service | ✅ Complete | Full API integration with error handling |
-| Dynamic Background Images | ✅ Complete | Multi-API search with fallback |
+| Dynamic Background Images | ✅ Complete | Enhanced multi-API search with curated fallbacks |
 | Text Overlay System | ✅ Complete | Professional Instagram-optimized styling |
 | Workflow Integration | ✅ Complete | Seamless node integration |
 | Content Generation | ✅ Complete | Structured AI-powered content |
@@ -107,6 +115,8 @@ CLOUDINARY_API_SECRET=your_api_secret
 ### **AI Content Generation:**
 - **Structured Output**: Headlines, bullet points, captions, hashtags
 - **Platform Optimization**: Instagram-specific formatting and engagement
+- **Context-Aware Prompts**: Dynamic prompt generation based on workflow chain
+- **Mobile-Optimized Fonts**: Professional typography with minimum 24px readability
 - **Context Awareness**: Content tailored to the specific topic
 - **Hashtag Optimization**: Relevant hashtags for better reach
 

@@ -4,13 +4,14 @@
             {
                 "id": "node1",
                 "type": "aiAgent",
-                "label": "AI Trend Research",
+                "label": "AI Content Generation",
                 "position": {"x": 100, "y": 100},
                 "data": {
-                    "label": "AI Trend Research",
+                    "label": "AI Content Generation",
                     "type": "aiAgent",
                     "config": {
-                        "task": "research",
+                        "prompt": "Create Instagram content about AI trends with engaging headline, bullet points, caption, and relevant hashtags. Optimize for image overlay with crisp, visual content.",
+                        "task": "generate",
                         "topic": "AI trends"
                     },
                     "status": "idle",
@@ -19,15 +20,15 @@
             },
             {
                 "id": "node2",
-                "type": "data",
-                "label": "Post Data Transformation",
+                "type": "imageGenerator",
+                "label": "Background Image Generator",
                 "position": {"x": 300, "y": 100},
                 "data": {
-                    "label": "Post Data Transformation",
-                    "type": "data",
+                    "label": "Background Image Generator",
+                    "type": "imageGenerator",
                     "config": {
-                        "input": "node1",
-                        "output": "post_data"
+                        "structured_data": "node1.output",
+                        "style": "modern"
                     },
                     "status": "idle",
                     "executionCount": 0
@@ -35,15 +36,48 @@
             },
             {
                 "id": "node3",
+                "type": "textOverlay",
+                "label": "Text Overlay",
+                "position": {"x": 500, "y": 100},
+                "data": {
+                    "label": "Text Overlay",
+                    "type": "textOverlay",
+                    "config": {
+                        "overlay_text": "node1.output",
+                        "image_url": "node2.output.image_url",
+                        "image_width": 1080,
+                        "image_height": 1080
+                    },
+                    "status": "idle",
+                    "executionCount": 0
+                }
+            },
+            {
+                "id": "node4",
+                "type": "imageUpload",
+                "label": "Image Upload",
+                "position": {"x": 700, "y": 100},
+                "data": {
+                    "label": "Image Upload",
+                    "type": "imageUpload",
+                    "config": {
+                        "image_data_url": "node3.output.image_data_url"
+                    },
+                    "status": "idle",
+                    "executionCount": 0
+                }
+            },
+            {
+                "id": "node5",
                 "type": "instagram_post",
                 "label": "Post to Instagram",
-                "position": {"x": 500, "y": 100},
+                "position": {"x": 900, "y": 100},
                 "data": {
                     "label": "Post to Instagram",
                     "type": "instagram_post",
                     "config": {
                         "access_token": "Instagram API Key",
-                        "post": "node2.post_data"
+                        "post": "node1.output"
                     },
                     "status": "idle",
                     "executionCount": 0
@@ -56,22 +90,48 @@
                 "source": "node1",
                 "target": "node2",
                 "type": "default",
-                "label": ""
+                "label": "",
+                "data_mapping": {
+                    "structured_data": "node1.output"
+                }
             },
             {
                 "id": "edge2",
                 "source": "node2",
                 "target": "node3",
                 "type": "default",
-                "label": ""
+                "label": "",
+                "data_mapping": {
+                    "image_url": "node2.output.image_url"
+                }
+            },
+            {
+                "id": "edge3",
+                "source": "node3",
+                "target": "node4",
+                "type": "default",
+                "label": "",
+                "data_mapping": {
+                    "image_data_url": "node3.output.image_data_url"
+                }
+            },
+            {
+                "id": "edge4",
+                "source": "node4",
+                "target": "node5",
+                "type": "default",
+                "label": "",
+                "data_mapping": {
+                    "image_url": "node4.output.image_url"
+                }
             }
         ],
         "metadata": {
-            "title": "AI Trend Post Creator",
-            "description": "Automatically creates posts in AI trends and posts them on Instagram",
+            "title": "Enhanced Instagram Post Creator",
+            "description": "Creates professional Instagram posts with AI-generated content, dynamic backgrounds, and text overlay",
             "estimatedCost": "Free to $50/month",
-            "requiredIntegrations": ["Instagram"],
-            "authRequirements": ["Instagram API Key"],
+            "requiredIntegrations": ["Instagram", "Cloudinary"],
+            "authRequirements": ["Instagram API Key", "Cloudinary Credentials"],
             "complexity": "medium",
             "estimatedTime": "10-15 minutes setup"
         }

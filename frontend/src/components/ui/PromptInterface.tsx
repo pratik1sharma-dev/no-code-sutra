@@ -21,7 +21,7 @@ const PromptInterface: React.FC<PromptInterfaceProps> = ({
 
   const defaultSuggestions = [
     "Find construction companies in NYC and send them personalized emails",
-    "Create blog posts about AI trends and post them to LinkedIn",
+    "Create blog posts about AI trends and post them to instagram",
     "Process customer data and send weekly reports to my team",
     "Monitor social media mentions and respond automatically",
     "Generate leads from LinkedIn and add them to CRM"

@@ -1,9 +1,33 @@
 import React, { useState, useMemo } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { 
+  ChevronDown, 
+  ChevronRight, 
+  Search, 
+  Bot, 
+  Mail, 
+  MessageSquare, 
+  Database, 
+  GitBranch, 
+  Clock, 
+  Globe,
+  Instagram
+} from 'lucide-react';
 import { useNodeRegistry, NODE_TYPES } from './nodes/NodeRegistry';
 import type { NodeType } from '../../types/workflow';
+
+// Icon mapping for dynamic loading
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+  Bot,
+  Globe,
+  Mail,
+  MessageSquare,
+  Database,
+  GitBranch,
+  Clock,
+  Instagram
+};
 
 interface NodePaletteProps {
   onNodeSelect?: (nodeType: NodeType) => void;
@@ -114,7 +138,7 @@ const DraggableNodeItem: React.FC<DraggableNodeItemProps> = ({ nodeType, onNodeS
     opacity: isDragging ? 0.5 : 1,
   } as React.CSSProperties;
 
-  const Icon = nodeType.icon;
+  const Icon = nodeType.icon ? ICON_MAP[nodeType.icon] || Bot : Bot;
 
   return (
     <div
