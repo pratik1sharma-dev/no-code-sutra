@@ -289,6 +289,134 @@ async def save_execution(result: Dict[str, Any]):
 	finally:
 		db.close()
 
+
+@app.get("/api/workflows")
+async def list_workflows(user_id: Optional[str] = None, limit: int = 50, offset: int = 0):
+	"""
+	List saved workflows with optional user filtering
+	"""
+	try:
+		db = SessionLocal()
+		query = db.query(WorkflowModel)
+		
+		if user_id:
+			# TODO: Add user_id column to WorkflowModel when user management is implemented
+			# query = query.filter(WorkflowModel.user_id == user_id)
+			pass
+		
+		workflows = query.order_by(WorkflowModel.updated_at.desc()).offset(offset).limit(limit).all()
+		
+		return {
+			"workflows": [
+				{
+					"id": wf.id,
+					"name": wf.name,
+					"description": wf.description,
+					"created_at": wf.created_at.isoformat(),
+					"updated_at": wf.updated_at.isoformat(),
+					"node_count": len(wf.data.get("nodes", [])),
+					"status": wf.data.get("status", "draft")
+				}
+				for wf in workflows
+			],
+			"total": query.count(),
+			"limit": limit,
+			"offset": offset
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Error listing workflows: {str(e)}")
+	finally:
+		db.close()
+
+
+@app.get("/api/workflows/{workflow_id}")
+async def get_workflow(workflow_id: str):
+	"""
+	Get a specific workflow by ID
+	"""
+	try:
+		db = SessionLocal()
+		workflow = db.query(WorkflowModel).filter(WorkflowModel.id == workflow_id).first()
+		
+		if not workflow:
+			raise HTTPException(status_code=404, detail="Workflow not found")
+		
+		return {
+			"id": workflow.id,
+			"name": workflow.name,
+			"description": workflow.description,
+			"data": workflow.data,
+			"created_at": workflow.created_at.isoformat(),
+			"updated_at": workflow.updated_at.isoformat()
+		}
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Error retrieving workflow: {str(e)}")
+	finally:
+		db.close()
+
+
+@app.delete("/api/workflows/{workflow_id}")
+async def delete_workflow(workflow_id: str):
+	"""
+	Delete a workflow by ID
+	"""
+	try:
+		db = SessionLocal()
+		workflow = db.query(WorkflowModel).filter(WorkflowModel.id == workflow_id).first()
+		
+		if not workflow:
+			raise HTTPException(status_code=404, detail="Workflow not found")
+		
+		db.delete(workflow)
+		db.commit()
+		
+		return {"success": True, "message": "Workflow deleted successfully"}
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Error deleting workflow: {str(e)}")
+	finally:
+		db.close()
+
+
+@app.get("/api/workflows/{workflow_id}/executions")
+async def get_workflow_executions(workflow_id: str, limit: int = 20, offset: int = 0):
+	"""
+	Get execution history for a specific workflow
+	"""
+	try:
+		db = SessionLocal()
+		executions = db.query(ExecutionModel).filter(
+			ExecutionModel.workflow_id == workflow_id
+		).order_by(ExecutionModel.started_at.desc()).offset(offset).limit(limit).all()
+		
+		return {
+			"executions": [
+				{
+					"id": exec.id,
+					"workflow_id": exec.workflow_id,
+					"status": exec.status,
+					"nodes_executed": exec.nodes_executed,
+					"started_at": exec.started_at.isoformat(),
+					"finished_at": exec.finished_at.isoformat() if exec.finished_at else None,
+					"result_summary": {
+						"success": exec.result.get("status") == "completed" if exec.result else False,
+						"error": exec.result.get("error") if exec.result else None
+					}
+				}
+				for exec in executions
+			],
+			"total": db.query(ExecutionModel).filter(ExecutionModel.workflow_id == workflow_id).count(),
+			"limit": limit,
+			"offset": offset
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Error retrieving executions: {str(e)}")
+	finally:
+		db.close()
+
 @app.get("/api/nodes/registry")
 async def get_node_registry():
 	"""Get centralized node registry configuration"""

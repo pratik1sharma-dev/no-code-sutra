@@ -65,9 +65,16 @@ Server will be available at: http://localhost:8000
 ### Workflow Generation
 - `POST /api/workflows/generate` - Generate agentic workflow from natural language
 
+### Workflow Management
+- `GET /api/workflows` - List all saved workflows
+- `GET /api/workflows/{id}` - Get specific workflow by ID
+- `POST /api/workflows/save` - Save or update a workflow
+- `DELETE /api/workflows/{id}` - Delete a workflow
+- `GET /api/workflows/{id}/executions` - Get execution history for a workflow
+
 ### Workflow Execution
 - `POST /api/workflows/execute` - Execute a workflow
-- `GET /api/workflows/{id}/status` - Get workflow status
+- `POST /api/executions/save` - Save execution result
 
 ### Node Registry
 - `GET /api/nodes/registry` - List available workflow nodes
