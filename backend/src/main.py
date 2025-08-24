@@ -1,11 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -17,6 +18,8 @@ from services.aiWorkflowGenerator import AIWorkflowGenerator
 from services.node_registry import node_registry
 from services.db import init_db, SessionLocal
 from services.models import Workflow as WorkflowModel, Execution as ExecutionModel
+from services.instagram_oauth import InstagramOAuthService
+from services.instagram_credentials import instagram_credentials_service
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -56,7 +59,9 @@ app = FastAPI(
 # Ensure DB is initialized at startup
 @app.on_event("startup")
 async def _startup_init_db():
+	print("🔍 Starting database initialization...")
 	init_db()
+	print("🔍 Database initialization complete")
 
 # CORS middleware
 app.add_middleware(
@@ -71,6 +76,7 @@ app.add_middleware(
 # Initialize services
 langgraph_executor = LangGraphWorkflowExecutor()
 ai_generator = AIWorkflowGenerator()
+instagram_oauth_service = InstagramOAuthService()
 
 @app.get("/")
 async def root():
@@ -488,6 +494,169 @@ async def execute_workflow(request: WorkflowExecutionRequest):
 		import traceback
 		traceback.print_exc()
 		raise HTTPException(status_code=500, detail=f"Workflow execution failed: {str(e)}")
+
+# Instagram OAuth endpoints
+@app.get("/api/auth/instagram/url")
+async def get_instagram_auth_url():
+    """Get Instagram authorization URL for OAuth flow"""
+    try:
+        auth_url = instagram_oauth_service.get_authorization_url()
+        return {
+            "auth_url": auth_url,
+            "message": "Visit this URL to authorize Instagram access"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate auth URL: {str(e)}")
+
+@app.get("/api/auth/instagram/callback")
+async def instagram_oauth_callback(code: str, state: Optional[str] = None, user_id: Optional[str] = None):
+    """Handle Instagram OAuth callback and complete the flow"""
+    try:
+        print(f"🔍 OAuth Callback - Code: {code[:20]}..., State: {state}, User ID: {user_id}")
+        
+        if not code:
+            print("❌ No authorization code provided")
+            raise HTTPException(status_code=400, detail="Authorization code is required")
+        
+        # Use a default user_id if not provided (for demo purposes)
+        user_id = user_id or "default_user"
+        print(f"🔍 Using user_id: {user_id}")
+        
+        # Complete the OAuth flow
+        print("🔍 Starting OAuth flow completion...")
+        token_data = instagram_oauth_service.complete_oauth_flow(code)
+        print(f"🔍 OAuth flow completed successfully. Token type: {token_data.get('token_type')}")
+        
+        # Automatically save credentials to database
+        print("🔍 Attempting to save credentials to database...")
+        try:
+            saved = instagram_credentials_service.save_credentials(user_id, token_data)
+            print(f"🔍 Credentials saved: {saved}")
+        except Exception as save_error:
+            print(f"❌ Error saving credentials: {save_error}")
+            import traceback
+            traceback.print_exc()
+            # Continue even if saving fails
+            saved = False
+        
+        # Redirect to frontend with success message
+        from fastapi.responses import RedirectResponse
+        
+        success_url = f"http://localhost:5173/auth/instagram/callback?success=true&user_id={user_id}"
+        return RedirectResponse(url=success_url, status_code=302)
+    except Exception as e:
+        print(f"❌ OAuth callback error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"OAuth flow failed: {str(e)}")
+
+@app.post("/api/auth/instagram/validate")
+async def validate_instagram_token(request: Request):
+    """Validate an existing Instagram access token"""
+    try:
+        body = await request.json()
+        access_token = body.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Access token is required")
+        
+        validation = instagram_oauth_service.validate_token(access_token)
+        
+        if validation["valid"]:
+            instagram_accounts = instagram_oauth_service.get_instagram_accounts(access_token)
+            return {
+                "valid": True,
+                "user": validation["user"],
+                "permissions": validation["permissions"],
+                "instagram_accounts": instagram_accounts
+            }
+        else:
+            return {
+                "valid": False,
+                "error": validation["error"]
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Token validation failed: {str(e)}")
+
+@app.post("/api/auth/instagram/refresh")
+async def refresh_instagram_token(request: Request):
+    """Refresh a long-lived Instagram access token"""
+    try:
+        body = await request.json()
+        access_token = body.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Access token is required")
+        
+        refreshed_data = instagram_oauth_service.refresh_long_lived_token(access_token)
+        
+        return {
+            "success": True,
+            "access_token": refreshed_data["access_token"][:10] + "...",
+            "expires_in": refreshed_data.get("expires_in"),
+            "expires_at": (datetime.now() + timedelta(seconds=refreshed_data.get("expires_in", 5184000))).isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Token refresh failed: {str(e)}")
+
+
+@app.get("/api/auth/instagram/credentials/{user_id}")
+async def get_instagram_credentials(user_id: str):
+    """Get stored Instagram credentials for a user"""
+    try:
+        credentials = instagram_credentials_service.get_credentials(user_id)
+        
+        if not credentials:
+            raise HTTPException(status_code=404, detail="No credentials found for this user")
+        
+        # Don't return the full access token for security
+        safe_credentials = {
+            **credentials,
+            'access_token': credentials['access_token'][:10] + '...' if credentials['access_token'] else None
+        }
+        
+        return {
+            "success": True,
+            "credentials": safe_credentials
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get credentials: {str(e)}")
+
+
+@app.delete("/api/auth/instagram/credentials/{user_id}")
+async def delete_instagram_credentials(user_id: str):
+    """Delete stored Instagram credentials for a user"""
+    try:
+        deleted = instagram_credentials_service.delete_credentials(user_id)
+        
+        if not deleted:
+            raise HTTPException(status_code=404, detail="No credentials found for this user")
+        
+        return {
+            "success": True,
+            "message": "Credentials deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete credentials: {str(e)}")
+
+
+@app.get("/api/auth/instagram/status/{user_id}")
+async def get_instagram_auth_status(user_id: str):
+    """Check if user has valid Instagram credentials"""
+    try:
+        is_valid = instagram_credentials_service.is_token_valid(user_id)
+        credentials = instagram_credentials_service.get_credentials(user_id) if is_valid else None
+        
+        return {
+            "authenticated": is_valid,
+            "credentials": credentials if credentials else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check auth status: {str(e)}")
 
 if __name__ == "__main__":
 	import uvicorn

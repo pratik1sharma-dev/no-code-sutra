@@ -35,20 +35,27 @@ class InstagramService:
     def _validate_access_token(self) -> bool:
         """Validate the access token and check permissions"""
         try:
+            print(f"🔍 Validating access token: {self.access_token[:20]}...")
             url = f"{self.base_url}/me"
             params = {
                 'access_token': self.access_token,
                 'fields': 'id,name'
             }
             
+            print(f"🔍 Making validation request to: {url}")
             response = requests.get(url, params=params)
+            print(f"🔍 Response status: {response.status_code}")
+            print(f"🔍 Response content: {response.text[:200]}...")
+            
             response.raise_for_status()
             
             data = response.json()
+            print(f"🔍 ✅ Access token validated for user: {data.get('name', 'Unknown')}")
             logger.info(f"Access token validated for user: {data.get('name', 'Unknown')}")
             return True
             
         except Exception as e:
+            print(f"🔍 ❌ Access token validation failed: {e}")
             logger.error(f"Access token validation failed: {e}")
             return False
     
@@ -180,8 +187,14 @@ class InstagramService:
             Response data from Instagram API
         """
         try:
+            print(f"🔍 Instagram Service: Starting post_text_only")
+            print(f"🔍 Caption length: {len(caption)}")
+            print(f"🔍 Image URL: {image_url}")
+            print(f"🔍 Instagram Business Account ID: {self.instagram_business_account_id}")
+            
             # Instagram requires at least one media item
             if not image_url:
+                print(f"🔍 ❌ No image URL provided - Instagram requires media")
                 return {
                     'status': 'failed',
                     'error': 'Instagram requires media for posts. Please provide an image_url parameter.',
@@ -189,12 +202,17 @@ class InstagramService:
                 }
             
             # Create a media container with the provided image
+            print(f"🔍 Creating media container...")
             media_result = self.create_media_container(caption, "IMAGE", image_url)
             creation_id = media_result.get('id')
+            print(f"🔍 Media container result: {media_result}")
+            print(f"🔍 Creation ID: {creation_id}")
             
             if creation_id:
                 # Publish the media
+                print(f"🔍 Publishing media with creation ID: {creation_id}")
                 publish_result = self.publish_media(creation_id)
+                print(f"🔍 Publish result: {publish_result}")
                 
                 # Truncate caption for response
                 truncated_caption = self._truncate_caption(caption)
@@ -212,9 +230,13 @@ class InstagramService:
                 raise ValueError("Failed to create media container")
                 
         except Exception as e:
+            print(f"🔍 ❌ Instagram post_text_only failed: {e}")
             logger.error(f"Failed to post text-only content: {e}")
             if hasattr(e, 'response') and e.response is not None:
+                print(f"🔍 Response content: {e.response.text}")
                 logger.error(f"Response content: {e.response.text}")
+            import traceback
+            traceback.print_exc()
             return {
                 'status': 'failed',
                 'error': str(e),

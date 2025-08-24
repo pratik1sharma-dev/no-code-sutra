@@ -223,7 +223,9 @@ class LangGraphWorkflowExecutor:
             elif node_type == 'instagram_post':
                 import os
                 state['platform'] = 'instagram'
-                state['access_token'] = os.getenv('INSTAGRAM_ACCESS_TOKEN', '')
+                # Don't set access_token here - let the social media node get it from stored credentials
+                state['access_token'] = ''  # Empty to force using stored token
+                state['user_id'] = 'default_user'  # Add user_id to state
                 state['post'] = config.get('post', '')
                 if state.get('post'):
                     resolved_content = self.resolve_data_reference(state['post'], input_data)
@@ -237,6 +239,8 @@ class LangGraphWorkflowExecutor:
                 state['style'] = config.get('style', state.get('style', 'modern'))
                 state['user_image_url'] = config.get('user_image_url', state.get('user_image_url', ''))
             elif node_type == 'textOverlay':
+                # Get structured_data from previous nodes (AI agent output)
+                state['structured_data'] = state.get('structured_data', {})
                 state['overlay_text'] = config.get('overlay_text', state.get('overlay_text', ''))
                 state['image_url'] = config.get('image_url', state.get('image_url', ''))
                 state['image_width'] = config.get('image_width', state.get('image_width', 1080))

@@ -161,6 +161,7 @@ export interface WorkflowStore {
   addEdge: (edge: WorkflowEdge) => void;
   removeEdge: (edgeId: string) => void;
   updateWorkflow: (updates: Partial<WorkflowState>) => void;
+  saveCurrentWorkflow: () => Promise<{ success: boolean; error?: string }>;
   executeWorkflow: () => Promise<void>;
   clearExecution: () => void;
 } 

@@ -15,7 +15,7 @@ import 'reactflow/dist/style.css';
 import { DndContext, DragOverlay, useDroppable } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { v4 as uuidv4 } from 'uuid';
-import { Play, Save, Settings, Sparkles, ZoomIn, ZoomOut, Maximize2, Grid } from 'lucide-react';
+import { Play, Save, Settings, Sparkles, ZoomIn, ZoomOut, Maximize2, Grid, LayoutGrid } from 'lucide-react';
 import { useWorkflowStore } from '../stores/workflowStore';
 import { useNodeRegistry, NODE_TYPES } from '../components/workflow/nodes/NodeRegistry';
 import { NodePalette } from '../components/workflow/NodePalette';
@@ -51,9 +51,14 @@ const DroppableReactFlow: React.FC<{
 };
 
 // Canvas Controls Component
-const CanvasControls: React.FC<{ showGrid: boolean; onToggleGrid: () => void }> = ({ 
+const CanvasControls: React.FC<{ 
+  showGrid: boolean; 
+  onToggleGrid: () => void;
+  onArrangeNodes: () => void;
+}> = ({ 
   showGrid, 
-  onToggleGrid 
+  onToggleGrid,
+  onArrangeNodes
 }) => {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
 
@@ -86,6 +91,13 @@ const CanvasControls: React.FC<{ showGrid: boolean; onToggleGrid: () => void }> 
         title="Toggle grid"
       >
         <Grid className="w-4 h-4" />
+      </button>
+      <button 
+        className="icon-btn" 
+        onClick={onArrangeNodes} 
+        title="Arrange nodes in grid"
+      >
+        <LayoutGrid className="w-4 h-4" />
       </button>
     </div>
   );
@@ -227,6 +239,7 @@ const WorkflowBuilder: React.FC = () => {
         type: node.type,
         position: node.position,
         data: {
+          id: node.id,
           label: node.label || `New ${node.type}`,
           type: node.type,
           config: node.config || {},
@@ -271,13 +284,34 @@ const WorkflowBuilder: React.FC = () => {
       const nodeType = active.data?.current?.nodeType as NodeType;
       if (nodeType) {
         const existingNodes = currentWorkflow?.nodes || [];
-        const baseX = 100; const baseY = 100;
-        const offsetX = existingNodes.length * 50; const offsetY = existingNodes.length * 30;
+        
+        // Grid-based positioning for better visual layout
+        const gridSize = { width: 280, height: 120 }; // Node spacing
+        const nodesPerRow = 3; // Number of nodes per row
+        const rowIndex = Math.floor(existingNodes.length / nodesPerRow);
+        const colIndex = existingNodes.length % nodesPerRow;
+        
+        // Start position with some margin from edges
+        const startX = 100;
+        const startY = 100;
+        
+        // Calculate position with alternating row offset for visual interest
+        const x = startX + (colIndex * gridSize.width);
+        const y = startY + (rowIndex * gridSize.height) + (rowIndex % 2 === 1 ? gridSize.height / 2 : 0);
+        
+        const nodeId = uuidv4();
         const newNode: WorkflowNode = {
-          id: uuidv4(),
+          id: nodeId,
           type: nodeType,
-          position: { x: baseX + offsetX, y: baseY + offsetY },
-          data: { label: `New ${nodeType}`, type: nodeType, config: {}, status: 'idle', executionCount: 0 }
+          position: { x, y },
+          data: { 
+            id: nodeId,
+            label: `New ${nodeType}`, 
+            type: nodeType, 
+            config: {}, 
+            status: 'idle', 
+            executionCount: 0 
+          }
         };
         addNode(newNode);
       }
@@ -300,13 +334,39 @@ const WorkflowBuilder: React.FC = () => {
   // Canvas toolbar controls
   const [showGrid, setShowGrid] = useState(true);
 
+  // Auto-arrange nodes in a grid layout
+  const arrangeNodesInGrid = useCallback(() => {
+    if (!currentWorkflow?.nodes.length) return;
+    
+    const gridSize = { width: 280, height: 120 };
+    const nodesPerRow = 3;
+    const startX = 100;
+    const startY = 100;
+    
+    const updatedNodes = currentWorkflow.nodes.map((node, index) => {
+      const rowIndex = Math.floor(index / nodesPerRow);
+      const colIndex = index % nodesPerRow;
+      const x = startX + (colIndex * gridSize.width);
+      const y = startY + (rowIndex * gridSize.height) + (rowIndex % 2 === 1 ? gridSize.height / 2 : 0);
+      
+      return {
+        ...node,
+        position: { x, y }
+      };
+    });
+    
+    // Update all node positions at once
+    updatedNodes.forEach(node => {
+      updateNodePosition(node.id, node.position);
+    });
+  }, [currentWorkflow?.nodes, updateNodePosition]);
+
   const handleNodeClick = useCallback((_: any, node: any) => {
     setSelectedNode(node?.id || null);
   }, [setSelectedNode]);
 
   const handleSelectionChange = useCallback((params: any) => {
     const nextId = params?.nodes?.[0]?.id || null;
-    setSelectedNode((prev => prev) as any); // no-op to use store guard against redundant sets
     if (nextId !== null) setSelectedNode(nextId);
   }, [setSelectedNode]);
 
@@ -383,7 +443,11 @@ const WorkflowBuilder: React.FC = () => {
                 <Controls />
                 {showGrid && <Background gap={20} color="#f0f0f0" />}
                 <MiniMap />
-                <CanvasControls showGrid={showGrid} onToggleGrid={() => setShowGrid(v => !v)} />
+                <CanvasControls 
+                  showGrid={showGrid} 
+                  onToggleGrid={() => setShowGrid(v => !v)} 
+                  onArrangeNodes={arrangeNodesInGrid}
+                />
               </DroppableReactFlow>
             </div>
 

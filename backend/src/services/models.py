@@ -23,3 +23,18 @@ class Execution(Base):
 	nodes_executed = Column(Integer, default=0)
 	started_at = Column(DateTime, default=datetime.utcnow)
 	finished_at = Column(DateTime)
+
+
+class InstagramCredentials(Base):
+	__tablename__ = "instagram_credentials"
+	id = Column(String, primary_key=True)
+	user_id = Column(String, nullable=False)
+	access_token = Column(String, nullable=False)
+	instagram_business_account_id = Column(String)
+	page_id = Column(String)
+	page_name = Column(String)
+	username = Column(String)
+	token_type = Column(String, default="long_lived")
+	expires_at = Column(DateTime)
+	created_at = Column(DateTime, default=datetime.utcnow)
+	updated_at = Column(DateTime, default=datetime.utcnow)

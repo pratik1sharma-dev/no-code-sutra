@@ -187,19 +187,16 @@ class TextRenderer:
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        overlay_text = state.get('overlay_text') or state.get('structured_data')
-        print(f"Text overlay node processing - state: {overlay_text} type: {type(overlay_text)}")
+        # Get the structured data from AI agent or any other source
+        overlay_text = state.get('structured_data') or state.get('overlay_text') or state.get('result') or state.get('output')
+        print(f"Text overlay node processing - overlay_text: {overlay_text} type: {type(overlay_text)}")
+        print(f"Text overlay node - structured_data: {state.get('structured_data')}")
+        print(f"Text overlay node - result: {state.get('result')}")
+        print(f"Text overlay node - output: {state.get('output')}")
 
-        # Process structured data directly
+        # Process structured data intelligently for any JSON structure
         if isinstance(overlay_text, dict):
-            headline = overlay_text.get('headline', '')
-            subhead = overlay_text.get('subhead', '')
-            bullets = overlay_text.get('bullets', [])
-            structured_content = {
-                'headline': headline,
-                'subhead': subhead, 
-                'bullets': bullets
-            }
+            structured_content = _convert_any_json_to_text_structure(overlay_text)
         else:
             structured_content = None
 
@@ -275,6 +272,141 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         state['error'] = str(e)
         state['timestamp'] = datetime.now().isoformat()
         return state
+
+
+def _convert_any_json_to_text_structure(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Intelligently convert any JSON structure to text overlay format.
+    This function analyzes the data structure and creates appropriate headline, subhead, and bullets.
+    """
+    headline = ""
+    subhead = ""
+    bullets = []
+    
+    # Priority keys for headline (most important content)
+    headline_priority = ['headline', 'title', 'main_title', 'primary_title', 'name']
+    
+    # Priority keys for subhead (secondary content)
+    subhead_priority = ['subhead', 'subtitle', 'sub_title', 'description', 'summary', 'overview']
+    
+    # Priority keys for bullets (list content)
+    bullet_priority = ['bullets', 'bullet_points', 'points', 'items', 'list', 'statistics', 'facts', 'key_points', 'highlights']
+    
+    # Find headline
+    for key in headline_priority:
+        if key in data and data[key]:
+            headline = str(data[key])
+            break
+    
+    # Find subhead
+    for key in subhead_priority:
+        if key in data and data[key]:
+            subhead = str(data[key])
+            break
+    
+    # Find bullets
+    for key in bullet_priority:
+        if key in data and isinstance(data[key], list):
+            bullets = _convert_list_to_bullets(data[key])
+            break
+    
+    # If no headline found, try to create one from summary or description
+    if not headline:
+        for key in ['summary', 'description', 'overview']:
+            if key in data and data[key]:
+                text = str(data[key])
+                # Take first sentence as headline
+                sentences = text.split('.')
+                if sentences:
+                    headline = sentences[0].strip() + '.'
+                    # Rest becomes subhead if no subhead exists
+                    if not subhead and len(sentences) > 1:
+                        subhead = '. '.join(sentences[1:]).strip()
+                break
+    
+    # If still no headline, use the first string value found
+    if not headline:
+        for key, value in data.items():
+            if isinstance(value, str) and value.strip():
+                headline = value[:100] + "..." if len(value) > 100 else value
+                break
+    
+    # If no bullets found, try to convert any remaining list data
+    if not bullets:
+        for key, value in data.items():
+            if isinstance(value, list) and value:
+                bullets = _convert_list_to_bullets(value)
+                break
+    
+    # Fallback: if nothing found, convert the entire data to text
+    if not headline and not subhead and not bullets:
+        headline = str(data)[:200] + "..." if len(str(data)) > 200 else str(data)
+    
+    return {
+        'headline': headline,
+        'subhead': subhead,
+        'bullets': bullets
+    }
+
+
+def _convert_list_to_bullets(items: list) -> list:
+    """Convert any list of items to formatted bullet points"""
+    bullets = []
+    
+    for item in items[:5]:  # Limit to 5 bullets for readability
+        if isinstance(item, dict):
+            # Handle dictionary items
+            bullet_text = _format_dict_as_bullet(item)
+        elif isinstance(item, (str, int, float)):
+            # Handle simple values
+            bullet_text = f"• {str(item)}"
+        else:
+            # Handle other types
+            bullet_text = f"• {str(item)}"
+        
+        if bullet_text and bullet_text != "• ":
+            bullets.append(bullet_text)
+    
+    return bullets
+
+
+def _format_dict_as_bullet(item: Dict[str, Any]) -> str:
+    """Format a dictionary item as a bullet point"""
+    # Common patterns for formatting
+    if 'category' in item and 'value' in item:
+        category = item.get('category', '')
+        value = item.get('value', '')
+        growth_rate = item.get('growth_rate', '')
+        description = item.get('description', '')
+        
+        bullet_text = f"• {category}: {value}"
+        if growth_rate:
+            bullet_text += f" ({growth_rate} growth)"
+        if description:
+            bullet_text += f" - {description}"
+        return bullet_text
+    
+    elif 'name' in item and 'value' in item:
+        name = item.get('name', '')
+        value = item.get('value', '')
+        return f"• {name}: {value}"
+    
+    elif 'title' in item and 'description' in item:
+        title = item.get('title', '')
+        description = item.get('description', '')
+        return f"• {title}: {description}"
+    
+    else:
+        # Generic formatting for any dictionary
+        parts = []
+        for key, value in item.items():
+            if isinstance(value, (str, int, float)) and value:
+                parts.append(f"{key}: {value}")
+        
+        if parts:
+            return f"• {' | '.join(parts)}"
+        else:
+            return f"• {str(item)}"
 
 
 def _load_base_image(background_url: Optional[str], width: int, height: int) -> Image.Image:

@@ -54,19 +54,27 @@ class DataMapper:
         # Look for AI Agent output
         for source_id, output in source_outputs.items():
             if isinstance(output, dict):
+                # Check for structured_data (new AI agent format)
+                if 'structured_data' in output and output['structured_data']:
+                    mapped_data['structured_data'] = output['structured_data']
+                    break
                 # If it's structured JSON from AI Agent
-                if 'headline' in output and 'bullets' in output:
-                    mapped_data['ai_output'] = output
+                elif 'headline' in output and 'bullets' in output:
+                    mapped_data['structured_data'] = output
                     break
                 # If it's the old format with 'result' field
                 elif 'result' in output:
                     try:
                         # Try to parse the result as JSON
                         parsed_result = json.loads(output['result'])
-                        mapped_data['ai_output'] = parsed_result
+                        mapped_data['structured_data'] = parsed_result
                     except (json.JSONDecodeError, TypeError):
                         # If it's not JSON, use as-is
-                        mapped_data['ai_output'] = output
+                        mapped_data['structured_data'] = output
+                    break
+                # Fallback: use any dict output as structured data
+                else:
+                    mapped_data['structured_data'] = output
                     break
         
         # Apply edge mapping if provided
