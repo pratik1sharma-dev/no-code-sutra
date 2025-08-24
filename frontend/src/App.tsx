@@ -7,6 +7,8 @@ import Dashboard from './pages/Dashboard';
 import WorkflowBuilder from './pages/WorkflowBuilder';
 import Login from './pages/Login';
 import LandingPage from './pages/LandingPage';
+import LinkedInConnect from './pages/LinkedInConnect';
+import LinkedInCallback from './pages/LinkedInCallback';
 
 const App: React.FC = () => {
   return (
@@ -25,6 +27,8 @@ const App: React.FC = () => {
             
             {/* Auth routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/auth/linkedin/callback" element={<LinkedInCallback />} />
+            <Route path="/linkedin/connect" element={<LinkedInConnect />} />
           </Routes>
         </Suspense>
       </BrowserRouter>

@@ -141,6 +141,19 @@ class ApiService {
 	async healthCheck(): Promise<{ status: string; service: string }> {
 		return this.request<{ status: string; service: string }>('/health');
 	}
+
+	// LinkedIn OAuth
+	async getLinkedInAuthUrl(): Promise<{ auth_url: string }> {
+		return this.request<{ auth_url: string }>(`/api/auth/linkedin/url`);
+	}
+
+	async getLinkedInStatus(userId: string): Promise<{ authenticated: boolean; credentials?: any }> {
+		return this.request(`/api/auth/linkedin/status/${encodeURIComponent(userId)}`);
+	}
+
+	async deleteLinkedInCredentials(userId: string): Promise<{ success: boolean }> {
+		return this.request(`/api/auth/linkedin/credentials/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+	}
 }
 
 // Create singleton instance

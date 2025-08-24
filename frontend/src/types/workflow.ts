@@ -19,6 +19,7 @@ export type NodeType =
   | 'aggregate'
   | 'errorHandler'
   | 'instagram_post'
+  | 'linkedin_post'
   | 'textOverlay'
   | 'imageUpload';
 
