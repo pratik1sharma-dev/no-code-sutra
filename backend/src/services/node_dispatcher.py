@@ -13,6 +13,7 @@ from .nodes import image_generator as image_gen_exec
 from .nodes import seo_optimizer as seo_exec
 from .nodes import text_overlay as text_overlay_exec
 from .nodes import image_upload as image_upload_exec
+from .nodes import linkedin_post as linkedin_post_exec
 
 
 class NodeDispatcher:
@@ -30,6 +31,7 @@ class NodeDispatcher:
             "blogWriter": blog_exec.execute,
             "socialMedia": social_exec.execute,
             "instagram_post": social_exec.execute_instagram,
+            "linkedin_post": linkedin_post_exec.execute,
             "textOverlay": text_overlay_exec.execute,
             "imageGenerator": image_gen_exec.execute,
             "imageUpload": image_upload_exec.execute,

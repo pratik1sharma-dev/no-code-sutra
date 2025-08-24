@@ -21,7 +21,8 @@ import {
   Filter,
   BarChart3,
   AlertTriangle,
-  Instagram
+  Instagram,
+  Linkedin
 } from 'lucide-react';
 import type { WorkflowNodeData, NodeType } from '../../../types/workflow';
 import { BaseNode } from './BaseNode';
@@ -42,6 +43,7 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
   FolderOpen,
   Server,
   Instagram,
+  Linkedin,
   GitBranch,
   Clock,
   Calendar,
