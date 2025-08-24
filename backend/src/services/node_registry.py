@@ -63,6 +63,18 @@ class NodeRegistry:
             optional_inputs=['scheduled_time', 'location', 'user_tags'],
             output_schema={'type': 'object', 'properties': {'post_id': {'type': 'string'}}}
         )
+
+        self._nodes['linkedin_post'] = NodeMetadata(
+            type='linkedin_post',
+            label='LinkedIn Post',
+            description='Post professional content to LinkedIn member feed',
+            category=NodeCategory.SOCIAL_MEDIA,
+            icon='Linkedin',
+            color='primary',
+            required_inputs=['ai_output', 'linkedin_credentials'],
+            optional_inputs=['image_url', 'author_urn'],
+            output_schema={'type': 'object', 'properties': {'post_id': {'type': 'string'}, 'author_urn': {'type': 'string'}}}
+        )
         
         # Communication Nodes
         self._nodes['email'] = NodeMetadata(

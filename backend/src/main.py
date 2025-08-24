@@ -20,6 +20,8 @@ from services.db import init_db, SessionLocal
 from services.models import Workflow as WorkflowModel, Execution as ExecutionModel
 from services.instagram_oauth import InstagramOAuthService
 from services.instagram_credentials import instagram_credentials_service
+from services.linkedin_oauth import LinkedInOAuthService
+from services.linkedin_credentials import linkedin_credentials_service
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -77,6 +79,7 @@ app.add_middleware(
 langgraph_executor = LangGraphWorkflowExecutor()
 ai_generator = AIWorkflowGenerator()
 instagram_oauth_service = InstagramOAuthService()
+linkedin_oauth_service = LinkedInOAuthService()
 
 @app.get("/")
 async def root():
@@ -657,6 +660,105 @@ async def get_instagram_auth_status(user_id: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to check auth status: {str(e)}")
+
+
+# LinkedIn OAuth endpoints
+@app.get("/api/auth/linkedin/url")
+async def get_linkedin_auth_url():
+	"""Get LinkedIn authorization URL for OAuth flow"""
+	try:
+		auth_url = linkedin_oauth_service.get_authorization_url()
+		return {
+			"auth_url": auth_url,
+			"message": "Visit this URL to authorize LinkedIn access"
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Failed to generate LinkedIn auth URL: {str(e)}")
+
+
+@app.get("/api/auth/linkedin/callback")
+async def linkedin_oauth_callback(code: str, state: Optional[str] = None, user_id: Optional[str] = None):
+	"""Handle LinkedIn OAuth callback and complete the flow"""
+	try:
+		if not code:
+			raise HTTPException(status_code=400, detail="Authorization code is required")
+		user_id = user_id or "default_user"
+		token_data = linkedin_oauth_service.complete_oauth_flow(code)
+		# Persist credentials
+		saved = linkedin_credentials_service.save_credentials(user_id, token_data)
+		from fastapi.responses import RedirectResponse
+		success = "true" if saved else "false"
+		success_url = f"http://localhost:5173/auth/linkedin/callback?success={success}&user_id={user_id}"
+		return RedirectResponse(url=success_url, status_code=302)
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"LinkedIn OAuth flow failed: {str(e)}")
+
+
+@app.post("/api/auth/linkedin/validate")
+async def validate_linkedin_token(request: Request):
+	"""Validate an existing LinkedIn access token"""
+	try:
+		body = await request.json()
+		access_token = body.get("access_token")
+		if not access_token:
+			raise HTTPException(status_code=400, detail="Access token is required")
+		validation = linkedin_oauth_service.validate_token(access_token)
+		return validation
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"LinkedIn token validation failed: {str(e)}")
+
+
+@app.get("/api/auth/linkedin/status/{user_id}")
+async def get_linkedin_auth_status(user_id: str):
+	"""Check if user has valid LinkedIn credentials"""
+	try:
+		is_valid = linkedin_credentials_service.is_token_valid(user_id)
+		credentials = linkedin_credentials_service.get_credentials(user_id) if is_valid else None
+		if credentials and credentials.get('access_token'):
+			credentials = {
+				**credentials,
+				'access_token': credentials['access_token'][:10] + '...'
+			}
+		return {
+			"authenticated": is_valid,
+			"credentials": credentials if credentials else None
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Failed to check LinkedIn auth status: {str(e)}")
+
+
+@app.get("/api/auth/linkedin/credentials/{user_id}")
+async def get_linkedin_credentials(user_id: str):
+	"""Get stored LinkedIn credentials for a user (safe view)"""
+	try:
+		credentials = linkedin_credentials_service.get_credentials(user_id)
+		if not credentials:
+			raise HTTPException(status_code=404, detail="No LinkedIn credentials found for this user")
+		if credentials.get('access_token'):
+			credentials['access_token'] = credentials['access_token'][:10] + '...'
+		return {"success": True, "credentials": credentials}
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Failed to get LinkedIn credentials: {str(e)}")
+
+
+@app.delete("/api/auth/linkedin/credentials/{user_id}")
+async def delete_linkedin_credentials(user_id: str):
+	"""Delete stored LinkedIn credentials for a user"""
+	try:
+		deleted = linkedin_credentials_service.delete_credentials(user_id)
+		if not deleted:
+			raise HTTPException(status_code=404, detail="No LinkedIn credentials found for this user")
+		return {"success": True, "message": "LinkedIn credentials deleted successfully"}
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Failed to delete LinkedIn credentials: {str(e)}")
 
 if __name__ == "__main__":
 	import uvicorn
