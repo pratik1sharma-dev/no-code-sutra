@@ -158,6 +158,12 @@ const LandingPage: React.FC = () => {
             <a href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">Features</a>
             <a href="#examples" className="text-gray-600 hover:text-gray-900 transition-colors">Examples</a>
             <button 
+              onClick={() => navigate('/linkedin/connect')}
+              className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+            >
+              Connect LinkedIn
+            </button>
+            <button 
               onClick={() => navigate('/login')}
               className="px-4 py-2 text-blue-600 hover:text-blue-700 transition-colors"
             >
@@ -293,4 +299,4 @@ const LandingPage: React.FC = () => {
   );
 };
 
-export default LandingPage; 
+export default LandingPage;

@@ -384,32 +384,62 @@ Generate the workflow in the specified JSON format."""
 	def _generate_fallback_workflow(self, prompt: str) -> Dict[str, Any]:
 		logger.info(f"Generating fallback workflow for prompt: '{prompt[:50]}...'")
 		workflow_name = self._generate_workflow_name(prompt)
+		# Heuristic intent routing for LinkedIn
+		prompt_lower = (prompt or '').lower()
+		is_linkedin = 'linkedin' in prompt_lower or 'linked in' in prompt_lower
+		nodes = []
+		edges = []
+		# Always start with aiAgent
+		nodes.append({
+			"id": "1",
+			"type": "aiAgent",
+			"label": "Process Request",
+			"position": {"x": 100, "y": 100},
+			"data": {
+				"label": "Process Request",
+				"type": "aiAgent",
+				"config": {"prompt": prompt},
+				"status": "idle",
+				"executionCount": 0
+			}
+		})
+		if is_linkedin:
+			# Minimal LinkedIn posting chain: aiAgent -> linkedin_post
+			nodes.append({
+				"id": "2",
+				"type": "linkedin_post",
+				"label": "Post to LinkedIn",
+				"position": {"x": 320, "y": 100},
+				"data": {
+					"label": "Post to LinkedIn",
+					"type": "linkedin_post",
+					"config": {},
+					"status": "idle",
+					"executionCount": 0
+				}
+			})
+			edges.append({
+				"id": "e1-2",
+				"source": "1",
+				"target": "2",
+				"type": "default",
+				"label": "",
+				"data_mapping": {
+					"ai_output": "1.output"
+				}
+			})
 		fallback_workflow = {
 			"workflow": {
 				"name": workflow_name,
 				"description": f"Automation workflow for: {prompt}",
-				"nodes": [
-					{
-						"id": "1",
-						"type": "aiAgent",
-						"label": "Process Request",
-						"position": {"x": 100, "y": 100},
-						"data": {
-							"label": "Process Request",
-							"type": "aiAgent",
-							"config": {"prompt": prompt},
-							"status": "idle",
-							"executionCount": 0
-						}
-					}
-				],
-				"edges": [],
+				"nodes": nodes,
+				"edges": edges,
 				"metadata": {
 					"title": workflow_name,
 					"description": f"Basic automation for: {prompt}",
 					"estimatedCost": "Free",
-					"requiredIntegrations": [],
-					"authRequirements": [],
+					"requiredIntegrations": ["LinkedIn"] if is_linkedin else [],
+					"authRequirements": ["LinkedIn OAuth"] if is_linkedin else [],
 					"complexity": "simple",
 					"estimatedTime": "5 minutes"
 				}

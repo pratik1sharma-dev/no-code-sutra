@@ -38,3 +38,18 @@ class InstagramCredentials(Base):
 	expires_at = Column(DateTime)
 	created_at = Column(DateTime, default=datetime.utcnow)
 	updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LinkedInCredentials(Base):
+	__tablename__ = "linkedin_credentials"
+	id = Column(String, primary_key=True)
+	user_id = Column(String, nullable=False)
+	provider = Column(String, default="linkedin")
+	access_token = Column(String, nullable=False)
+	refresh_token = Column(String)
+	scopes = Column(String)
+	expires_at = Column(DateTime)
+	author_urn = Column(String)  # e.g., "urn:li:person:xxxx" or organization URN
+	metadata = Column(JSONB)
+	created_at = Column(DateTime, default=datetime.utcnow)
+	updated_at = Column(DateTime, default=datetime.utcnow)

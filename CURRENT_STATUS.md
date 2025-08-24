@@ -10,6 +10,32 @@ The Instagram integration is **fully functional** and ready for production use. 
 
 ---
 
+## 🚧 **IN PROGRESS: LinkedIn Integration**
+
+- **Decision**: Implement LinkedIn using a provider-agnostic OAuth layer, unified credentials storage, and a posting adapter pattern. Add a dedicated `linkedin_post` node and minimal frontend connect flow.
+- **Phase 1 Scope**:
+  - OAuth 2.0 (scopes: `r_liteprofile`, `r_emailaddress`, `w_member_social`), token persistence with refresh
+  - Backend services: `linkedin_oauth`, `linkedin_service` (member posts text + optional image URL)
+  - Node: `linkedin_post` registered in `node_registry`, executor to call posting service
+  - Frontend: "Connect LinkedIn" and status display
+  - Generator: emit `linkedin_post` for LinkedIn intents
+- **Planned Architecture Improvements** (shared across providers):
+  - Provider-agnostic OAuth endpoints: `/api/auth/{provider}/(url|callback|validate|status)` with strict CSRF/state
+  - Unified `oauth_credentials` model (provider, tokens, expires_at, scopes, subject_urn, metadata) with encryption-at-rest
+  - Poster adapters via factory (`InstagramPoster`, `LinkedInPoster`) used by social nodes
+  - Token lifecycle automation (proactive refresh, retry-on-401), structured logging and metrics per provider
+
+### 🔜 Next Steps (Checklist)
+- [ ] DB model + credentials service for LinkedIn
+- [ ] OAuth service + API endpoints
+- [ ] Posting service (member post + image)
+- [ ] `linkedin_post` node + executor + registry update
+- [ ] Frontend connect flow + status UI
+- [ ] Workflow generator mapping to `linkedin_post`
+- [ ] Tests for OAuth, posting, node execution
+
+---
+
 ## ✅ **COMPLETED FEATURES**
 
 ### 🧠 **AI Content Generation**
