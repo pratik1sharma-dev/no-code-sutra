@@ -1,0 +1,326 @@
+{
+  "template_examples": {
+    "business_professional": {
+      "description": "Professional business content with minimal design",
+      "config": {
+        "use_instagram_template": true,
+        "instagram_template_name": "minimal",
+        "brand_config": {
+          "colors": {
+            "primary": [17, 24, 39, 255],
+            "secondary": [55, 65, 81, 255],
+            "accent": [59, 130, 246, 255],
+            "text_dark": [15, 15, 15, 255],
+            "text_light": [255, 255, 255, 255]
+          }
+        }
+      },
+      "sample_content": {
+        "headline": "Scale Your Business with AI",
+        "subhead": "Transform operations with intelligent automation",
+        "bullets": [
+          "Reduce costs by 40%",
+          "Increase efficiency 3x",
+          "24/7 automated support"
+        ]
+      }
+    },
+    "motivational_bold": {
+      "description": "Bold motivational content with high impact",
+      "config": {
+        "use_instagram_template": true,
+        "instagram_template_name": "bold",
+        "brand_config": {
+          "colors": {
+            "primary": [236, 72, 153, 255],
+            "secondary": [139, 92, 246, 255],
+            "accent": [251, 146, 60, 255],
+            "text_light": [255, 255, 255, 255]
+          }
+        }
+      },
+      "sample_content": {
+        "headline": "UNLEASH YOUR POTENTIAL",
+        "subhead": "Every expert was once a beginner",
+        "bullets": [
+          "Take action today",
+          "Embrace the challenge",
+          "Success is inevitable",
+          "You are unstoppable"
+        ]
+      }
+    },
+    "tech_gradient": {
+      "description": "Modern tech content with gradient design",
+      "config": {
+        "use_instagram_template": true,
+        "instagram_template_name": "gradient",
+        "brand_config": {
+          "colors": {
+            "primary": [59, 130, 246, 255],
+            "secondary": [139, 92, 246, 255],
+            "accent": [34, 197, 94, 255],
+            "text_light": [255, 255, 255, 255]
+          }
+        }
+      },
+      "sample_content": {
+        "headline": "Future of Technology",
+        "subhead": "AI-powered solutions for tomorrow",
+        "bullets": [
+          "Machine Learning at scale",
+          "Automated decision making",
+          "Predictive analytics"
+        ]
+      }
+    },
+    "educational_split": {
+      "description": "Educational content with split-screen layout",
+      "config": {
+        "use_instagram_template": true,
+        "instagram_template_name": "split_screen",
+        "brand_config": {
+          "colors": {
+            "primary": [34, 197, 94, 255],
+            "secondary": [59, 130, 246, 255],
+            "accent": [251, 146, 60, 255],
+            "text_light": [255, 255, 255, 255]
+          }
+        }
+      },
+      "sample_content": {
+        "headline": "Learn Instagram Marketing",
+        "subhead": "Master social media in 30 days",
+        "bullets": [
+          "Content strategy basics",
+          "Engagement optimization",
+          "Analytics and insights",
+          "Growth hacking techniques"
+        ]
+      }
+    },
+    "inspirational_quote": {
+      "description": "Quote-focused inspirational content",
+      "config": {
+        "use_instagram_template": true,
+        "instagram_template_name": "quote",
+        "brand_config": {
+          "colors": {
+            "primary": [139, 92, 246, 255],
+            "accent": [236, 72, 153, 255],
+            "text_light": [255, 255, 255, 255]
+          }
+        }
+      },
+      "sample_content": {
+        "headline": "Success is not final, failure is not fatal: it is the courage to continue that counts",
+        "subhead": "Winston Churchill"
+      }
+    }
+  },
+  "workflow_configurations": {
+    "business_post_workflow": {
+      "description": "Complete workflow for business Instagram posts",
+      "nodes": [
+        {
+          "id": "ai_agent",
+          "type": "aiAgent",
+          "config": {
+            "prompt": "Create professional business content about {{topic}} with headline, subhead, and 3 bullet points focusing on benefits and results"
+          }
+        },
+        {
+          "id": "image_generator",
+          "type": "imageGenerator",
+          "config": {
+            "style": "professional business"
+          }
+        },
+        {
+          "id": "text_overlay",
+          "type": "textOverlay",
+          "config": {
+            "use_instagram_template": true,
+            "instagram_template_name": "minimal",
+            "brand_config": {
+              "colors": {
+                "primary": [17, 24, 39, 255],
+                "accent": [59, 130, 246, 255]
+              }
+            }
+          }
+        },
+        {
+          "id": "image_upload",
+          "type": "imageUpload"
+        },
+        {
+          "id": "instagram_post",
+          "type": "instagram_post"
+        }
+      ]
+    },
+    "motivational_post_workflow": {
+      "description": "High-impact motivational posts",
+      "nodes": [
+        {
+          "id": "ai_agent",
+          "type": "aiAgent",
+          "config": {
+            "prompt": "Create powerful motivational content about {{topic}} with inspiring headline, supportive subhead, and 4 action-oriented bullet points"
+          }
+        },
+        {
+          "id": "image_generator",
+          "type": "imageGenerator",
+          "config": {
+            "style": "motivational inspiring"
+          }
+        },
+        {
+          "id": "text_overlay",
+          "type": "textOverlay",
+          "config": {
+            "use_instagram_template": true,
+            "instagram_template_name": "bold",
+            "brand_config": {
+              "colors": {
+                "primary": [236, 72, 153, 255],
+                "secondary": [139, 92, 246, 255],
+                "accent": [251, 146, 60, 255]
+              }
+            }
+          }
+        },
+        {
+          "id": "image_upload",
+          "type": "imageUpload"
+        },
+        {
+          "id": "instagram_post",
+          "type": "instagram_post"
+        }
+      ]
+    },
+    "educational_post_workflow": {
+      "description": "Educational content with split-screen design",
+      "nodes": [
+        {
+          "id": "ai_agent",
+          "type": "aiAgent",
+          "config": {
+            "prompt": "Create educational content about {{topic}} with clear headline, descriptive subhead, and 4 learning points or steps"
+          }
+        },
+        {
+          "id": "image_generator",
+          "type": "imageGenerator",
+          "config": {
+            "style": "educational learning"
+          }
+        },
+        {
+          "id": "text_overlay",
+          "type": "textOverlay",
+          "config": {
+            "use_instagram_template": true,
+            "instagram_template_name": "split_screen",
+            "brand_config": {
+              "colors": {
+                "primary": [34, 197, 94, 255],
+                "secondary": [59, 130, 246, 255],
+                "accent": [251, 146, 60, 255]
+              }
+            }
+          }
+        },
+        {
+          "id": "image_upload",
+          "type": "imageUpload"
+        },
+        {
+          "id": "instagram_post",
+          "type": "instagram_post"
+        }
+      ]
+    }
+  },
+  "brand_presets": {
+    "tech_startup": {
+      "name": "Tech Startup",
+      "colors": {
+        "primary": [59, 130, 246, 255],
+        "secondary": [139, 92, 246, 255],
+        "accent": [34, 197, 94, 255],
+        "text_dark": [15, 15, 15, 255],
+        "text_light": [255, 255, 255, 255]
+      },
+      "preferred_templates": ["minimal", "gradient", "split_screen"]
+    },
+    "fitness_brand": {
+      "name": "Fitness & Wellness",
+      "colors": {
+        "primary": [236, 72, 153, 255],
+        "secondary": [251, 146, 60, 255],
+        "accent": [34, 197, 94, 255],
+        "text_dark": [15, 15, 15, 255],
+        "text_light": [255, 255, 255, 255]
+      },
+      "preferred_templates": ["bold", "gradient", "quote"]
+    },
+    "professional_services": {
+      "name": "Professional Services",
+      "colors": {
+        "primary": [17, 24, 39, 255],
+        "secondary": [55, 65, 81, 255],
+        "accent": [59, 130, 246, 255],
+        "text_dark": [15, 15, 15, 255],
+        "text_light": [255, 255, 255, 255]
+      },
+      "preferred_templates": ["minimal", "split_screen"]
+    },
+    "creative_agency": {
+      "name": "Creative Agency",
+      "colors": {
+        "primary": [139, 92, 246, 255],
+        "secondary": [236, 72, 153, 255],
+        "accent": [251, 146, 60, 255],
+        "text_dark": [15, 15, 15, 255],
+        "text_light": [255, 255, 255, 255]
+      },
+      "preferred_templates": ["gradient", "bold", "split_screen"]
+    }
+  },
+  "template_selection_guide": {
+    "minimal": {
+      "best_for": ["Professional content", "Clean branding", "Text-heavy posts", "Corporate communications"],
+      "content_types": ["business", "professional", "educational"],
+      "max_bullets": 3,
+      "characteristics": ["Clean", "Elegant", "Readable", "Professional"]
+    },
+    "bold": {
+      "best_for": ["High-impact messages", "Motivational content", "Promotional posts", "Call-to-action focused"],
+      "content_types": ["motivational", "promotional", "announcement"],
+      "max_bullets": 4,
+      "characteristics": ["High contrast", "Strong typography", "Eye-catching", "Energetic"]
+    },
+    "gradient": {
+      "best_for": ["Modern tech content", "Creative posts", "Brand storytelling", "Lifestyle content"],
+      "content_types": ["tech", "lifestyle", "creative", "modern"],
+      "max_bullets": 3,
+      "characteristics": ["Modern", "Colorful", "Dynamic", "Contemporary"]
+    },
+    "split_screen": {
+      "best_for": ["Educational content", "Before/after comparisons", "Product features", "Step-by-step guides"],
+      "content_types": ["educational", "tutorial", "comparison", "features"],
+      "max_bullets": 4,
+      "characteristics": ["Organized", "Structured", "Informative", "Clear hierarchy"]
+    },
+    "quote": {
+      "best_for": ["Inspirational quotes", "Testimonials", "Thought leadership", "Wisdom sharing"],
+      "content_types": ["inspirational", "testimonial", "thought_leadership"],
+      "max_bullets": 0,
+      "characteristics": ["Elegant", "Focused", "Impactful", "Sophisticated"]
+    }
+  }
+}

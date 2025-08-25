@@ -252,14 +252,21 @@ class NodeRegistry:
         self._nodes['textOverlay'] = NodeMetadata(
             type='textOverlay',
             label='Text Overlay',
-            description='Overlay text onto an image and output an image URL. Supports Canva templates for professional designs.',
+            description='Overlay text onto an image with professional templates. Supports Instagram templates (minimal, bold, gradient, split_screen, quote) and Canva integration.',
             category=NodeCategory.DATA,
             icon='FileText',
             color='secondary',
             required_inputs=['ai_output'],  # Accept AI Agent output directly
-            optional_inputs=['image_url', 'image_width', 'image_height', 'text_fields', 'canva_template_id', 'use_canva_template', 'export_format', 'export_width', 'export_height'],
+            optional_inputs=[
+                'image_url', 'image_width', 'image_height', 'text_fields', 
+                'use_instagram_template', 'instagram_template_name', 'brand_config',
+                'canva_template_id', 'use_canva_template', 'export_format', 'export_width', 'export_height'
+            ],
             output_schema={'type': 'object', 'properties': {
                 'image_url': {'type': 'string'},
+                'template_used': {'type': 'string'},
+                'template_engine': {'type': 'string'},
+                'available_templates': {'type': 'array'},
                 'canva_design_id': {'type': 'string'},
                 'canva_design_url': {'type': 'string'},
                 'canva_template_used': {'type': 'boolean'}

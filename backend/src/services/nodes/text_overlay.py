@@ -10,6 +10,15 @@ import math
 import random
 from abc import ABC, abstractmethod
 
+# Import the new Instagram Template Engine
+try:
+    from .instagram_templates import create_instagram_post_with_template, InstagramTemplateEngine
+    TEMPLATES_AVAILABLE = True
+    print("✅ Instagram Template Engine loaded successfully")
+except ImportError as e:
+    print(f"⚠️ Instagram Template Engine not available: {e}")
+    TEMPLATES_AVAILABLE = False
+
 
 class PlatformConfig:
     """Platform-specific configuration for different social media platforms"""
@@ -1008,11 +1017,17 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         platform = state.get('platform', 'instagram')
         post_type = state.get('post_type', 'single')  # NEW: Get post type
         
-        # Check if Canva template should be used (default to True for testing)
+        # Check template preferences
         canva_template_id = state.get('canva_template_id', 'EAGFcgTrfLo')  # Default template ID
-        use_canva_template = state.get('use_canva_template', True)  # Default to True for testing
+        use_canva_template = state.get('use_canva_template', False)  # Default to False now
+        use_instagram_template = state.get('use_instagram_template', True)  # NEW: Default to True
+        instagram_template_name = state.get('instagram_template_name')  # NEW: Specific template
         
-        if canva_template_id and use_canva_template:
+        # NEW: Priority order - Instagram Templates > Canva > Smart Placement
+        if TEMPLATES_AVAILABLE and use_instagram_template:
+            print(f"🎨 Using Instagram Template Engine (template: {instagram_template_name or 'auto-select'})")
+            return generate_instagram_template_overlay(state, overlay_text, platform, post_type)
+        elif canva_template_id and use_canva_template:
             print(f"🎨 Using Canva template: {canva_template_id}")
             return generate_canva_template_overlay(state, overlay_text, platform, post_type)
         
@@ -1583,6 +1598,96 @@ def _calculate_overlay_opacity(zone_data: Dict[str, Any]) -> int:
         return 50
     else:
         return 70
+
+
+def generate_instagram_template_overlay(state: Dict[str, Any], overlay_text: Dict[str, Any], platform: str, post_type: str = 'single') -> Dict[str, Any]:
+    """Generate overlay using Instagram Template Engine"""
+    try:
+        if not TEMPLATES_AVAILABLE:
+            print("⚠️ Instagram Template Engine not available, falling back to smart placement")
+            return generate_single_overlay(state, overlay_text, platform, post_type)
+        
+        print("🎨 Generating Instagram template overlay...")
+        
+        # Get background image
+        background_url = state.get('image_url') or state.get('background_image_url')
+        if not background_url:
+            raise ValueError("No background image URL provided")
+        
+        # Load background image
+        background_img = _load_modern_background(background_url, 1080, 1080)
+        
+        # Get template preferences with flexible priority system
+        template_name = state.get('instagram_template_name')  # Manual override (highest priority)
+        
+        if not template_name and isinstance(overlay_text, dict):
+            # Check if AI agent optionally recommended a template
+            ai_template = overlay_text.get('recommended_template')
+            if ai_template and ai_template in ['minimal', 'bold', 'gradient', 'split_screen', 'quote']:
+                template_name = ai_template
+                print(f"🤖 Using AI-recommended template: {template_name}")
+                reason = overlay_text.get('template_reason', 'AI suggestion based on content analysis')
+                print(f"   Reason: {reason}")
+            else:
+                print(f"🎯 No AI template recommendation - will use auto-selection fallback")
+        
+        brand_config = state.get('brand_config')  # Brand customization
+        
+        # Prepare content structure for templates
+        content = {}
+        if isinstance(overlay_text, dict):
+            content = {
+                'headline': overlay_text.get('headline', overlay_text.get('title', '')),
+                'subhead': overlay_text.get('subhead', overlay_text.get('subtitle', overlay_text.get('description', ''))),
+                'bullets': overlay_text.get('bullets', overlay_text.get('key_points', overlay_text.get('points', [])))
+            }
+        else:
+            # Handle string content
+            content = {'headline': str(overlay_text)}
+        
+        # Clean up content
+        if isinstance(content.get('bullets'), str):
+            content['bullets'] = [content['bullets']]
+        elif not isinstance(content.get('bullets'), list):
+            content['bullets'] = []
+        
+        print(f"📝 Template content: {content}")
+        print(f"🎨 Template name: {template_name}")
+        print(f"🎨 Brand config: {brand_config}")
+        
+        # Create the Instagram post with template
+        result = create_instagram_post_with_template(
+            background_img, 
+            content, 
+            template_name, 
+            brand_config
+        )
+        
+        if result['success']:
+            # Update state with results
+            state.update({
+                'image_url': result['image_data_url'],
+                'image_data_url': result['image_data_url'],
+                'template_used': result['template_used'],
+                'template_engine': 'instagram_templates',
+                'available_templates': result['available_templates'],
+                'overlay_text_used': str(content),
+                'platform_used': platform,
+                'post_type': post_type,
+                'status': 'completed',
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            print(f"✅ Instagram template overlay completed using template: {result['template_used']}")
+            return state
+        else:
+            raise Exception(f"Template generation failed: {result.get('error', 'Unknown error')}")
+            
+    except Exception as e:
+        print(f"❌ Error in Instagram template overlay: {e}")
+        # Fallback to existing smart placement
+        print("🔄 Falling back to smart placement overlay...")
+        return generate_single_overlay(state, overlay_text, platform, post_type)
 
 
 def generate_canva_template_overlay(state: Dict[str, Any], overlay_text: Dict[str, Any], platform: str, post_type: str = 'single') -> Dict[str, Any]:
