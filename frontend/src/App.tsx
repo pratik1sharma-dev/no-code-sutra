@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import WorkflowBuilder from './pages/WorkflowBuilder';
 import Login from './pages/Login';
 import LandingPage from './pages/LandingPage';
+import InstagramAuth from './components/ui/InstagramAuth';
 
 const App: React.FC = () => {
   return (
@@ -25,6 +26,7 @@ const App: React.FC = () => {
             
             {/* Auth routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/auth/instagram/callback" element={<InstagramAuth />} />
           </Routes>
         </Suspense>
       </BrowserRouter>

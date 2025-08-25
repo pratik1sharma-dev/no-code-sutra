@@ -297,6 +297,155 @@ class InstagramService:
                 'error': str(e),
                 'posted_at': datetime.now().isoformat()
             }
+
+    def post_carousel(self, caption: str, image_urls: List[str]) -> Dict[str, Any]:
+        """
+        Post carousel (multiple images) to Instagram
+        
+        Args:
+            caption: Post caption text
+            image_urls: List of image URLs for the carousel (2-10 images)
+        
+        Returns:
+            Response data from Instagram API
+        """
+        try:
+            print(f"🔍 Instagram Service: Starting post_carousel")
+            print(f"🔍 Caption length: {len(caption)}")
+            print(f"🔍 Number of images: {len(image_urls)}")
+            print(f"🔍 Image URLs: {image_urls}")
+            
+            # Validate input
+            if not image_urls or len(image_urls) < 2:
+                return {
+                    'status': 'failed',
+                    'error': 'Carousel requires at least 2 images',
+                    'posted_at': datetime.now().isoformat()
+                }
+            
+            if len(image_urls) > 10:
+                return {
+                    'status': 'failed',
+                    'error': 'Carousel cannot have more than 10 images',
+                    'posted_at': datetime.now().isoformat()
+                }
+            
+            # Truncate caption if it exceeds Instagram's limit
+            truncated_caption = self._truncate_caption(caption)
+            
+            url = f"{self.base_url}/{self.instagram_business_account_id}/media"
+            
+            # Step 1: Create child media objects (upload each image as carousel item)
+            print(f"🔍 Creating child media objects for {len(image_urls)} images...")
+            media_ids = []
+            
+            for i, image_url in enumerate(image_urls):
+                print(f"🔍 Uploading image {i+1}/{len(image_urls)}...")
+                
+                # Create child media object with is_carousel_item=true
+                child_data = {
+                    'access_token': self.access_token,
+                    'image_url': image_url,
+                    'is_carousel_item': 'true'
+                }
+                
+                response = requests.post(url, data=child_data)
+                response.raise_for_status()
+                
+                child_result = response.json()
+                child_id = child_result.get('id')
+                
+                if child_id:
+                    media_ids.append(child_id)
+                    print(f"✅ Image {i+1} uploaded")
+                else:
+                    raise ValueError(f"Failed to upload image {i+1}")
+            
+            print(f"🔍 All {len(media_ids)} images uploaded successfully")
+            
+            # Wait for child media objects to be ready
+            print(f"🔍 Waiting for child media objects to be ready...")
+            import time
+            
+            for i, media_id in enumerate(media_ids):
+                max_retries = 10
+                for attempt in range(max_retries):
+                    status_url = f"{self.base_url}/{media_id}"
+                    status_params = {'access_token': self.access_token, 'fields': 'status_code'}
+                    
+                    status_response = requests.get(status_url, params=status_params)
+                    if status_response.status_code == 200:
+                        status_data = status_response.json()
+                        status_code = status_data.get('status_code')
+                        
+                        if status_code == 'FINISHED':
+                            print(f"✅ Image {i+1} ready")
+                            break
+                        elif status_code == 'ERROR':
+                            raise ValueError(f"Image {i+1} failed")
+                        else:
+                            time.sleep(2)
+                    else:
+                        time.sleep(2)
+                else:
+                    raise ValueError(f"Image {i+1} not ready after {max_retries} attempts")
+            
+            # Step 2: Create carousel container
+            print(f"🔍 Creating carousel container...")
+            
+            carousel_data = {
+                'access_token': self.access_token,
+                'media_type': 'CAROUSEL',
+                'caption': truncated_caption,
+                'children': json.dumps(media_ids)
+            }
+            
+            print(f"🔍 Creating carousel with {len(media_ids)} images...")
+            
+            response = requests.post(url, data=carousel_data)
+            response.raise_for_status()
+            
+            carousel_result = response.json()
+            creation_id = carousel_result.get('id')
+            print(f"🔍 Carousel media container result: {carousel_result}")
+            print(f"🔍 Creation ID: {creation_id}")
+            
+            if creation_id:
+                # Publish the carousel
+                print(f"🔍 Publishing carousel with creation ID: {creation_id}")
+                publish_result = self.publish_media(creation_id)
+                print(f"🔍 Publish result: {publish_result}")
+                
+                print(f"✅ Carousel posted successfully! Post ID: {publish_result.get('id')}")
+                
+                return {
+                    'status': 'success',
+                    'instagram_post_id': publish_result.get('id'),
+                    'creation_id': creation_id,
+                    'caption': truncated_caption,
+                    'original_caption_length': len(caption),
+                    'image_urls': image_urls,
+                    'image_count': len(image_urls),
+                    'media_ids': media_ids,
+                    'posted_at': datetime.now().isoformat(),
+                    'api_response': publish_result
+                }
+            else:
+                raise ValueError("Failed to create carousel media container")
+                
+        except Exception as e:
+            print(f"🔍 ❌ Instagram post_carousel failed: {e}")
+            logger.error(f"Failed to post carousel: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"🔍 Response content: {e.response.text}")
+                logger.error(f"Response content: {e.response.text}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'posted_at': datetime.now().isoformat()
+            }
     
     def get_post_status(self, post_id: str) -> Dict[str, Any]:
         """

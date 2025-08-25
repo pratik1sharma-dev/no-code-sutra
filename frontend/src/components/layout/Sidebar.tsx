@@ -12,12 +12,12 @@ import {
 
 const Sidebar: React.FC = () => {
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Workflows', href: '/workflows', icon: Workflow },
-    { name: 'Templates', href: '/templates', icon: FileText },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-    { name: 'Team', href: '/team', icon: Users },
-    { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Dashboard', href: '/app', icon: Home },
+    { name: 'Workflows', href: '/app/workflows', icon: Workflow },
+    { name: 'Templates', href: '/app/templates', icon: FileText },
+    { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
+    { name: 'Team', href: '/app/team', icon: Users },
+    { name: 'Settings', href: '/app/settings', icon: Settings },
   ];
 
   return (
@@ -55,7 +55,7 @@ const Sidebar: React.FC = () => {
       {/* Create New Workflow Button */}
       <div className="p-4 border-t border-secondary-200">
         <NavLink
-          to="/workflow"
+          to="/app/workflow"
           className="flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors"
         >
           <Plus className="mr-2 h-4 w-4" />

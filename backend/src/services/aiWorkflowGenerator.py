@@ -190,10 +190,64 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - Considers workflow chain (if content goes to other nodes like textOverlay, instagram_post, etc.)
 
 3. EXAMPLES of contextual prompt generation:
-   - Instagram with image overlay: "Create Instagram content optimized for image overlay. Generate headline (max 40 chars), bullet points (3-4 items, max 20 chars each), engaging caption (max 200 chars), and relevant hashtags. Content must be CRISP and VISUAL for image overlay. Return JSON: {{\"headline\": \"...\", \"bullets\": [...], \"caption\": \"...\", \"hashtags\": [...]}}"
-   - LinkedIn: "Write professional LinkedIn post with industry insights and business-focused tone. Include compelling headline, professional content, relevant hashtags, and call-to-action. Return JSON: {{\"headline\": \"...\", \"content\": \"...\", \"hashtags\": [...]}}"
-   - Email: "Compose professional email with subject line and body for business communication. Include clear subject, professional greeting, main content, and closing. Return JSON: {{\"subject\": \"...\", \"body\": \"...\"}}"
-   - Twitter: "Create engaging tweet with character limit and trending hashtags. Include main message, relevant hashtags, and call-to-action. Return JSON: {{\"tweet\": \"...\", \"hashtags\": [...]}}"
+
+   **POST TYPE DETECTION:**
+   First, analyze the user request to determine the optimal post type:
+   - 'single': Simple messages, tips, announcements (1 main point)
+   - 'carousel': Multi-step processes, lists, comparisons (2-5 key points)
+   - 'video_reel': Demonstrations, tutorials, dynamic content
+   - 'story': Time-sensitive, behind-the-scenes content
+
+   **INSTAGRAM WITH TEXT OVERLAY (ENHANCED):**
+   "Create Instagram content optimized for modern visual overlay. Generate:
+   - Headline (max 35 chars): Clear, impactful main message
+   - Subhead (max 50 chars): Supporting description OR key point
+   - Bullet points (1-2 items, max 20 chars each): Key insights (optional)
+   - Caption (max 200 chars): Engaging caption for Instagram (goes in caption field)
+   - Hashtags (5-8): Relevant, trending hashtags (goes in caption field)
+   
+   Content must be VISUAL, ENGAGING, and MOBILE-OPTIMIZED for Instagram. Use modern, professional tone.
+   Focus on ONE main message with ONE supporting element. Keep it simple and impactful.
+   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"bullets\": [...], \"caption\": \"...\", \"hashtags\": [...]}}"
+
+   **INSTAGRAM CAROUSEL:**
+   "Create Instagram carousel content (2-5 slides). Generate:
+   - Headline (max 35 chars): Main carousel title
+   - Subhead (max 50 chars): Supporting description
+   - Slides array (2-5 items):
+     - Title (max 25 chars): Slide title
+     - Content (max 80 chars): Slide content
+     - Stats (max 30 chars): Key metric or stat (optional)
+     - image_search_terms (array): 3 relevant image search terms for background image
+   - Caption (max 200 chars): Engaging caption
+   - Hashtags (5-8): Relevant hashtags
+   
+   Each slide should be self-contained but connected to the main theme.
+   For image_search_terms, provide 3 visual, descriptive terms that would find good background images.
+   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"slides\": [...], \"caption\": \"...\", \"hashtags\": [...]}}"
+
+   **INSTAGRAM VIDEO REEL:**
+   "Create Instagram video reel content. Generate:
+   - Headline (max 35 chars): Main reel title
+   - Subhead (max 50 chars): Supporting description
+   - Script (max 200 chars): Video script or description
+   - Key points (3-5 items, max 30 chars each): Main talking points
+   - Caption (max 200 chars): Engaging caption
+   - Hashtags (5-8): Relevant hashtags
+   
+   Content should be engaging and suitable for video format.
+   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"script\": \"...\", \"key_points\": [...], \"caption\": \"...\", \"hashtags\": [...]}}"
+
+   **INSTAGRAM STORY:**
+   "Create Instagram story content. Generate:
+   - Headline (max 25 chars): Story title
+   - Content (max 100 chars): Story content
+   - Call to action (max 30 chars): Action prompt
+   - Caption (max 100 chars): Story caption
+   - Hashtags (3-5): Relevant hashtags
+   
+   Content should be time-sensitive and engaging for stories.
+   Return JSON: {{\"headline\": \"...\", \"content\": \"...\", \"call_to_action\": \"...\", \"caption\": \"...\", \"hashtags\": [...]}}"
 
 4. CONFIGURATION STRUCTURE:
    For AI Agent nodes, include in config:
@@ -205,7 +259,7 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    }}
 
 5. WORKFLOW CHAIN AWARENESS:
-   - If AI Agent → textOverlay: Generate content suitable for image overlay (headlines, bullets, not long paragraphs)
+   - If AI Agent → textOverlay: Generate content suitable for modern image overlay (hero, headlines, bullets, quotes, stats)
    - If AI Agent → instagram_post: Generate Instagram-optimized content with hashtags
    - If AI Agent → email: Generate professional email content
    - If AI Agent → slack: Generate concise, team-friendly messages
@@ -216,21 +270,21 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    For AI Agent → Text Overlay:
    {{
      "data_mapping": {{
-       "ai_output": "ai_agent_1.output"
+       "structured_data": "ai_agent_1.output"
      }}
    }}
    
    For Text Overlay → Image Upload:
    {{
      "data_mapping": {{
-       "image_data_url": "text_overlay_1.output.image_url"
+       "image_data_url": "text_overlay_1.output.image_data_url"
      }}
    }}
    
    For AI Agent + Image Upload → Instagram Post:
    {{
      "data_mapping": {{
-       "ai_output": "ai_agent_1.output",
+       "structured_data": "ai_agent_1.output",
        "image_url": "image_upload_1.output.image_url"
      }}
    }}
@@ -243,9 +297,9 @@ For Instagram posts with dynamic backgrounds, use this optimal pattern:
 1. aiAgent → imageGenerator → textOverlay → imageUpload → instagram_post
 
 This pattern provides:
-- AI-generated content (headlines, bullets, captions)
+- AI-generated content (hero, headlines, bullets, quotes, stats)
 - Dynamic background images from public sources (Unsplash, Pexels, Lorem Picsum)
-- Professional text overlay with mobile-optimized fonts
+- Modern text overlay with professional styling and Instagram-optimized fonts
 - Cloudinary hosting for public Instagram URLs
 - Direct Instagram posting
 

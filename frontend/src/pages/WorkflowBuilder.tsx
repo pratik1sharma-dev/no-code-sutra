@@ -286,7 +286,7 @@ const WorkflowBuilder: React.FC = () => {
         const existingNodes = currentWorkflow?.nodes || [];
         
         // Grid-based positioning for better visual layout
-        const gridSize = { width: 280, height: 120 }; // Node spacing
+        const gridSize = { width: 350, height: 180 }; // Increased node spacing
         const nodesPerRow = 3; // Number of nodes per row
         const rowIndex = Math.floor(existingNodes.length / nodesPerRow);
         const colIndex = existingNodes.length % nodesPerRow;
@@ -338,7 +338,7 @@ const WorkflowBuilder: React.FC = () => {
   const arrangeNodesInGrid = useCallback(() => {
     if (!currentWorkflow?.nodes.length) return;
     
-    const gridSize = { width: 280, height: 120 };
+    const gridSize = { width: 350, height: 180 };
     const nodesPerRow = 3;
     const startX = 100;
     const startY = 100;

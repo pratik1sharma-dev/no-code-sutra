@@ -11,12 +11,19 @@ class DynamicImageFetcher:
     """Fetches relevant background images from multiple public APIs"""
     
     def __init__(self):
+        self.google_api_key = os.getenv('GOOGLE_CUSTOM_SEARCH_API_KEY')
+        self.google_search_engine_id = os.getenv('GOOGLE_CUSTOM_SEARCH_ENGINE_ID')
         self.unsplash_access_key = os.getenv('UNSPLASH_ACCESS_KEY')
         self.pexels_api_key = os.getenv('PEXELS_API_KEY')
         self.pixabay_api_key = os.getenv('PIXABAY_API_KEY')
         
     def extract_keywords(self, content: Dict[str, Any]) -> List[str]:
         """Extract relevant keywords from content for image search"""
+        # Check if custom keywords are provided (for slide-specific images)
+        if content.get('_custom_keywords'):
+            print(f"🔍 Using custom keywords: {content['_custom_keywords']}")
+            return content['_custom_keywords']
+        
         keywords = []
         
         # Extract from headline
@@ -51,6 +58,7 @@ class DynamicImageFetcher:
     def search_unsplash(self, query: str) -> Optional[str]:
         """Search Unsplash for relevant images"""
         if not self.unsplash_access_key:
+            print(f"⚠️ Unsplash API not configured - Access Key: {bool(self.unsplash_access_key)}")
             return None
             
         try:
@@ -104,6 +112,37 @@ class DynamicImageFetcher:
         
         return None
     
+    def search_google_custom(self, query: str) -> Optional[str]:
+        """Search Google Custom Search for relevant images"""
+        if not self.google_api_key or not self.google_search_engine_id:
+            print(f"⚠️ Google Custom Search not configured - API Key: {bool(self.google_api_key)}, Engine ID: {bool(self.google_search_engine_id)}")
+            return None
+            
+        try:
+            url = "https://www.googleapis.com/customsearch/v1"
+            params = {
+                'key': self.google_api_key,
+                'cx': self.google_search_engine_id,
+                'q': query,
+                'searchType': 'image',
+                'num': 1,
+                'imgSize': 'large',
+                'imgType': 'photo',
+                'safe': 'active'
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            if data.get('items') and len(data['items']) > 0:
+                return data['items'][0]['link']
+                
+        except Exception as e:
+            print(f"Google Custom Search failed: {e}")
+        
+        return None
+    
     def search_pixabay(self, query: str) -> Optional[str]:
         """Search Pixabay for relevant images (free tier available)"""
         if not self.pixabay_api_key:
@@ -135,15 +174,21 @@ class DynamicImageFetcher:
         """Search Unsplash Source API (no API key required, limited)"""
         try:
             # Use Unsplash Source API which doesn't require authentication
+            # Format: https://source.unsplash.com/1080x1080/?query
             url = f"https://source.unsplash.com/1080x1080/?{query}"
             
+            print(f"🔍 Trying Unsplash Source: {url}")
+            
             # Test if the URL is accessible
-            response = requests.head(url, timeout=5)
+            response = requests.head(url, timeout=10)
             if response.status_code == 200:
+                print(f"✅ Unsplash Source URL accessible")
                 return url
+            else:
+                print(f"❌ Unsplash Source returned status: {response.status_code}")
                 
         except Exception as e:
-            print(f"Unsplash Source search failed: {e}")
+            print(f"❌ Unsplash Source search failed: {e}")
         
         return None
     
@@ -210,28 +255,34 @@ class DynamicImageFetcher:
         
         print(f"Searching for images with query: {search_query}")
         
-        # Try Unsplash API first (highest quality, requires API key)
+        # Try Google Custom Search first (access to entire web)
+        image_url = self.search_google_custom(search_query)
+        if image_url:
+            print(f"Found Google Custom Search image: {image_url}")
+            return image_url
+        
+        # Try Unsplash Source second (no API key required)
+        image_url = self.search_unsplash_source(search_query)
+        if image_url:
+            print(f"Found Unsplash Source image: {image_url}")
+            return image_url
+        
+        # Try Unsplash API third (high quality stock photos, requires API key)
         image_url = self.search_unsplash(search_query)
         if image_url:
             print(f"Found Unsplash API image: {image_url}")
             return image_url
         
-        # Try Pexels API second (requires API key)
+        # Try Pexels API fourth (requires API key)
         image_url = self.search_pexels(search_query)
         if image_url:
             print(f"Found Pexels API image: {image_url}")
             return image_url
         
-        # Try Pixabay API third (requires API key)
+        # Try Pixabay API fifth (requires API key)
         image_url = self.search_pixabay(search_query)
         if image_url:
             print(f"Found Pixabay API image: {image_url}")
-            return image_url
-        
-        # Try Unsplash Source API (no API key required)
-        image_url = self.search_unsplash_source(search_query)
-        if image_url:
-            print(f"Found Unsplash Source image: {image_url}")
             return image_url
         
         # Try curated stock images (no API key required)

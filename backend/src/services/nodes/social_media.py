@@ -16,7 +16,11 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         image_url = state.get('image_url', '')
         image = state.get('image', '')
         user_id = state.get('user_id', 'default_user')  # Default user ID for demo
-        print(f"🔍 SOCIAL MEDIA NODE DEBUG:" +content)
+        post_type = state.get('post_type', 'single')  # Get post type
+        
+        print(f"🔍 SOCIAL MEDIA NODE DEBUG: Platform={platform}, PostType={post_type}")
+        print(f"🔍 Content: {content}")
+        
         if platform == 'instagram' or platform == 'instagram_post':
             # First try to get structured_data from AI Agent
             if 'structured_data' in state and state['structured_data']:
@@ -36,11 +40,22 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                         content = post
                 else:
                     content = post
-            if not image_url and image:
-                if isinstance(image, dict) and 'image_url' in image:
-                    image_url = image.get('image_url')
-                elif isinstance(image, str):
-                    image_url = image
+                    
+            # Handle image URLs - prioritize text overlay images
+            if not image_url:
+                # Check for text overlay image first (this is the final image with text)
+                if 'image_data_url' in state and state['image_data_url']:
+                    image_url = state['image_data_url']
+                    print(f"🔍 Using text overlay image: {image_url[:50]}...")
+                elif image:
+                    if isinstance(image, dict) and 'image_url' in image:
+                        image_url = image.get('image_url')
+                    elif isinstance(image, str):
+                        image_url = image
+                elif 'background_image_url' in state:
+                    image_url = state['background_image_url']
+                    print(f"🔍 Using background image: {image_url[:50]}...")
+                    
             print(f"🔍 Content type: {type(content)}")
             
             if isinstance(content, dict):
@@ -67,7 +82,7 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                 state['error'] = 'No content available for Instagram post'
                 state['timestamp'] = datetime.now().isoformat()
                 return state
-            print(f"🔍 SOCIAL MEDIA NODE DEBUG:"+content)
+            print(f"🔍 SOCIAL MEDIA NODE DEBUG: {content}")
             
             # Try to get stored credentials if no access token provided
             print(f"🔍 Checking for stored Instagram credentials for user: {user_id}")
@@ -86,19 +101,34 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                 print(f"🔍 Attempting to post to Instagram...")
                 print(f"🔍 Content length: {len(str(content))}")
                 print(f"🔍 Image URL: {image_url}")
+                print(f"🔍 Post Type: {post_type}")
+                
                 try:
                     print(f"🔍 Creating Instagram service...")
                     instagram_service = InstagramService(access_token)
                     print(f"🔍 Instagram service created successfully")
                     
-                    print(f"🔍 Calling post_text_only...")
-                    result = instagram_service.post_text_only(str(content), image_url=image_url)
+                    # Handle different post types
+                    if post_type == 'carousel':
+                        print(f"🔍 Processing carousel post...")
+                        result = _handle_carousel_post(instagram_service, content, image_url, state)
+                    elif post_type == 'video_reel':
+                        print(f"🔍 Processing video reel post...")
+                        result = _handle_video_reel_post(instagram_service, content, image_url, state)
+                    elif post_type == 'story':
+                        print(f"🔍 Processing story post...")
+                        result = _handle_story_post(instagram_service, content, image_url, state)
+                    else:
+                        print(f"🔍 Processing single post...")
+                        result = instagram_service.post_text_only(str(content), image_url=image_url)
+                    
                     print(f"🔍 Instagram API response: {result}")
                     
                     if result['status'] == 'success':
                         print(f"🔍 ✅ Instagram post successful!")
                         social_data = {
                             'platform': 'instagram',
+                            'post_type': post_type,
                             'content': content,
                             'access_token': access_token[:10] + '...',
                             'posted_at': result['posted_at'],
@@ -120,8 +150,11 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                     import traceback
                     traceback.print_exc()
                     pass
+                    
+            # Fallback to simulation mode
             social_data = {
                 'platform': 'instagram',
+                'post_type': post_type,
                 'content': content,
                 'access_token': access_token[:10] + '...' if access_token else 'demo_token',
                 'posted_at': datetime.now().isoformat(),
@@ -151,6 +184,93 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         state['error'] = str(e)
         state['timestamp'] = datetime.now().isoformat()
         return state
+
+
+def _handle_carousel_post(instagram_service: InstagramService, content: str, image_url: str, state: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle carousel post creation with multiple images"""
+    try:
+        print(f"📱 Processing carousel post with multiple images...")
+        print(f"📱 State keys available: {list(state.keys())}")
+        
+        # First try to get uploaded carousel images (public URLs)
+        uploaded_carousel_images = state.get('uploaded_carousel_images', [])
+        carousel_image_urls = state.get('carousel_image_urls', [])
+        
+        print(f"📱 Uploaded carousel images count: {len(uploaded_carousel_images)}")
+        print(f"📱 Carousel image URLs count: {len(carousel_image_urls)}")
+        
+        if uploaded_carousel_images and carousel_image_urls:
+            print(f"✅ Found {len(carousel_image_urls)} uploaded carousel images")
+            print(f"✅ Carousel image URLs: {carousel_image_urls}")
+            if len(carousel_image_urls) >= 2:
+                caption = f"{content}\n\n📊 Carousel post with {len(carousel_image_urls)} slides"
+                print(f"📱 Posting carousel with {len(carousel_image_urls)} images to Instagram...")
+                return instagram_service.post_carousel(caption, carousel_image_urls)
+            else:
+                print(f"❌ Not enough uploaded images for carousel (need 2+, got {len(carousel_image_urls)})")
+        
+        # Fallback to original carousel images (data URLs)
+        carousel_images = state.get('carousel_images', [])
+        print(f"📱 Original carousel images count: {len(carousel_images)}")
+        
+        if not carousel_images:
+            print(f"❌ No carousel images found, falling back to single post")
+            caption = f"{content}\n\n📊 Carousel post with multiple insights"
+            return instagram_service.post_text_only(caption, image_url=image_url)
+        
+        # Extract image URLs from carousel images
+        image_urls = []
+        for i, slide in enumerate(carousel_images):
+            if isinstance(slide, dict) and 'image_data_url' in slide:
+                image_urls.append(slide['image_data_url'])
+                print(f"📱 Slide {i+1}: Found image_data_url in slide dict")
+            elif isinstance(slide, str):
+                image_urls.append(slide)
+                print(f"📱 Slide {i+1}: Found direct string URL")
+            else:
+                print(f"📱 Slide {i+1}: Invalid slide format: {type(slide)}")
+        
+        print(f"📱 Extracted {len(image_urls)} image URLs from carousel images")
+        
+        if len(image_urls) < 2:
+            print(f"❌ Not enough images for carousel, falling back to single post")
+            caption = f"{content}\n\n📊 Carousel post with multiple insights"
+            return instagram_service.post_text_only(caption, image_url=image_url)
+        
+        # Create carousel caption
+        caption = f"{content}\n\n📊 Carousel post with {len(image_urls)} slides"
+        
+        # Post carousel with multiple images
+        print(f"📱 Posting carousel with {len(image_urls)} data URLs to Instagram...")
+        return instagram_service.post_carousel(caption, image_urls)
+        
+    except Exception as e:
+        print(f"❌ Carousel post failed: {e}")
+        return {'status': 'failed', 'error': str(e)}
+
+
+def _handle_video_reel_post(instagram_service: InstagramService, content: str, image_url: str, state: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle video reel post creation"""
+    try:
+        # For now, create a single post with video reel content
+        # In the future, this could handle actual video uploads
+        caption = f"{content}\n\n🎥 Video reel content"
+        return instagram_service.post_text_only(caption, image_url=image_url)
+    except Exception as e:
+        print(f"Video reel post failed: {e}")
+        return {'status': 'failed', 'error': str(e)}
+
+
+def _handle_story_post(instagram_service: InstagramService, content: str, image_url: str, state: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle story post creation"""
+    try:
+        # For now, create a single post with story content
+        # In the future, this could handle story-specific posting
+        caption = f"{content}\n\n📱 Story content"
+        return instagram_service.post_text_only(caption, image_url=image_url)
+    except Exception as e:
+        print(f"Story post failed: {e}")
+        return {'status': 'failed', 'error': str(e)}
 
 
 def execute_instagram(state: Dict[str, Any]) -> Dict[str, Any]:

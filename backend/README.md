@@ -91,6 +91,18 @@ Server will be available at: http://localhost:8000
 
 ## Architecture
 
+### **Design Philosophy**
+We follow a **state-based data flow** pattern that ensures consistency and predictability across all nodes. See [Design Guidelines](DESIGN_GUIDELINES.md) for detailed architecture standards.
+
+### **Data Flow Pattern**
+```
+AI Workflow Generator → Workflow JSON → Node Config → Workflow Executor → State → Node
+     ↓                           ↓              ↓              ↓         ↓      ↓
+Generates prompt    → {"config": {"prompt": → config.get() → state['prompt'] → Node reads
+                    "Create..."}}           copies to state              from state
+```
+
+### **Directory Structure**
 ```
 src/
 ├── main.py                          # FastAPI application
@@ -212,13 +224,17 @@ python test_env_setup.py
 
 ## Documentation
 
+### 📚 **Documentation Index**
+- **[Complete Documentation Index](DOCUMENTATION_INDEX.md)** - All documentation files and their purposes
+
+### Architecture & Design
+- **[Design Guidelines](DESIGN_GUIDELINES.md)** - Architecture standards and data flow patterns
+- **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Technical implementation overview
+
 ### Setup Guides
 - **[Instagram Setup Guide](INSTAGRAM_SETUP_GUIDE.md)** - Complete Instagram integration setup
 - **[Bedrock Setup Guide](BEDROCK_SETUP_GUIDE.md)** - Amazon Bedrock configuration
 - **[LLM Setup Guide](LLM_SETUP_GUIDE.md)** - Language model configuration
-
-### Implementation Details
-- **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Technical implementation overview
 
 ## Troubleshooting
 
