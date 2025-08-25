@@ -38,3 +38,16 @@ class InstagramCredentials(Base):
 	expires_at = Column(DateTime)
 	created_at = Column(DateTime, default=datetime.utcnow)
 	updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CanvaCredentials(Base):
+	__tablename__ = "canva_credentials"
+	id = Column(String, primary_key=True)
+	user_id = Column(String, nullable=False)
+	access_token = Column(String, nullable=False)
+	refresh_token = Column(String)
+	token_type = Column(String, default="Bearer")
+	scope = Column(String)
+	expires_at = Column(DateTime)
+	created_at = Column(DateTime, default=datetime.utcnow)
+	updated_at = Column(DateTime, default=datetime.utcnow)

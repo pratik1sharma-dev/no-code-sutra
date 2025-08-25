@@ -20,6 +20,8 @@ from services.db import init_db, SessionLocal
 from services.models import Workflow as WorkflowModel, Execution as ExecutionModel
 from services.instagram_oauth import InstagramOAuthService
 from services.instagram_credentials import instagram_credentials_service
+from services.canva_integration import CanvaIntegration
+from services.canva_credentials import canva_credentials_service
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -77,6 +79,7 @@ app.add_middleware(
 langgraph_executor = LangGraphWorkflowExecutor()
 ai_generator = AIWorkflowGenerator()
 instagram_oauth_service = InstagramOAuthService()
+canva_integration = CanvaIntegration()
 
 @app.get("/")
 async def root():
@@ -657,6 +660,224 @@ async def get_instagram_auth_status(user_id: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to check auth status: {str(e)}")
+
+# Canva OAuth endpoints
+@app.get("/api/auth/canva/url")
+async def get_canva_auth_url():
+    """Get Canva authorization URL for OAuth flow"""
+    try:
+        import secrets
+        state = secrets.token_urlsafe(32)
+        auth_url = canva_integration.get_authorization_url(state)
+        
+        return {
+            "auth_url": auth_url,
+            "state": state,
+            "message": "Visit this URL to authorize Canva access"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate Canva auth URL: {str(e)}")
+
+@app.get("/api/auth/canva/callback")
+async def canva_oauth_callback(code: str = None, state: Optional[str] = None, user_id: Optional[str] = None, error: Optional[str] = None, error_description: Optional[str] = None):
+    """Handle Canva OAuth callback and complete the flow"""
+    try:
+        print("🎨 Canva OAuth Callback Received:")
+        print(f"   Code: {code[:20] + '...' if code else 'None'}")
+        print(f"   State: {state}")
+        print(f"   User ID: {user_id}")
+        print(f"   Error: {error}")
+        print(f"   Error Description: {error_description}")
+        print("🎨 End of Canva OAuth Callback")
+        
+        if error:
+            print(f"❌ Canva OAuth Error: {error} - {error_description}")
+            raise HTTPException(status_code=400, detail=f"Canva OAuth error: {error} - {error_description}")
+        
+        if not code:
+            raise HTTPException(status_code=400, detail="Authorization code is required")
+        
+        # Use a default user_id if not provided
+        user_id = user_id or "default_user"
+        
+        print("🎨 Starting Canva OAuth flow completion...")
+        token_data = canva_integration.exchange_code_for_token(code, state)
+        print(f"🎨 Canva OAuth flow completed successfully")
+        
+        # Save credentials to database
+        try:
+            saved = canva_credentials_service.save_credentials(user_id, token_data)
+            print(f"🎨 Credentials saved: {saved}")
+        except Exception as save_error:
+            print(f"❌ Error saving credentials: {save_error}")
+            saved = False
+        
+        # Redirect to frontend with success message
+        from fastapi.responses import RedirectResponse
+        
+        success_url = f"http://localhost:5173/auth/canva/callback?canva_success=true&user_id={user_id}"
+        return RedirectResponse(url=success_url, status_code=302)
+        
+    except Exception as e:
+        print(f"❌ Canva OAuth callback error: {e}")
+        raise HTTPException(status_code=500, detail=f"Canva OAuth flow failed: {str(e)}")
+
+@app.post("/api/auth/canva/reconnect")
+async def reconnect_canva(request: Request):
+    """Reconnect to Canva - clear old credentials and generate new auth URL"""
+    try:
+        import secrets
+        
+        # Get user ID from request body or use default
+        body = await request.json()
+        user_id = body.get("user_id", "default_user")
+        
+        # Clear old credentials
+        canva_credentials_service.delete_credentials(user_id)
+        
+        # Generate new authorization URL with updated scopes
+        state = secrets.token_urlsafe(32)
+        auth_url = canva_integration.get_authorization_url(state)
+        
+        return {
+            "success": True,
+            "message": "Old credentials cleared. Please re-authenticate with Canva.",
+            "auth_url": auth_url,
+            "state": state,
+            "requires_reauth": True
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Canva reconnect failed: {str(e)}")
+
+@app.post("/api/auth/canva/refresh")
+async def refresh_canva_token(request: Request):
+    """Refresh a Canva access token (legacy endpoint - now redirects to reconnect)"""
+    try:
+        # Get user ID from request body or use default
+        body = await request.json()
+        user_id = body.get("user_id", "default_user")
+        
+        # For JWT tokens, we need to re-authenticate since there's no refresh token
+        # This is a limitation of Canva's JWT-based OAuth flow
+        return {
+            "success": False,
+            "message": "JWT tokens cannot be refreshed. Please use /api/auth/canva/reconnect to re-authenticate.",
+            "requires_reauth": True,
+            "reconnect_endpoint": "/api/auth/canva/reconnect"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Canva token refresh failed: {str(e)}")
+
+@app.get("/api/auth/canva/status/{user_id}")
+async def get_canva_auth_status(user_id: str):
+    """Check if Canva is authenticated for a user"""
+    try:
+        is_valid = canva_credentials_service.is_token_valid(user_id)
+        credentials = canva_credentials_service.get_credentials(user_id) if is_valid else None
+        
+        return {
+            "authenticated": is_valid,
+            "credentials": credentials if credentials else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check Canva auth status: {str(e)}")
+
+# Canva Template and Design endpoints
+@app.get("/api/canva/templates")
+async def get_canva_templates(query: Optional[str] = None, category: Optional[str] = None, limit: int = 20, user_id: str = "default_user"):
+    """Get Canva templates"""
+    try:
+        # Get credentials from database
+        credentials = canva_credentials_service.get_credentials(user_id)
+        if not credentials:
+            raise HTTPException(status_code=401, detail="No valid Canva credentials found. Please authenticate first.")
+        
+        # Initialize Canva integration with stored tokens
+        canva_integration.access_token = credentials.get('access_token')
+        
+        templates = canva_integration.search_templates(query=query, category=category, limit=limit)
+        
+        return {
+            "success": True,
+            "templates": templates,
+            "count": len(templates)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get Canva templates: {str(e)}")
+
+@app.get("/api/canva/templates/{template_id}")
+async def get_canva_template_details(template_id: str, user_id: str = "default_user"):
+    """Get detailed information about a specific Canva template"""
+    try:
+        # Get credentials from database
+        credentials = canva_credentials_service.get_credentials(user_id)
+        if not credentials:
+            raise HTTPException(status_code=401, detail="No valid Canva credentials found. Please authenticate first.")
+        
+        # Initialize Canva integration with stored tokens
+        canva_integration.access_token = credentials.get('access_token')
+        
+        template_details = canva_integration.get_template_details(template_id)
+        
+        return {
+            "success": True,
+            "template": template_details
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get template details: {str(e)}")
+
+@app.post("/api/canva/templates/{template_id}/create-design")
+async def create_canva_design(template_id: str, request: Request, user_id: str = "default_user"):
+    """Create a design from a template with custom content"""
+    try:
+        # Get credentials from database
+        credentials = canva_credentials_service.get_credentials(user_id)
+        if not credentials:
+            raise HTTPException(status_code=401, detail="No valid Canva credentials found. Please authenticate first.")
+        
+        # Initialize Canva integration with stored tokens
+        canva_integration.access_token = credentials.get('access_token')
+        
+        # Get content from request body
+        body = await request.json()
+        content_data = body.get('content', {})
+        
+        # Create design (will use fallback in dev mode)
+        design = canva_integration.apply_content_to_template(template_id, content_data)
+        
+        return {
+            "success": True,
+            "design": design,
+            "method": design.get('method', 'unknown')
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create design: {str(e)}")
+
+@app.get("/api/canva/templates/{template_id}/download")
+async def download_canva_template(template_id: str, format: str = "png", user_id: str = "default_user"):
+    """Download a Canva template as an image"""
+    try:
+        # Get credentials from database
+        credentials = canva_credentials_service.get_credentials(user_id)
+        if not credentials:
+            raise HTTPException(status_code=401, detail="No valid Canva credentials found. Please authenticate first.")
+        
+        # Initialize Canva integration with stored tokens
+        canva_integration.access_token = credentials.get('access_token')
+        
+        # Download template
+        template_image = canva_integration.download_template(template_id, format)
+        
+        from fastapi.responses import Response
+        return Response(
+            content=template_image,
+            media_type=f"image/{format}",
+            headers={"Content-Disposition": f"attachment; filename=template_{template_id}.{format}"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to download template: {str(e)}")
 
 if __name__ == "__main__":
 	import uvicorn

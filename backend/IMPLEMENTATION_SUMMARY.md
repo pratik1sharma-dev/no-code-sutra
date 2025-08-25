@@ -19,6 +19,7 @@
 
 ### 3. **Enhanced Workflow Nodes (Modularized)**
 - **Per-node executors**: SRP-compliant modules in `services/nodes/*`
+- **State-based data flow**: All nodes read from state, workflow executor copies config to state
 - **AI Content Generation**: via `nodes/ai_agent.py` using `LLMClient` (Bedrock/OpenAI)
 - **Text Overlay**: `nodes/text_overlay.py` (Instagram-optimized formatting)
 - **Image Upload**: `nodes/image_upload.py` (Cloudinary signed uploads)
@@ -48,6 +49,14 @@
 3. Text Overlay Node → Creates image with professional text overlay
 4. Image Upload Node → Uploads to Cloudinary for public hosting
 5. Instagram Post Node → Posts to Instagram with image and caption
+```
+
+### **Data Flow Architecture:**
+```
+AI Workflow Generator → Workflow JSON → Node Config → Workflow Executor → State → Node
+     ↓                           ↓              ↓              ↓         ↓      ↓
+Generates prompt    → {"config": {"prompt": → config.get() → state['prompt'] → Node reads
+                    "Create..."}}           copies to state              from state
 ```
 
 ### **Enhanced Dynamic Background Image Process:**

@@ -245,6 +245,13 @@ class LangGraphWorkflowExecutor:
                 state['image_url'] = config.get('image_url', state.get('image_url', ''))
                 state['image_width'] = config.get('image_width', state.get('image_width', 1080))
                 state['image_height'] = config.get('image_height', state.get('image_height', 1080))
+                
+                # Canva template configuration (default to True for testing)
+                state['canva_template_id'] = config.get('canva_template_id', state.get('canva_template_id', 'EAGFcgTrfLo'))
+                state['use_canva_template'] = config.get('use_canva_template', state.get('use_canva_template', True))
+                state['export_format'] = config.get('export_format', state.get('export_format', 'png'))
+                state['export_width'] = config.get('export_width', state.get('export_width', 1080))
+                state['export_height'] = config.get('export_height', state.get('export_height', 1080))
             result = executor(state)
             result['end_time'] = datetime.now().isoformat()
             result['node_type'] = node_type

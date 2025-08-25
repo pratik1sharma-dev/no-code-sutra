@@ -252,13 +252,18 @@ class NodeRegistry:
         self._nodes['textOverlay'] = NodeMetadata(
             type='textOverlay',
             label='Text Overlay',
-            description='Overlay text onto an image and output an image URL',
+            description='Overlay text onto an image and output an image URL. Supports Canva templates for professional designs.',
             category=NodeCategory.DATA,
             icon='FileText',
             color='secondary',
             required_inputs=['ai_output'],  # Accept AI Agent output directly
-            optional_inputs=['image_url', 'image_width', 'image_height', 'text_fields'],
-            output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}}}
+            optional_inputs=['image_url', 'image_width', 'image_height', 'text_fields', 'canva_template_id', 'use_canva_template', 'export_format', 'export_width', 'export_height'],
+            output_schema={'type': 'object', 'properties': {
+                'image_url': {'type': 'string'},
+                'canva_design_id': {'type': 'string'},
+                'canva_design_url': {'type': 'string'},
+                'canva_template_used': {'type': 'boolean'}
+            }}
         )
         
         self._nodes['imageGenerator'] = NodeMetadata(
@@ -283,6 +288,23 @@ class NodeRegistry:
             required_inputs=['image_data_url'],
             optional_inputs=['image_url'],
             output_schema={'type': 'object', 'properties': {'image_url': {'type': 'string'}}}
+        )
+        
+        self._nodes['canvaTemplate'] = NodeMetadata(
+            type='canvaTemplate',
+            label='Canva Template',
+            description='Apply content to Canva templates and export professional designs',
+            category=NodeCategory.INTEGRATION,
+            icon='Palette',
+            color='primary',
+            required_inputs=['template_id', 'content'],
+            optional_inputs=['export_format', 'export_width', 'export_height'],
+            output_schema={'type': 'object', 'properties': {
+                'canva_design_id': {'type': 'string'},
+                'canva_design_url': {'type': 'string'},
+                'canva_image_data': {'type': 'string'},
+                'canva_image_data_url': {'type': 'string'}
+            }}
         )
     
     def get_node_metadata(self, node_type: str) -> Optional[NodeMetadata]:

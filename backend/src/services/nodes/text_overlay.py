@@ -1008,6 +1008,14 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         platform = state.get('platform', 'instagram')
         post_type = state.get('post_type', 'single')  # NEW: Get post type
         
+        # Check if Canva template should be used (default to True for testing)
+        canva_template_id = state.get('canva_template_id', 'EAGFcgTrfLo')  # Default template ID
+        use_canva_template = state.get('use_canva_template', True)  # Default to True for testing
+        
+        if canva_template_id and use_canva_template:
+            print(f"🎨 Using Canva template: {canva_template_id}")
+            return generate_canva_template_overlay(state, overlay_text, platform, post_type)
+        
         # Auto-detect post type from content structure
         if isinstance(overlay_text, dict):
             if 'slides' in overlay_text and isinstance(overlay_text['slides'], list) and len(overlay_text['slides']) > 1:
@@ -1575,3 +1583,102 @@ def _calculate_overlay_opacity(zone_data: Dict[str, Any]) -> int:
         return 50
     else:
         return 70
+
+
+def generate_canva_template_overlay(state: Dict[str, Any], overlay_text: Dict[str, Any], platform: str, post_type: str = 'single') -> Dict[str, Any]:
+    """Generate overlay using Canva template"""
+    try:
+        print("🎨 Generating Canva template overlay...")
+        
+        # Import Canva integration
+        from services.canva_integration import CanvaIntegration
+        
+        # Get Canva template ID
+        canva_template_id = state.get('canva_template_id')
+        if not canva_template_id:
+            raise ValueError("canva_template_id is required for Canva template overlay")
+        
+        # Initialize Canva integration
+        canva = CanvaIntegration()
+        
+        # Get credentials from database
+        from services.canva_credentials import canva_credentials_service
+        
+        user_id = state.get('user_id', 'default_user')
+        access_token = canva_credentials_service.get_access_token(user_id)
+        
+        if not access_token:
+            raise ValueError("No valid Canva access token found. Please authenticate with Canva first.")
+        
+        canva.access_token = access_token
+        
+        # Prepare content for Canva template
+        if isinstance(overlay_text, dict):
+            # Extract content from structured data
+            content = {
+                'headline': overlay_text.get('headline', ''),
+                'subhead': overlay_text.get('subhead', ''),
+                'bullets': overlay_text.get('bullets', [])
+            }
+            
+            # Handle carousel content
+            if 'slides' in overlay_text and isinstance(overlay_text['slides'], list):
+                content['slides'] = overlay_text['slides']
+        else:
+            # Fallback content
+            content = {
+                'headline': str(overlay_text),
+                'subhead': '',
+                'bullets': []
+            }
+        
+        print(f"🎨 Content prepared for Canva: {content}")
+        
+        # Apply content to Canva template
+        print("🎨 Applying content to Canva template...")
+        design = canva.apply_content_to_template(canva_template_id, content)
+        
+        design_id = design.get('id')
+        design_url = design.get('url')
+        
+        print(f"🎨 Canva design created: {design_id}")
+        
+        # Export the design as image
+        print("🎨 Exporting Canva design...")
+        export_format = state.get('export_format', 'png')
+        export_width = state.get('export_width', 1080)
+        export_height = state.get('export_height', 1080)
+        
+        image_data = canva.export_design(
+            design_id, 
+            format=export_format,
+            width=export_width,
+            height=export_height
+        )
+        
+        # Convert to base64
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        data_url = f"data:image/{export_format};base64,{image_base64}"
+        
+        print(f"🎨 Canva design exported successfully")
+        
+        # Update state with results
+        state['image_url'] = data_url
+        state['image_data_url'] = data_url
+        state['canva_design_id'] = design_id
+        state['canva_design_url'] = design_url
+        state['overlay_text_used'] = str(content)
+        state['platform_used'] = platform
+        state['post_type'] = post_type
+        state['canva_template_used'] = True
+        state['status'] = 'completed'
+        state['timestamp'] = datetime.now().isoformat()
+        
+        return state
+        
+    except Exception as e:
+        print(f"❌ Error in Canva template overlay: {e}")
+        state['status'] = 'failed'
+        state['error'] = str(e)
+        state['timestamp'] = datetime.now().isoformat()
+        return state

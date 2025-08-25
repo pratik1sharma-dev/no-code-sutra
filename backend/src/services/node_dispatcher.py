@@ -13,6 +13,7 @@ from .nodes import image_generator as image_gen_exec
 from .nodes import seo_optimizer as seo_exec
 from .nodes import text_overlay as text_overlay_exec
 from .nodes import image_upload as image_upload_exec
+from .nodes import canva_template as canva_template_exec
 
 
 class NodeDispatcher:
@@ -34,6 +35,7 @@ class NodeDispatcher:
             "imageGenerator": image_gen_exec.execute,
             "imageUpload": image_upload_exec.execute,
             "seoOptimizer": seo_exec.execute,
+            "canvaTemplate": canva_template_exec.execute,
         }
 
     def get_executor(self, node_type: str) -> Callable:
