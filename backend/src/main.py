@@ -881,9 +881,12 @@ async def download_canva_template(template_id: str, format: str = "png", user_id
 
 if __name__ == "__main__":
 	import uvicorn
+	# Use PORT from environment (Railway/Heroku style); default to 8000
+	port_value = int(os.getenv("PORT", "8000"))
+	reload_flag = os.getenv("UVICORN_RELOAD", "false").lower() == "true"
 	uvicorn.run(
 		"main:app",
 		host="0.0.0.0",
-		port=8000,
-		reload=True
-	) 
+		port=port_value,
+		reload=reload_flag
+	)
