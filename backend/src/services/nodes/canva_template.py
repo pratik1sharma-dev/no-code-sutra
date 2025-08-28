@@ -152,3 +152,4 @@ def get_node_info() -> Dict[str, Any]:
             'status': {'type': 'string'}
         }
     }
+

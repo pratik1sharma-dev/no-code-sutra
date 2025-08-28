@@ -22,6 +22,7 @@ from services.instagram_oauth import InstagramOAuthService
 from services.instagram_credentials import instagram_credentials_service
 from services.canva_integration import CanvaIntegration
 from services.canva_credentials import canva_credentials_service
+from services.scheduler.factory import SchedulerFactory
 
 # Request/Response models
 class WorkflowRequest(BaseModel):
@@ -64,6 +65,23 @@ async def _startup_init_db():
 	print("🔍 Starting database initialization...")
 	init_db()
 	print("🔍 Database initialization complete")
+	
+	# Initialize scheduler
+	print("⏰ Starting scheduler initialization...")
+	try:
+		await SchedulerFactory.initialize_scheduler()
+		print("⏰ Scheduler initialization complete")
+	except Exception as e:
+		print(f"❌ Scheduler initialization failed: {e}")
+
+@app.on_event("shutdown")
+async def _shutdown_scheduler():
+	print("⏰ Shutting down scheduler...")
+	try:
+		await SchedulerFactory.shutdown_scheduler()
+		print("⏰ Scheduler shutdown complete")
+	except Exception as e:
+		print(f"❌ Scheduler shutdown failed: {e}")
 
 # CORS middleware
 app.add_middleware(
@@ -877,7 +895,14 @@ async def download_canva_template(template_id: str, format: str = "png", user_id
             headers={"Content-Disposition": f"attachment; filename=template_{template_id}.{format}"}
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to download template: {str(e)}")
+        		raise HTTPException(status_code=500, detail=f"Failed to download template: {str(e)}")
+
+# Include scheduler routes
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from api.scheduler_routes import router as scheduler_router
+app.include_router(scheduler_router)
 
 if __name__ == "__main__":
 	import uvicorn

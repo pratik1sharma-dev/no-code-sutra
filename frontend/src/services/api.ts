@@ -57,6 +57,72 @@ export interface AgentInfo {
 	capabilities: string[];
 }
 
+// Scheduler Types
+export interface CreateRecurringScheduleRequest {
+	workflow_id: string;
+	name: string;
+	cron_expression: string;
+	timezone?: string;
+	description?: string;
+	metadata?: Record<string, any>;
+}
+
+export interface CreateOneTimeScheduleRequest {
+	workflow_id: string;
+	name: string;
+	run_at: string; // ISO string
+	description?: string;
+	metadata?: Record<string, any>;
+}
+
+export interface ScheduleResponse {
+	success: boolean;
+	schedule_id?: string;
+	backend_job_id?: string;
+	message: string;
+	next_run_time?: string;
+	run_at?: string;
+}
+
+export interface ScheduleListItem {
+	schedule_id: string;
+	workflow_id: string;
+	name: string;
+	description?: string;
+	cron_expression: string;
+	timezone: string;
+	is_active: boolean;
+	backend_type: string;
+	created_at: string;
+	last_execution_at?: string;
+	next_execution_at?: string;
+	execution_count: number;
+	metadata?: Record<string, any>;
+}
+
+export interface ExecutionHistoryItem {
+	execution_id: string;
+	workflow_id: string;
+	execution_type: string;
+	status: string;
+	success?: boolean;
+	started_at: string;
+	completed_at?: string;
+	duration_seconds?: number;
+	error_message?: string;
+	node_results_count: number;
+}
+
+export interface SchedulerStatusResponse {
+	backend: string;
+	is_distributed: boolean;
+	active_schedules: number;
+	executions_24h: number;
+	success_rate_24h: number;
+	status: string;
+	error?: string;
+}
+
 class ApiService {
 	private baseUrl: string;
 
@@ -163,6 +229,78 @@ class ApiService {
 
 	async delete<T>(endpoint: string): Promise<T> {
 		return this.request<T>(endpoint, { method: 'DELETE' });
+	}
+
+	// Scheduler API Methods
+	async createRecurringSchedule(
+		request: CreateRecurringScheduleRequest, 
+		userId: string = 'default_user'
+	): Promise<ScheduleResponse> {
+		return this.request<ScheduleResponse>('/api/scheduler/recurring', {
+			method: 'POST',
+			body: JSON.stringify(request),
+			headers: {
+				'Content-Type': 'application/json',
+				'X-User-ID': userId, // TODO: Replace with proper auth
+			},
+		});
+	}
+
+	async createOneTimeSchedule(
+		request: CreateOneTimeScheduleRequest, 
+		userId: string = 'default_user'
+	): Promise<ScheduleResponse> {
+		return this.request<ScheduleResponse>('/api/scheduler/one-time', {
+			method: 'POST',
+			body: JSON.stringify(request),
+			headers: {
+				'Content-Type': 'application/json',
+				'X-User-ID': userId, // TODO: Replace with proper auth
+			},
+		});
+	}
+
+	async listUserSchedules(userId: string = 'default_user'): Promise<ScheduleListItem[]> {
+		return this.request<ScheduleListItem[]>(`/api/scheduler/?user_id=${userId}`);
+	}
+
+	async pauseSchedule(scheduleId: string, userId: string = 'default_user'): Promise<{ success: boolean; message: string }> {
+		return this.request<{ success: boolean; message: string }>(`/api/scheduler/${scheduleId}/pause`, {
+			method: 'POST',
+			headers: {
+				'X-User-ID': userId, // TODO: Replace with proper auth
+			},
+		});
+	}
+
+	async resumeSchedule(scheduleId: string, userId: string = 'default_user'): Promise<{ success: boolean; message: string }> {
+		return this.request<{ success: boolean; message: string }>(`/api/scheduler/${scheduleId}/resume`, {
+			method: 'POST',
+			headers: {
+				'X-User-ID': userId, // TODO: Replace with proper auth
+			},
+		});
+	}
+
+	async deleteSchedule(scheduleId: string, userId: string = 'default_user'): Promise<{ success: boolean; message: string; backend_removal_success: boolean }> {
+		return this.request<{ success: boolean; message: string; backend_removal_success: boolean }>(`/api/scheduler/${scheduleId}`, {
+			method: 'DELETE',
+			headers: {
+				'X-User-ID': userId, // TODO: Replace with proper auth
+			},
+		});
+	}
+
+	async getExecutionHistory(
+		workflowId: string, 
+		userId: string = 'default_user', 
+		limit: number = 50
+	): Promise<ExecutionHistoryItem[]> {
+		return this.request<ExecutionHistoryItem[]>(`/api/scheduler/${workflowId}/history?user_id=${userId}&limit=${limit}`);
+	}
+
+	async getSchedulerStatus(): Promise<SchedulerStatusResponse> {
+		return this.request<SchedulerStatusResponse>('/api/scheduler/status');
 	}
 }
 

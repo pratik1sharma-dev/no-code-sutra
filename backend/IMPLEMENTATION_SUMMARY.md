@@ -20,8 +20,9 @@
 ### 3. **Enhanced Workflow Nodes (Modularized)**
 - **Per-node executors**: SRP-compliant modules in `services/nodes/*`
 - **State-based data flow**: All nodes read from state, workflow executor copies config to state
-- **AI Content Generation**: via `nodes/ai_agent.py` using `LLMClient` (Bedrock/OpenAI)
-- **Text Overlay**: `nodes/text_overlay.py` (Instagram-optimized formatting)
+- **AI Content Generation**: via `nodes/ai_agent.py` using `LLMClient` (Bedrock/OpenAI) with template recommendations
+- **Instagram Template Engine**: `nodes/instagram_templates.py` with 5 professional templates
+- **Text Overlay**: `nodes/text_overlay.py` (Instagram-optimized formatting with template system)
 - **Image Upload**: `nodes/image_upload.py` (Cloudinary signed uploads)
 - **Social Posting**: `nodes/social_media.py` (real vs simulation with InstagramService)
 - **Smart Content Detection**: Automatically finds content from previous nodes
@@ -44,11 +45,26 @@
 
 ### **Complete Instagram Posting Flow:**
 ```
-1. AI Agent Node → Generates structured content (headline, bullets, caption, hashtags)
+1. AI Agent Node → Generates structured content + recommends optimal template
 2. Image Generator Node → Fetches relevant background image from multiple sources
-3. Text Overlay Node → Creates image with professional text overlay
+3. Text Overlay Node → Creates image using AI-recommended template with professional styling
 4. Image Upload Node → Uploads to Cloudinary for public hosting
 5. Instagram Post Node → Posts to Instagram with image and caption
+```
+
+### **Instagram Template Engine:**
+```
+5 Professional Templates Available:
+- Minimal: Clean, professional design (business, corporate content)
+- Bold: High-impact design with strong contrast (motivational, promotional)
+- Gradient: Modern colorful design (tech, lifestyle, creative)
+- Split Screen: Organized educational layout (tutorials, features)
+- Quote: Elegant quote-focused design (inspirational quotes, testimonials)
+
+Template Selection Priority:
+1. Manual Override (user choice)
+2. AI Recommendation (based on content analysis)
+3. Auto-Selection (keyword-based fallback)
 ```
 
 ### **Data Flow Architecture:**

@@ -15,11 +15,14 @@ import 'reactflow/dist/style.css';
 import { DndContext, DragOverlay, useDroppable } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { v4 as uuidv4 } from 'uuid';
-import { Play, Save, Settings, Sparkles, ZoomIn, ZoomOut, Maximize2, Grid, LayoutGrid } from 'lucide-react';
+import { Play, Save, Settings, Sparkles, ZoomIn, ZoomOut, Maximize2, Grid, LayoutGrid, Clock } from 'lucide-react';
 import { useWorkflowStore } from '../stores/workflowStore';
 import { useNodeRegistry, NODE_TYPES } from '../components/workflow/nodes/NodeRegistry';
 import { NodePalette } from '../components/workflow/NodePalette';
+import ScheduleModal from '../components/ui/ScheduleModal';
 import type { WorkflowNodeData, WorkflowNode, WorkflowEdge, NodeType } from '../types/workflow';
+import type { ScheduleConfig } from '../types/scheduler';
+import { apiService } from '../services/api';
 
 // Droppable React Flow wrapper
 const DroppableReactFlow: React.FC<{
@@ -154,6 +157,7 @@ const WorkflowBuilder: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams(); // Added for generated workflow import
   const [isNodePaletteCollapsed, setIsNodePaletteCollapsed] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const { 
     currentWorkflow, 
     setCurrentWorkflow, 
@@ -330,6 +334,41 @@ const WorkflowBuilder: React.FC = () => {
   // Save / Execute
   const handleSaveDraft = useCallback(async () => { await saveCurrentWorkflow(); }, [saveCurrentWorkflow]);
   const handleExecute = useCallback(async () => { await saveCurrentWorkflow(); await executeWorkflow(); }, [executeWorkflow, saveCurrentWorkflow]);
+  
+  // Schedule workflow
+  const handleCreateSchedule = useCallback(async (config: ScheduleConfig) => {
+    if (!currentWorkflow?.id) {
+      throw new Error('Please save the workflow first');
+    }
+    
+    try {
+      // Save workflow first to ensure it's persisted
+      await saveCurrentWorkflow();
+      
+      if (config.type === 'recurring') {
+        await apiService.createRecurringSchedule({
+          workflow_id: currentWorkflow.id,
+          name: config.name,
+          cron_expression: config.cronExpression,
+          timezone: config.timezone,
+          description: config.description,
+          metadata: config.metadata
+        });
+      } else {
+        await apiService.createOneTimeSchedule({
+          workflow_id: currentWorkflow.id,
+          name: config.name,
+          run_at: config.runAt.toISOString(),
+          description: config.description,
+          metadata: config.metadata
+        });
+      }
+      
+      setShowScheduleModal(false);
+    } catch (error) {
+      throw error; // Let the modal handle the error
+    }
+  }, [currentWorkflow?.id, saveCurrentWorkflow]);
 
   // Canvas toolbar controls
   const [showGrid, setShowGrid] = useState(true);
@@ -412,6 +451,15 @@ const WorkflowBuilder: React.FC = () => {
                   Save Draft
                 </button>
                 <button 
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setShowScheduleModal(true)}
+                  disabled={!currentWorkflow?.id}
+                  title={!currentWorkflow?.id ? 'Save workflow first to schedule' : 'Schedule this workflow'}
+                >
+                  <Clock className="w-4 h-4 mr-1" />
+                  Schedule
+                </button>
+                <button 
                   className="btn btn-primary btn-sm"
                   onClick={handleExecute}
                   disabled={isExecuting}
@@ -456,6 +504,14 @@ const WorkflowBuilder: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Schedule Modal */}
+      <ScheduleModal
+        isOpen={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        workflowId={currentWorkflow?.id}
+        onSave={handleCreateSchedule}
+      />
     </DndContext>
   );
 };

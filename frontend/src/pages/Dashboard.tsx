@@ -10,10 +10,13 @@ import {
   Instagram
 } from 'lucide-react';
 import InstagramAuth from '../components/ui/InstagramAuth';
+import CanvaAuth from '../components/ui/CanvaAuth';
 
 const Dashboard: React.FC = () => {
   const [showInstagramAuth, setShowInstagramAuth] = useState(false);
   const [isInstagramConnected, setIsInstagramConnected] = useState(false);
+  const [showCanvaAuth, setShowCanvaAuth] = useState(false);
+  const [isCanvaConnected, setIsCanvaConnected] = useState(false);
 
   // Check Instagram connection status
   useEffect(() => {
@@ -31,6 +34,25 @@ const Dashboard: React.FC = () => {
 
     checkInstagramStatus();
   }, []);
+
+  // Check Canva connection status
+  useEffect(() => {
+    const checkCanvaStatus = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/auth/canva/status/default_user');
+        if (response.ok) {
+          const data = await response.json();
+          setIsCanvaConnected(data.authenticated);
+        }
+      } catch (error) {
+        console.error('Failed to check Canva status:', error);
+      }
+    };
+
+    checkCanvaStatus();
+  }, []);
+
+
   
   const stats = [
     {
@@ -193,6 +215,53 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Canva */}
+            <div 
+              className={`flex items-center justify-between p-4 border rounded-lg transition-colors ${
+                isCanvaConnected 
+                  ? 'border-green-200 bg-green-50' 
+                  : 'border-secondary-200 hover:bg-secondary-50 cursor-pointer'
+              }`}
+              onClick={!isCanvaConnected ? () => setShowCanvaAuth(true) : undefined}
+            >
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-lg ${
+                  isCanvaConnected ? 'bg-green-100' : 'bg-blue-50'
+                }`}>
+                  <svg className={`h-5 w-5 ${
+                    isCanvaConnected ? 'text-green-600' : 'text-blue-600'
+                  }`} fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-medium text-secondary-900">Canva</h3>
+                  <p className="text-sm text-secondary-500">Professional templates</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                {isCanvaConnected ? (
+                  <>
+                    <span className="text-sm text-green-600 font-medium">Connected</span>
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCanvaAuth(true);
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium ml-2"
+                    >
+                      Reconnect
+                    </button>
+                  </>
+                ) : (
+                  <button className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                    Connect
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Twitter/X - Coming Soon */}
             <div className="flex items-center justify-between p-4 border border-secondary-200 rounded-lg opacity-50">
               <div className="flex items-center space-x-3">
@@ -313,6 +382,28 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="p-6">
               <InstagramAuth onTokenReceived={() => setShowInstagramAuth(false)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Canva Auth Modal */}
+      {showCanvaAuth && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Connect Canva</h2>
+              <button
+                onClick={() => setShowCanvaAuth(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <CanvaAuth onTokenReceived={() => setShowCanvaAuth(false)} />
             </div>
           </div>
         </div>

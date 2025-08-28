@@ -22,4 +22,15 @@ Base = declarative_base()
 def init_db() -> None:
 	"""Create tables if not existing (no migrations)."""
 	from . import models  # noqa: F401
+	from .scheduler.models import Base as SchedulerBase  # Import scheduler models
 	Base.metadata.create_all(bind=engine)
+	SchedulerBase.metadata.create_all(bind=engine)
+
+
+def get_db():
+	"""FastAPI dependency to get database session"""
+	db = SessionLocal()
+	try:
+		yield db
+	finally:
+		db.close()

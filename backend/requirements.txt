@@ -84,3 +84,8 @@ Pillow==10.4.0
 # ORM + Postgres driver
 SQLAlchemy==2.0.43
 psycopg[binary]==3.2.3
+
+# Scheduler dependencies
+APScheduler==3.10.4
+pytz==2023.3
+croniter==3.0.3

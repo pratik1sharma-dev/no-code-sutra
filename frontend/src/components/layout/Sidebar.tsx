@@ -7,13 +7,15 @@ import {
   BarChart3, 
   Users, 
   FileText,
-  Plus
+  Plus,
+  Clock
 } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
   const navigation = [
     { name: 'Dashboard', href: '/app', icon: Home },
     { name: 'Workflows', href: '/app/workflows', icon: Workflow },
+    { name: 'Schedules', href: '/app/schedules', icon: Clock },
     { name: 'Templates', href: '/app/templates', icon: FileText },
     { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
     { name: 'Team', href: '/app/team', icon: Users },
