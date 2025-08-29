@@ -1,0 +1,42 @@
+# Core Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.8.0
+
+# LangGraph & AI Framework (optimized for Railway)
+langgraph==0.6.3
+langgraph-checkpoint==2.1.1
+langgraph-prebuilt==0.6.3
+langgraph-sdk==0.2.0
+langchain==0.3.27
+langchain-community==0.3.27
+langchain-core==0.3.72
+langchain-text-splitters==0.3.9
+# Removed langchain-huggingface to avoid PyTorch/CUDA dependencies
+langsmith==0.4.13
+
+# LLM Providers  
+boto3==1.34.0
+
+# Database & ORM
+SQLAlchemy==2.0.23
+psycopg[binary]==3.1.18
+
+# Scheduler
+APScheduler==3.10.4
+pytz==2023.3
+
+# Instagram/Social Media
+facebook-business==18.0.0
+
+# Image Processing
+Pillow==10.0.0
+
+# Web Scraping & Parsing
+beautifulsoup4==4.12.0
+
+# HTTP & Networking
+requests==2.31.0
+
+# Environment & Configuration
+python-dotenv==1.0.0
