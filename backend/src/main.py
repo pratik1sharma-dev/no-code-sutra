@@ -154,77 +154,10 @@ async def generate_workflow(request: WorkflowRequest, http_request: Request, use
 			generated_at=datetime.utcnow().isoformat()
 		)
 	except Exception as e:
-		print(f"Error in generate_workflow: {e}")
+		logger.error(f"Error in generate_workflow: {e}")
 		raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/workflows/available")
-async def get_available_workflows():
-	"""
-	Get list of available LangGraph workflows
-	"""
-	return {
-		"workflows": [
-			{
-				"type": "research",
-				"name": "Company Research",
-				"description": "Research company information using AI",
-				"nodes": ["research"],
-				"input": {"company_name": "string"}
-			},
-			{
-				"type": "lead_qualification",
-				"name": "Lead Qualification",
-				"description": "Complete lead qualification workflow",
-				"nodes": ["research", "analyze", "score", "route"],
-				"input": {"company_name": "string"}
-			},
-			{
-				"type": "conditional_lead",
-				"name": "Conditional Lead Qualification",
-				"description": "Lead qualification with conditional routing",
-				"nodes": ["research", "analyze", "score", "route"],
-				"input": {"company_name": "string"}
-			}
-		]
-	}
 
-@app.get("/api/agents/available")
-async def get_available_agents():
-	"""
-	Get list of available AI agents
-	"""
-	return {
-		"agents": [
-			{
-				"name": "Research Agent",
-				"description": "AI-powered company research",
-				"capabilities": ["web search", "data extraction", "website scraping"],
-				"input": "company_name",
-				"output": "structured_company_data"
-			},
-			{
-				"name": "Lead Analysis Agent",
-				"description": "AI-powered lead analysis",
-				"capabilities": ["data analysis", "lead scoring", "qualification"],
-				"input": "company_data",
-				"output": "lead_analysis"
-			},
-			{
-				"name": "Lead Scoring Agent",
-				"description": "AI-powered lead scoring (0-100)",
-				"capabilities": ["scoring", "evaluation", "ranking"],
-				"input": "company_data + analysis",
-				"output": "lead_score"
-			},
-			{
-				"name": "Lead Routing Agent",
-				"description": "AI-powered lead routing decisions",
-				"capabilities": ["decision_making", "routing", "classification"],
-				"input": "lead_score + company_data",
-				"output": "route_decision"
-			}
-		]
-	}
 
 @app.get("/api/executors/available")
 async def get_available_executors():
@@ -269,7 +202,7 @@ async def get_available_executors():
 				"description": "Scheduled execution"
 			},
 			{
-				"node_type": "blogWriter",
+				"node_type": "blog_writer",
 				"class_name": "nodes.blog_writer.execute",
 				"description": "Generates SEO-optimized blog posts"
 			}
@@ -664,50 +597,6 @@ async def refresh_instagram_token(request: Request):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Token refresh failed: {str(e)}")
-
-
-@app.get("/api/auth/instagram/credentials/{user_id}")
-async def get_instagram_credentials(user_id: str):
-    """Get stored Instagram credentials for a user"""
-    try:
-        credentials = instagram_credentials_service.get_credentials(user_id)
-        
-        if not credentials:
-            raise HTTPException(status_code=404, detail="No credentials found for this user")
-        
-        # Don't return the full access token for security
-        safe_credentials = {
-            **credentials,
-            'access_token': credentials['access_token'][:10] + '...' if credentials['access_token'] else None
-        }
-        
-        return {
-            "success": True,
-            "credentials": safe_credentials
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get credentials: {str(e)}")
-
-
-@app.delete("/api/auth/instagram/credentials/{user_id}")
-async def delete_instagram_credentials(user_id: str):
-    """Delete stored Instagram credentials for a user"""
-    try:
-        deleted = instagram_credentials_service.delete_credentials(user_id)
-        
-        if not deleted:
-            raise HTTPException(status_code=404, detail="No credentials found for this user")
-        
-        return {
-            "success": True,
-            "message": "Credentials deleted successfully"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete credentials: {str(e)}")
 
 
 @app.get("/api/auth/instagram/status/{user_id}")
