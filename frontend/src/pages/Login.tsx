@@ -20,7 +20,8 @@ const Login: React.FC = () => {
     try {
       await authService.login({ username, password });
       // Navigate to the intended page or default to dashboard
-      const from = location.state?.from?.pathname || '/dashboard';
+      const fromLocation = location.state?.from;
+      const from = fromLocation ? `${fromLocation.pathname}${fromLocation.search}` : '/dashboard';
       navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');

@@ -167,14 +167,20 @@ class LangGraphWorkflowExecutor:
                 print(f"State after {node_id}: {list(current_state.keys())}")
                 if 'node_results' in current_state:
                     print(f"  Node results: {list(current_state['node_results'].keys())}")
+            # Check if any nodes failed
+            failed_nodes = [node for node in current_state.get('nodes_executed', []) if node.get('status') == 'failed']
+            has_failures = len(failed_nodes) > 0
+            
             result = {
                 'workflow_id': initial_state['workflow_id'],
                 'start_time': initial_state['start_time'],
                 'input_data': input_data,
                 'current_node': None,
-                'status': 'completed',
+                'status': 'failed' if has_failures else 'completed',
                 'execution_id': initial_state['workflow_id'],
-                'end_time': datetime.now().isoformat()
+                'end_time': datetime.now().isoformat(),
+                'failed_nodes': failed_nodes if has_failures else [],
+                'error_details': [{'node_id': node['node_id'], 'error': node['result'].get('error', 'Unknown error')} for node in failed_nodes] if has_failures else []
             }
             essential_keys = ['result', 'output', 'content', 'status', 'timestamp', 'image_url', 'social_data', 'instagram_post']
             for key in essential_keys:

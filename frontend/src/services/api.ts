@@ -1,4 +1,5 @@
 import { config } from '../config/environment';
+import { authService } from './auth';
 
 const API_BASE_URL = config.apiBaseUrl;
 
@@ -138,6 +139,7 @@ class ApiService {
 		const defaultOptions: RequestInit = {
 			headers: {
 				'Content-Type': 'application/json',
+				...authService.getAuthHeaders(),
 				...options.headers,
 			},
 		};

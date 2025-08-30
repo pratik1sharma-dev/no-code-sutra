@@ -31,6 +31,8 @@ const App: React.FC = () => {
             }>
               <Route index element={<Dashboard />} />
               <Route path="workflows" element={<Workflows />} />
+              <Route path="workflow" element={<WorkflowBuilder />} />
+              <Route path="workflow/new" element={<WorkflowBuilder />} />
               <Route path="workflow-builder" element={<WorkflowBuilder />} />
               <Route path="schedules" element={<Schedules />} />
             </Route>
