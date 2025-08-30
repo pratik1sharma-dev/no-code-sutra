@@ -180,9 +180,13 @@ const WorkflowBuilder: React.FC = () => {
       if (generatedWorkflowData) {
         try {
           const workflowData = JSON.parse(decodeURIComponent(generatedWorkflowData));
+          console.log('🔍 Raw workflow data:', workflowData);
           
           // Handle both nested and flat workflow structures
           const workflow = workflowData.workflow || workflowData;
+          console.log('🔍 Processed workflow:', workflow);
+          console.log('🔍 Workflow nodes:', workflow.nodes);
+          console.log('🔍 Workflow edges:', workflow.edges);
           
           setCurrentWorkflow({
             ...workflow,
@@ -194,7 +198,8 @@ const WorkflowBuilder: React.FC = () => {
             tags: []
           });
         } catch (error) {
-          console.error('Failed to parse generated workflow:', error);
+          console.error('❌ Failed to parse generated workflow:', error);
+          console.error('❌ Raw data:', generatedWorkflowData);
           setCurrentWorkflow({
             id: id || uuidv4(),
             name: 'New Workflow',
