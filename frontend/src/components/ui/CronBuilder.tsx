@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Clock, Calendar, Info, ChevronDown, ChevronRight } from 'lucide-react';
-import { 
-  CronBuilderProps, 
-  CronBuilderState, 
-  CronPreset, 
-  CRON_PRESETS, 
-  TIMEZONE_OPTIONS 
+import type {
+  CronBuilderProps,
+  CronBuilderState,
+  CronPreset,
 } from '../../types/scheduler';
+import { CRON_PRESETS, TIMEZONE_OPTIONS } from '../../types/scheduler';
 
 const CronBuilder: React.FC<CronBuilderProps> = ({
   value,
