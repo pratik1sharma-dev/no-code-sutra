@@ -171,29 +171,22 @@ class LangGraphWorkflowExecutor:
             failed_nodes = [node for node in current_state.get('nodes_executed', []) if node.get('status') == 'failed']
             has_failures = len(failed_nodes) > 0
             
+            # Create clean result without circular references
             result = {
-                'workflow_id': initial_state['workflow_id'],
-                'start_time': initial_state['start_time'],
-                'input_data': input_data,
+                'workflow_id': str(initial_state['workflow_id']),
+                'start_time': str(initial_state['start_time']),
+                'input_data': self._sanitize_for_json(input_data),
                 'current_node': None,
                 'status': 'failed' if has_failures else 'completed',
-                'execution_id': initial_state['workflow_id'],
+                'execution_id': str(initial_state['workflow_id']),
                 'end_time': datetime.now().isoformat(),
-                'failed_nodes': failed_nodes if has_failures else [],
-                'error_details': [{'node_id': node['node_id'], 'error': node['result'].get('error', 'Unknown error')} for node in failed_nodes] if has_failures else []
+                'failed_nodes': self._sanitize_for_json(failed_nodes) if has_failures else [],
+                'error_details': [{'node_id': str(node.get('node_id', '')), 'error': str(node.get('result', {}).get('error', 'Unknown error'))} for node in failed_nodes] if has_failures else []
             }
             essential_keys = ['result', 'output', 'content', 'status', 'timestamp', 'image_url', 'social_data', 'instagram_post']
             for key in essential_keys:
                 if key in current_state:
-                    value = current_state[key]
-                    if isinstance(value, (str, int, float, bool, type(None))):
-                        result[key] = value
-                    elif isinstance(value, dict):
-                        result[key] = {k: (v if isinstance(v, (str, int, float, bool, type(None))) else str(v)) for k, v in value.items()}
-                    elif isinstance(value, list):
-                        result[key] = [(item if isinstance(item, (str, int, float, bool, type(None))) else str(item)) for item in value]
-                    else:
-                        result[key] = str(value)
+                    result[key] = self._sanitize_for_json(current_state[key])
             return result
         except Exception as e:
             print(f"Error executing workflow: {e}")
@@ -331,4 +324,20 @@ class LangGraphWorkflowExecutor:
                     in_degree[node] -= 1
                     if in_degree[node] == 0:
                         queue.append(node)
-        return result 
+        return result
+    
+    def _sanitize_for_json(self, obj: Any, max_depth: int = 5, current_depth: int = 0) -> Any:
+        """Sanitize objects for JSON serialization, preventing circular references"""
+        if current_depth > max_depth:
+            return str(obj)
+        
+        if obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, dict):
+            return {str(k): self._sanitize_for_json(v, max_depth, current_depth + 1) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self._sanitize_for_json(item, max_depth, current_depth + 1) for item in obj]
+        else:
+            return str(obj) 
