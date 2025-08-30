@@ -15,12 +15,13 @@ import {
   Search,
   X
 } from 'lucide-react';
-import { 
-  Schedule, 
+import type {
+  Schedule,
   ScheduleStatus,
-  SCHEDULE_STATUS_COLORS 
 } from '../../types/scheduler';
-import { apiService, ScheduleListItem } from '../../services/api';
+import { SCHEDULE_STATUS_COLORS } from '../../types/scheduler';
+import { apiService } from '../../services/api';
+import type { ScheduleListItem } from '../../services/api';
 
 interface ScheduleListProps {
   onEditSchedule?: (schedule: Schedule) => void;

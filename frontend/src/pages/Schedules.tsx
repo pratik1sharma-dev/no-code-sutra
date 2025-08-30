@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Clock, TrendingUp, Activity, AlertTriangle } from 'lucide-react';
 import ScheduleList from '../components/ui/ScheduleList';
 import ScheduleModal from '../components/ui/ScheduleModal';
-import { Schedule, ScheduleConfig } from '../types/scheduler';
-import { apiService, SchedulerStatusResponse } from '../services/api';
+import type { Schedule, ScheduleConfig } from '../types/scheduler';
+import { apiService } from '../services/api';
+import type { SchedulerStatusResponse } from '../services/api';
 
 const Schedules: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);

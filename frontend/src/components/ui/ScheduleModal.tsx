@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock, Calendar, AlertTriangle, Check, Loader2 } from 'lucide-react';
 import CronBuilder from './CronBuilder';
-import { 
-  ScheduleModalProps, 
-  ScheduleConfig, 
-  RecurringScheduleConfig, 
+import type {
+  ScheduleModalProps,
+  ScheduleConfig,
+  RecurringScheduleConfig,
   OneTimeScheduleConfig,
-  TIMEZONE_OPTIONS 
 } from '../../types/scheduler';
+import { TIMEZONE_OPTIONS } from '../../types/scheduler';
 
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
   isOpen,
