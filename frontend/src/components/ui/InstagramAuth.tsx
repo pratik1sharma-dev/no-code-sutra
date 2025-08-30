@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import config from '../../config/api';
 
 interface InstagramAuthProps {
   onTokenReceived?: (token: string) => void;
@@ -19,7 +20,7 @@ const InstagramAuth: React.FC<InstagramAuthProps> = ({ onTokenReceived }) => {
       setStatus('loading');
       setMessage('Getting authorization URL...');
       
-      const response = await fetch('http://localhost:8000/api/auth/instagram/url');
+      const response = await fetch(config.getApiUrl(config.api.endpoints.instagramAuthUrl));
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -85,7 +86,7 @@ const InstagramAuth: React.FC<InstagramAuthProps> = ({ onTokenReceived }) => {
         setMessage('Completing authentication...');
 
         // Call backend to complete OAuth flow
-        const response = await fetch(`http://localhost:8000/api/auth/instagram/callback?code=${code}&state=${state || ''}`);
+        const response = await fetch(`${config.api.baseUrl}${config.api.endpoints.instagramCallback}?code=${code}&state=${state || ''}`);
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);

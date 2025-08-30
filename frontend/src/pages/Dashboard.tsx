@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Workflow, 
-  Play, 
-  CheckCircle, 
-  AlertCircle, 
-  TrendingUp,
-  Clock,
-  Users,
-  Instagram
+  Plus, 
+  Zap, 
+  Clock, 
+  Users, 
+  TrendingUp, 
+  Instagram, 
+  Palette
 } from 'lucide-react';
 import InstagramAuth from '../components/ui/InstagramAuth';
 import CanvaAuth from '../components/ui/CanvaAuth';
+import config from '../config/api';
 
 const Dashboard: React.FC = () => {
   const [showInstagramAuth, setShowInstagramAuth] = useState(false);
@@ -22,7 +22,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const checkInstagramStatus = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/auth/instagram/status/default_user');
+        const response = await fetch(`${config.api.baseUrl}/api/auth/instagram/status/default_user`);
         if (response.ok) {
           const data = await response.json();
           setIsInstagramConnected(data.authenticated);
@@ -39,7 +39,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const checkCanvaStatus = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/auth/canva/status/default_user');
+        const response = await fetch(`${config.api.baseUrl}/api/auth/canva/status/default_user`);
         if (response.ok) {
           const data = await response.json();
           setIsCanvaConnected(data.authenticated);

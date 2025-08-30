@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import config from '../../config/api';
 
 interface CanvaAuthProps {
   onTokenReceived?: (token: string) => void;
@@ -18,7 +19,7 @@ const CanvaAuth: React.FC<CanvaAuthProps> = ({ onTokenReceived, onAuthError }) =
 
   const checkAuthStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/auth/canva/status/default_user');
+      const response = await fetch(`${config.api.baseUrl}/api/auth/canva/status/default_user`);
       if (response.ok) {
         const data = await response.json();
         setAuthStatus(data);
@@ -41,7 +42,7 @@ const CanvaAuth: React.FC<CanvaAuthProps> = ({ onTokenReceived, onAuthError }) =
 
     try {
       // Get authorization URL
-      const response = await fetch('http://localhost:8000/api/auth/canva/url');
+      const response = await fetch(config.getApiUrl(config.api.endpoints.canvaAuthUrl));
       if (!response.ok) {
         throw new Error('Failed to get Canva authorization URL');
       }
@@ -80,7 +81,7 @@ const CanvaAuth: React.FC<CanvaAuthProps> = ({ onTokenReceived, onAuthError }) =
   const handleDisconnect = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/auth/canva/credentials/default_user', {
+      const response = await fetch(`${config.api.baseUrl}${config.api.endpoints.canvaCallback}?code=${code}&state=${state}`, {
         method: 'DELETE',
       });
 
@@ -106,7 +107,7 @@ const CanvaAuth: React.FC<CanvaAuthProps> = ({ onTokenReceived, onAuthError }) =
 
     try {
       // Call the reconnect endpoint to clear old credentials and get new auth URL
-      const response = await fetch('http://localhost:8000/api/auth/canva/reconnect', {
+      const response = await fetch(`${config.api.baseUrl}/api/auth/canva/reconnect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

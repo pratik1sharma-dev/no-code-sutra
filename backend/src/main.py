@@ -607,7 +607,8 @@ async def instagram_oauth_callback(http_request: Request, code: str, state: Opti
 		# Redirect to frontend with success message
 		from fastapi.responses import RedirectResponse
 		
-		success_url = f"http://localhost:5173/auth/instagram/callback?success=true&user_id={user_id}"
+		frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+		success_url = f"{frontend_url}/auth/instagram/callback?success=true&user_id={user_id}"
 		return RedirectResponse(url=success_url, status_code=302)
 	except Exception as e:
 		print(f"❌ OAuth callback error: {e}")
@@ -777,7 +778,8 @@ async def canva_oauth_callback(code: str = None, state: Optional[str] = None, us
         # Redirect to frontend with success message
         from fastapi.responses import RedirectResponse
         
-        success_url = f"http://localhost:5173/auth/canva/callback?canva_success=true&user_id={user_id}"
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        success_url = f"{frontend_url}/auth/canva/callback?canva_success=true&user_id={user_id}"
         return RedirectResponse(url=success_url, status_code=302)
         
     except Exception as e:

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Search, User, Settings, LogOut, Instagram } from 'lucide-react';
 import InstagramAuth from '../ui/InstagramAuth';
+import config from '../../config/api';
 
 const Header: React.FC = () => {
   const [showInstagramAuth, setShowInstagramAuth] = useState(false);
@@ -11,7 +12,7 @@ const Header: React.FC = () => {
   useEffect(() => {
     const checkInstagramStatus = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/auth/instagram/status/default_user');
+        const response = await fetch(`${config.api.baseUrl}/api/auth/instagram/credentials/default_user`);
         if (response.ok) {
           const data = await response.json();
           setIsInstagramConnected(data.authenticated);

@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Play, Trash2, Edit, Plus, Search, Filter } from 'lucide-react';
+import config from '../config/api';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
@@ -36,7 +38,7 @@ const Workflows: React.FC = () => {
     const loadWorkflows = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('http://localhost:8000/api/workflows');
+        const response = await fetch(`${config.api.baseUrl}/api/workflows`);
         const data = await response.json();
         setWorkflows(data.workflows || []);
       } catch (error) {
@@ -71,7 +73,7 @@ const Workflows: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/workflows/${workflowId}`, {
+      const response = await fetch(`${config.api.baseUrl}/api/workflows/${workflowId}`, {
         method: 'DELETE'
       });
       
