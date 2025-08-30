@@ -22,16 +22,28 @@ class LangGraphWorkflowExecutor:
         try:
             if '.' in reference:
                 parts = reference.split('.')
-                if len(parts) == 2:
-                    node_id_ref, field_name = parts
+                if len(parts) >= 2:
+                    node_id_ref = parts[0]
+                    field_path = parts[1:]
+                    
                     # Try node-scoped result first
                     node_results = state.get('node_results', {}) or {}
                     if node_id_ref in node_results and isinstance(node_results[node_id_ref], dict):
-                        candidate = node_results[node_id_ref].get(field_name)
+                        # Navigate nested field path
+                        candidate = node_results[node_id_ref]
+                        for field in field_path:
+                            if isinstance(candidate, dict) and field in candidate:
+                                candidate = candidate[field]
+                            else:
+                                candidate = None
+                                break
                         if candidate is not None:
                             return candidate
-                    # Fallback to top-level state
-                    return state.get(field_name)
+                    
+                    # Fallback to top-level state for simple field access
+                    if len(field_path) == 1:
+                        return state.get(field_path[0])
+                    return None
                 else:
                     print(f"Warning: Invalid reference format: {reference}")
                     return None
