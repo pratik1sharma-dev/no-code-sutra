@@ -10,6 +10,7 @@ import Schedules from './pages/Schedules';
 import Login from './pages/Login';
 import LandingPage from './pages/LandingPage';
 import InstagramAuth from './components/ui/InstagramAuth';
+import InstagramAuthCallback from './components/ui/InstagramAuthCallback';
 import CanvaAuthCallback from './components/ui/CanvaAuthCallback';
 
 const App: React.FC = () => {
@@ -31,7 +32,7 @@ const App: React.FC = () => {
             
             {/* Auth routes */}
             <Route path="/login" element={<Login />} />
-            <Route path="/auth/instagram/callback" element={<InstagramAuth />} />
+            <Route path="/auth/instagram/callback" element={<InstagramAuthCallback />} />
             <Route path="/auth/canva/callback" element={<CanvaAuthCallback />} />
           </Routes>
         </Suspense>
