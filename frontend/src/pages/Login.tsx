@@ -1,9 +1,30 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff, Mail, Lock, Loader2 } from 'lucide-react';
+import { authService } from '../services/auth';
 
 const Login: React.FC = () => {
   const [showPassword, setShowPassword] = React.useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      await authService.login({ username, password });
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-secondary-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -22,21 +43,23 @@ const Login: React.FC = () => {
         
         <div className="card">
           <div className="card-content">
-            <form className="space-y-6">
+            <form className="space-y-6" onSubmit={handleSubmit}>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-secondary-700">
-                  Email address
+                <label htmlFor="username" className="block text-sm font-medium text-secondary-700">
+                  Username
                 </label>
                 <div className="mt-1 relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-secondary-400" />
                   <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
+                    id="username"
+                    name="username"
+                    type="text"
+                    autoComplete="username"
                     required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="input pl-10"
-                    placeholder="Enter your email"
+                    placeholder="Enter your username"
                   />
                 </div>
               </div>
@@ -53,6 +76,8 @@ const Login: React.FC = () => {
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
                     required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="input pl-10 pr-10"
                     placeholder="Enter your password"
                   />
@@ -90,13 +115,27 @@ const Login: React.FC = () => {
                 </div>
               </div>
 
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                  {error}
+                </div>
+              )}
+
               <div>
-                <Link
-                  to="/"
-                  className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Sign in
-                </Link>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="animate-spin -ml-1 mr-3 h-4 w-4" />
+                      Signing in...
+                    </>
+                  ) : (
+                    'Sign in'
+                  )}
+                </button>
               </div>
             </form>
           </div>
