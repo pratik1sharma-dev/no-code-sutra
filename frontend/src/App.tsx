@@ -12,6 +12,7 @@ import LandingPage from './pages/LandingPage';
 import InstagramAuth from './components/ui/InstagramAuth';
 import InstagramAuthCallback from './components/ui/InstagramAuthCallback';
 import CanvaAuthCallback from './components/ui/CanvaAuthCallback';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
 const App: React.FC = () => {
   return (
@@ -22,17 +23,27 @@ const App: React.FC = () => {
             {/* Landing page as default */}
             <Route path="/" element={<LandingPage />} />
             
-            {/* App routes with layout */}
-            <Route path="/app" element={<Layout />}>
+            {/* Protected routes */}
+            <Route path="/app" element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }>
               <Route index element={<Dashboard />} />
               <Route path="workflows" element={<Workflows />} />
-              <Route path="workflow/:id?" element={<WorkflowBuilder />} />
+              <Route path="workflow-builder" element={<WorkflowBuilder />} />
               <Route path="schedules" element={<Schedules />} />
             </Route>
             
-            {/* Auth routes */}
+            {/* Dashboard route for login redirect */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }>
+              <Route index element={<Dashboard />} />
+            </Route>
             <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/auth/instagram/callback" element={<InstagramAuthCallback />} />
             <Route path="/auth/canva/callback" element={<CanvaAuthCallback />} />
           </Routes>

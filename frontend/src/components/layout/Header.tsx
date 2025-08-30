@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Search, User, Settings, LogOut, Instagram } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import InstagramAuth from '../ui/InstagramAuth';
+import { authService } from '../../services/auth';
 import config from '../../config/api';
 
 const Header: React.FC = () => {
+  const navigate = useNavigate();
   const [showInstagramAuth, setShowInstagramAuth] = useState(false);
   const [isInstagramConnected, setIsInstagramConnected] = useState(false);
   const [instagramAccount, setInstagramAccount] = useState<any>(null);
+  const [user, setUser] = useState(authService.getUser());
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Check Instagram connection status
   useEffect(() => {
@@ -27,6 +32,11 @@ const Header: React.FC = () => {
 
     checkInstagramStatus();
   }, []);
+
+  const handleLogout = () => {
+    authService.logout();
+    navigate('/login');
+  };
 
   return (
     <header className="bg-white border-b border-secondary-200 px-6 py-4">
@@ -72,12 +82,44 @@ const Header: React.FC = () => {
 
           {/* User Menu */}
           <div className="relative">
-            <button className="flex items-center space-x-2 p-2 text-secondary-600 hover:text-secondary-900 hover:bg-secondary-50 rounded-md transition-colors">
+            <button 
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center space-x-2 p-2 text-secondary-600 hover:text-secondary-900 hover:bg-secondary-50 rounded-md transition-colors"
+            >
               <div className="h-8 w-8 bg-primary-100 rounded-full flex items-center justify-center">
                 <User className="h-4 w-4 text-primary-600" />
               </div>
-              <span className="text-sm font-medium">John Doe</span>
+              <span className="text-sm font-medium">
+                {user?.username || 'User'}
+              </span>
             </button>
+
+            {/* User Dropdown Menu */}
+            {showUserMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-50">
+                <div className="py-1">
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+                    <p className="text-xs text-gray-500">
+                      {user?.permissions?.includes('admin') ? 'Administrator' : 'User'}
+                    </p>
+                  </div>
+                  
+                  <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </button>
+                  
+                  <button 
+                    onClick={handleLogout}
+                    className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
