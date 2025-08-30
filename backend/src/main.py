@@ -86,7 +86,7 @@ async def _shutdown_scheduler():
 # CORS middleware
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"],
+	allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", "https://no-code-sutra.vercel.app"],
 	allow_credentials=True,
 	allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 	allow_headers=["*"],
