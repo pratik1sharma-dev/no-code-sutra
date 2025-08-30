@@ -48,6 +48,9 @@ const App: React.FC = () => {
             <Route path="/login" element={<Login />} />
             <Route path="/auth/instagram/callback" element={<InstagramAuthCallback />} />
             <Route path="/auth/canva/callback" element={<CanvaAuthCallback />} />
+            
+            {/* Catch-all route for 404s - redirect to landing page */}
+            <Route path="*" element={<LandingPage />} />
           </Routes>
         </Suspense>
       </BrowserRouter>
