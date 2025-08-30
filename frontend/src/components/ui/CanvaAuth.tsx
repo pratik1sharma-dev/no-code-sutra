@@ -81,7 +81,7 @@ const CanvaAuth: React.FC<CanvaAuthProps> = ({ onTokenReceived, onAuthError }) =
   const handleDisconnect = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${config.api.baseUrl}${config.api.endpoints.canvaCallback}?code=${code}&state=${state}`, {
+      const response = await fetch(`${config.api.baseUrl}/api/auth/canva/credentials/default_user`, {
         method: 'DELETE',
       });
 

@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Trash2, Edit, Plus, Search, Filter } from 'lucide-react';
-import config from '../config/api';
-import { useNavigate } from 'react-router-dom';
 import { 
+  Play, 
+  Trash2, 
+  Edit, 
   Plus, 
   Search, 
-  Filter, 
-  Play, 
-  Edit, 
-  Trash2, 
+  Filter,
   Clock,
   MoreVertical,
   Calendar,
   Activity,
   Loader2
 } from 'lucide-react';
+import config from '../config/api';
+import { useNavigate } from 'react-router-dom';
 
 interface Workflow {
   id: string;

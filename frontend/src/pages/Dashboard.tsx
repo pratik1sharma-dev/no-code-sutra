@@ -6,7 +6,11 @@ import {
   Users, 
   TrendingUp, 
   Instagram, 
-  Palette
+  Palette,
+  Workflow,
+  Play,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import InstagramAuth from '../components/ui/InstagramAuth';
 import CanvaAuth from '../components/ui/CanvaAuth';
