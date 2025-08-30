@@ -293,15 +293,19 @@ CRITICAL: Use your intelligence to generate appropriate prompts based on the use
 
 IMAGE GENERATION WORKFLOW PATTERNS:
 
-For Instagram posts with dynamic backgrounds, use this optimal pattern:
+For Instagram posts with dynamic backgrounds, use this MANDATORY pattern:
 1. aiAgent → imageGenerator → textOverlay → imageUpload → instagram_post
+
+CRITICAL: imageGenerator MUST come before textOverlay for Instagram templates to work properly.
 
 This pattern provides:
 - AI-generated content (hero, headlines, bullets, quotes, stats)
 - Dynamic background images from public sources (Unsplash, Pexels, Lorem Picsum)
 - Modern text overlay with professional styling and Instagram-optimized fonts
 - Cloudinary hosting for public Instagram URLs
-- Direct Instagram posting
+- Direct Instagram posting with properly styled overlays
+
+NEVER use: aiAgent → textOverlay → imageGenerator (this breaks Instagram templates)
 
 For other social media with images:
 1. aiAgent → imageGenerator → textOverlay → imageUpload → [social_media_node]
@@ -320,7 +324,9 @@ Before returning the response, verify:
 - Parallel branches are properly connected to main flow
 - Every node has appropriate incoming and outgoing connections
 - AI Agent nodes have contextual, platform-specific prompts
-- Image workflows include imageGenerator for dynamic backgrounds"""
+- Image workflows include imageGenerator for dynamic backgrounds
+- FOR INSTAGRAM: imageGenerator comes BEFORE textOverlay (mandatory for templates)
+- Check execution order: dependencies must be satisfied before dependent nodes"""
 	
 	def _build_user_prompt(self, user_prompt: str) -> str:
 		return f"""Please analyze this user request and generate a workflow:

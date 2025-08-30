@@ -41,7 +41,7 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                 else:
                     content = post
                     
-            # Handle image URLs - prioritize text overlay images
+            # Handle image URLs - prioritize text overlay images, fallback to regenerating overlay
             if not image_url:
                 # Check for text overlay image first (this is the final image with text)
                 if 'image_data_url' in state and state['image_data_url']:
@@ -55,6 +55,7 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                 elif 'background_image_url' in state:
                     image_url = state['background_image_url']
                     print(f"🔍 Using background image: {image_url[:50]}...")
+                    
                     
             print(f"🔍 Content type: {type(content)}")
             
