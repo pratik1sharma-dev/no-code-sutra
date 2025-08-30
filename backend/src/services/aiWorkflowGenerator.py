@@ -205,10 +205,11 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - Bullet points (1-2 items, max 20 chars each): Key insights (optional)
    - Caption (max 200 chars): Engaging caption for Instagram (goes in caption field)
    - Hashtags (5-8): Relevant, trending hashtags (goes in caption field)
+   - Recommended template: Choose from minimal|bold|gradient|split_screen|quote
    
    Content must be VISUAL, ENGAGING, and MOBILE-OPTIMIZED for Instagram. Use modern, professional tone.
    Focus on ONE main message with ONE supporting element. Keep it simple and impactful.
-   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"bullets\": [...], \"caption\": \"...\", \"hashtags\": [...]}}"
+   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"bullets\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"minimal\"}}"
 
    **INSTAGRAM CAROUSEL:**
    "Create Instagram carousel content (2-5 slides). Generate:
@@ -221,10 +222,11 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
      - image_search_terms (array): 3 relevant image search terms for background image
    - Caption (max 200 chars): Engaging caption
    - Hashtags (5-8): Relevant hashtags
+   - Recommended template: Choose from minimal|bold|gradient|split_screen|quote
    
    Each slide should be self-contained but connected to the main theme.
    For image_search_terms, provide 3 visual, descriptive terms that would find good background images.
-   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"slides\": [...], \"caption\": \"...\", \"hashtags\": [...]}}"
+   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"slides\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"split_screen\"}}"
 
    **INSTAGRAM VIDEO REEL:**
    "Create Instagram video reel content. Generate:
@@ -234,9 +236,10 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - Key points (3-5 items, max 30 chars each): Main talking points
    - Caption (max 200 chars): Engaging caption
    - Hashtags (5-8): Relevant hashtags
+   - Recommended template: Choose from minimal|bold|gradient|split_screen|quote
    
    Content should be engaging and suitable for video format.
-   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"script\": \"...\", \"key_points\": [...], \"caption\": \"...\", \"hashtags\": [...]}}"
+   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"script\": \"...\", \"key_points\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"bold\"}}"
 
    **INSTAGRAM STORY:**
    "Create Instagram story content. Generate:
@@ -245,11 +248,20 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - Call to action (max 30 chars): Action prompt
    - Caption (max 100 chars): Story caption
    - Hashtags (3-5): Relevant hashtags
+   - Recommended template: Choose from minimal|bold|gradient|split_screen|quote
    
    Content should be time-sensitive and engaging for stories.
-   Return JSON: {{\"headline\": \"...\", \"content\": \"...\", \"call_to_action\": \"...\", \"caption\": \"...\", \"hashtags\": [...]}}"
+   Return JSON: {{\"headline\": \"...\", \"content\": \"...\", \"call_to_action\": \"...\", \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"minimal\"}}"
 
-4. CONFIGURATION STRUCTURE:
+4. TEMPLATE RECOMMENDATION GUIDELINES:
+   Choose the appropriate template based on content type:
+   - "quote": For inspirational quotes, testimonials, wisdom, love content
+   - "minimal": For business, professional, corporate, clean content
+   - "bold": For motivational, promotional, urgent messages, announcements
+   - "gradient": For tech, lifestyle, creative, modern content
+   - "split_screen": For educational, tutorials, features, step-by-step content
+
+5. CONFIGURATION STRUCTURE:
    For AI Agent nodes, include in config:
    {{
      "prompt": "Your dynamically generated contextual prompt here",
@@ -258,13 +270,13 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
      "max_tokens": 1000
    }}
 
-5. WORKFLOW CHAIN AWARENESS:
+6. WORKFLOW CHAIN AWARENESS:
    - If AI Agent → textOverlay: Generate content suitable for modern image overlay (hero, headlines, bullets, quotes, stats)
    - If AI Agent → instagram_post: Generate Instagram-optimized content with hashtags
    - If AI Agent → email: Generate professional email content
    - If AI Agent → slack: Generate concise, team-friendly messages
 
-6. DATA MAPPING FOR EDGES:
+7. DATA MAPPING FOR EDGES:
    When creating edges between nodes, include data_mapping to specify how data flows:
    
    For AI Agent → Text Overlay:
