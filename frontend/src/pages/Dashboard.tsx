@@ -33,6 +33,8 @@ const Dashboard: React.FC = () => {
         }
       } catch (error) {
         console.error('Failed to check Instagram status:', error);
+        // Don't block UI on API errors
+        setIsInstagramConnected(false);
       }
     };
 
@@ -50,6 +52,8 @@ const Dashboard: React.FC = () => {
         }
       } catch (error) {
         console.error('Failed to check Canva status:', error);
+        // Don't block UI on API errors
+        setIsCanvaConnected(false);
       }
     };
 

@@ -32,6 +32,7 @@ const App: React.FC = () => {
             
             {/* Auth routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/auth/instagram/callback" element={<InstagramAuthCallback />} />
             <Route path="/auth/canva/callback" element={<CanvaAuthCallback />} />
           </Routes>
