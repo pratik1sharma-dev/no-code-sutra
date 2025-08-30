@@ -63,12 +63,29 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                 caption = content.get('caption', '')
                 hashtags = content.get('hashtags', [])
                 summary = content.get('summary', '')
+                title = content.get('title', '')
+                points = content.get('points', [])
+                
+                # Handle structured blog data format
+                if title and points and not caption:
+                    # Create Instagram caption from blog title and points
+                    caption = f"{title}\n\n"
+                    for i, point_data in enumerate(points[:3], 1):  # Limit to first 3 points
+                        if isinstance(point_data, dict):
+                            point_text = point_data.get('point', '')
+                        else:
+                            point_text = str(point_data)
+                        if point_text:
+                            caption += f"{i}. {point_text[:100]}{'...' if len(point_text) > 100 else ''}\n\n"
+                    
+                    # Add relevant hashtags
+                    caption += "#AI #Technology #Innovation #TechTrends #ArtificialIntelligence"
                 
                 # Use summary if no caption
-                if not caption and summary:
+                elif not caption and summary:
                     caption = summary[:200] + "..." if len(summary) > 200 else summary
                 
-                if hashtags:
+                if hashtags and not title:  # Don't add hashtags if we already added them above
                     hashtag_text = ' '.join([f"#{tag.replace('#', '')}" for tag in hashtags])
                     content = f"{caption}\n\n{hashtag_text}"
                 else:
