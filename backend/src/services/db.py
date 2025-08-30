@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # Use Postgres only
 DATABASE_URL = os.getenv(
 	"DATABASE_URL",
-	"postgresql+psycopg://postgres:postgres@localhost:5432/nocodesutra",
+	"postgresql+psycopg2://postgres:postgres@localhost:5432/nocodesutra",
 )
 
 # SQLAlchemy engine and session (Postgres)
