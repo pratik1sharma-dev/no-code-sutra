@@ -8,9 +8,23 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+import logging
+
+# Security imports
+from middleware.auth import get_current_user, optional_auth, require_permissions, require_api_key, get_user_identifier
+from middleware.rate_limiter import apply_rate_limit, rate_limiter
+from middleware.security import SecurityHeadersMiddleware, InputValidationMiddleware, RequestLoggingMiddleware
+from config.security import security_config
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, security_config.LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Import LangGraph services
 from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
@@ -56,7 +70,9 @@ class SaveWorkflowRequest(BaseModel):
 app = FastAPI(
 	title="No Code Sutra API",
 	description="Agentic AI Workflow Platform powered by LangGraph",
-	version="1.0.0"
+	version="1.0.0",
+	docs_url="/docs" if not security_config.is_production() else None,
+	redoc_url="/redoc" if not security_config.is_production() else None
 )
 
 # Ensure DB is initialized at startup
@@ -83,14 +99,18 @@ async def _shutdown_scheduler():
 	except Exception as e:
 		print(f"❌ Scheduler shutdown failed: {e}")
 
-# CORS middleware
+# Security middleware (order matters!)
+if security_config.SECURITY_LOG_ENABLED:
+	app.add_middleware(RequestLoggingMiddleware)
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(InputValidationMiddleware)
+
+# CORS middleware with secure configuration
+cors_config = security_config.get_cors_config()
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", "https://no-code-sutra.vercel.app"],
-	allow_credentials=True,
-	allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-	allow_headers=["*"],
-	expose_headers=["*"],
+	**cors_config
 )
 
 # Initialize services
@@ -108,11 +128,15 @@ async def health_check():
 	return {"status": "healthy", "service": "No Code Sutra API", "engine": "LangGraph"}
 
 @app.post("/api/workflows/generate", response_model=WorkflowResponse)
-async def generate_workflow(request: WorkflowRequest):
+async def generate_workflow(request: WorkflowRequest, http_request: Request, user: Optional[dict] = Depends(optional_auth)):
 	"""
 	Generate an agentic workflow from natural language description
 	"""
 	try:
+		# Apply rate limiting
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, user)
+			await apply_rate_limit(http_request, identifier, "workflow", bool(user))
 		# Convert WorkflowRequest to dictionary
 		request_dict = {
 			"prompt": request.prompt,
@@ -253,11 +277,15 @@ async def get_available_executors():
 	}
 
 @app.post("/api/nodes/execute")
-async def execute_node(request: NodeExecutionRequest):
+async def execute_node(request: NodeExecutionRequest, http_request: Request, user: Optional[dict] = Depends(optional_auth)):
 	"""
 	Execute a single node using LangGraph
 	"""
 	try:
+		# Apply rate limiting
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, user)
+			await apply_rate_limit(http_request, identifier, "workflow", bool(user))
 		import time
 		start_time = time.time()
 		
@@ -280,7 +308,7 @@ async def execute_node(request: NodeExecutionRequest):
 		raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/workflows/save")
-async def save_workflow(req: SaveWorkflowRequest):
+async def save_workflow(req: SaveWorkflowRequest, http_request: Request, user: dict = Depends(get_current_user)):
 	try:
 		db = SessionLocal()
 		wf = WorkflowModel(
@@ -318,11 +346,15 @@ async def save_execution(result: Dict[str, Any]):
 
 
 @app.get("/api/workflows")
-async def list_workflows(user_id: Optional[str] = None, limit: int = 50, offset: int = 0):
+async def list_workflows(http_request: Request, user_id: Optional[str] = None, limit: int = 50, offset: int = 0, current_user: Optional[dict] = Depends(optional_auth)):
 	"""
 	List saved workflows with optional user filtering
 	"""
 	try:
+		# Apply rate limiting
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, current_user)
+			await apply_rate_limit(http_request, identifier, "default", bool(current_user))
 		db = SessionLocal()
 		query = db.query(WorkflowModel)
 		
@@ -357,7 +389,7 @@ async def list_workflows(user_id: Optional[str] = None, limit: int = 50, offset:
 
 
 @app.get("/api/workflows/{workflow_id}")
-async def get_workflow(workflow_id: str):
+async def get_workflow(workflow_id: str, http_request: Request, user: Optional[dict] = Depends(optional_auth)):
 	"""
 	Get a specific workflow by ID
 	"""
@@ -385,7 +417,7 @@ async def get_workflow(workflow_id: str):
 
 
 @app.delete("/api/workflows/{workflow_id}")
-async def delete_workflow(workflow_id: str):
+async def delete_workflow(workflow_id: str, http_request: Request, user: dict = Depends(get_current_user)):
 	"""
 	Delete a workflow by ID
 	"""
@@ -409,7 +441,7 @@ async def delete_workflow(workflow_id: str):
 
 
 @app.get("/api/workflows/{workflow_id}/executions")
-async def get_workflow_executions(workflow_id: str, limit: int = 20, offset: int = 0):
+async def get_workflow_executions(workflow_id: str, http_request: Request, limit: int = 20, offset: int = 0, user: Optional[dict] = Depends(optional_auth)):
 	"""
 	Get execution history for a specific workflow
 	"""
@@ -464,11 +496,15 @@ async def get_node_registry():
 		raise HTTPException(status_code=500, detail=f"Error getting node registry: {str(e)}")
 
 @app.post("/api/workflows/execute")
-async def execute_workflow(request: WorkflowExecutionRequest):
+async def execute_workflow(request: WorkflowExecutionRequest, http_request: Request, user: Optional[dict] = Depends(optional_auth)):
 	"""
 	Execute a workflow using LangGraph
 	"""
 	try:
+		# Apply rate limiting
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, user)
+			await apply_rate_limit(http_request, identifier, "workflow", bool(user))
 		import time
 		start_time = time.time()
 		print(f"Executing workflow with {len(request.workflow.get('nodes', []))} nodes")
@@ -518,58 +554,66 @@ async def execute_workflow(request: WorkflowExecutionRequest):
 
 # Instagram OAuth endpoints
 @app.get("/api/auth/instagram/url")
-async def get_instagram_auth_url():
-    """Get Instagram authorization URL for OAuth flow"""
-    try:
-        auth_url = instagram_oauth_service.get_authorization_url()
-        return {
-            "auth_url": auth_url,
-            "message": "Visit this URL to authorize Instagram access"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate auth URL: {str(e)}")
+async def get_instagram_auth_url(http_request: Request, user: Optional[dict] = Depends(optional_auth)):
+	"""Get Instagram authorization URL for OAuth flow"""
+	try:
+		# Apply rate limiting for auth endpoints
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, user)
+			await apply_rate_limit(http_request, identifier, "auth", bool(user))
+		auth_url = instagram_oauth_service.get_authorization_url()
+		return {
+			"auth_url": auth_url,
+			"message": "Visit this URL to authorize Instagram access"
+		}
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Failed to generate auth URL: {str(e)}")
 
 @app.get("/api/auth/instagram/callback")
-async def instagram_oauth_callback(code: str, state: Optional[str] = None, user_id: Optional[str] = None):
-    """Handle Instagram OAuth callback and complete the flow"""
-    try:
-        print(f"🔍 OAuth Callback - Code: {code[:20]}..., State: {state}, User ID: {user_id}")
-        
-        if not code:
-            print("❌ No authorization code provided")
-            raise HTTPException(status_code=400, detail="Authorization code is required")
-        
-        # Use a default user_id if not provided (for demo purposes)
-        user_id = user_id or "default_user"
-        print(f"🔍 Using user_id: {user_id}")
-        
-        # Complete the OAuth flow
-        print("🔍 Starting OAuth flow completion...")
-        token_data = instagram_oauth_service.complete_oauth_flow(code)
-        print(f"🔍 OAuth flow completed successfully. Token type: {token_data.get('token_type')}")
-        
-        # Automatically save credentials to database
-        print("🔍 Attempting to save credentials to database...")
-        try:
-            saved = instagram_credentials_service.save_credentials(user_id, token_data)
-            print(f"🔍 Credentials saved: {saved}")
-        except Exception as save_error:
-            print(f"❌ Error saving credentials: {save_error}")
-            import traceback
-            traceback.print_exc()
-            # Continue even if saving fails
-            saved = False
-        
-        # Redirect to frontend with success message
-        from fastapi.responses import RedirectResponse
-        
-        success_url = f"http://localhost:5173/auth/instagram/callback?success=true&user_id={user_id}"
-        return RedirectResponse(url=success_url, status_code=302)
-    except Exception as e:
-        print(f"❌ OAuth callback error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"OAuth flow failed: {str(e)}")
+async def instagram_oauth_callback(http_request: Request, code: str, state: Optional[str] = None, user_id: Optional[str] = None):
+	"""Handle Instagram OAuth callback and complete the flow"""
+	try:
+		# Apply rate limiting for auth endpoints
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, None)
+			await apply_rate_limit(http_request, identifier, "auth", False)
+		print(f"🔍 OAuth Callback - Code: {code[:20]}..., State: {state}, User ID: {user_id}")
+		
+		if not code:
+			print("❌ No authorization code provided")
+			raise HTTPException(status_code=400, detail="Authorization code is required")
+		
+		# Use a default user_id if not provided (for demo purposes)
+		user_id = user_id or "default_user"
+		print(f"🔍 Using user_id: {user_id}")
+		
+		# Complete the OAuth flow
+		print("🔍 Starting OAuth flow completion...")
+		token_data = instagram_oauth_service.complete_oauth_flow(code)
+		print(f"🔍 OAuth flow completed successfully. Token type: {token_data.get('token_type')}")
+		
+		# Automatically save credentials to database
+		print("🔍 Attempting to save credentials to database...")
+		try:
+			saved = instagram_credentials_service.save_credentials(user_id, token_data)
+			print(f"🔍 Credentials saved: {saved}")
+		except Exception as save_error:
+			print(f"❌ Error saving credentials: {save_error}")
+			import traceback
+			traceback.print_exc()
+			# Continue even if saving fails
+			saved = False
+		
+		# Redirect to frontend with success message
+		from fastapi.responses import RedirectResponse
+		
+		success_url = f"http://localhost:5173/auth/instagram/callback?success=true&user_id={user_id}"
+		return RedirectResponse(url=success_url, status_code=302)
+	except Exception as e:
+		print(f"❌ OAuth callback error: {e}")
+		import traceback
+		traceback.print_exc()
+		raise HTTPException(status_code=500, detail=f"OAuth flow failed: {str(e)}")
 
 @app.post("/api/auth/instagram/validate")
 async def validate_instagram_token(request: Request):
@@ -897,12 +941,14 @@ async def download_canva_template(template_id: str, format: str = "png", user_id
     except Exception as e:
         		raise HTTPException(status_code=500, detail=f"Failed to download template: {str(e)}")
 
-# Include scheduler routes
+# Include additional routes
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from api.scheduler_routes import router as scheduler_router
+from api.auth_routes import router as auth_router
 app.include_router(scheduler_router)
+app.include_router(auth_router)
 
 if __name__ == "__main__":
 	import uvicorn

@@ -40,3 +40,8 @@ requests==2.31.0
 
 # Environment & Configuration
 python-dotenv==1.0.0
+
+# Security Dependencies
+PyJWT==2.8.0
+cryptography==41.0.7
+passlib[bcrypt]==1.7.4
