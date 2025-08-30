@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import InstagramAuth from '../ui/InstagramAuth';
 import { authService } from '../../services/auth';
 import config from '../../config/api';
+import { config as envConfig } from '../../config/environment';
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
@@ -158,7 +159,7 @@ const Header: React.FC = () => {
                         <button
                           onClick={() => {
                             // This will open the Instagram auth flow for reconnection
-                            window.open('http://localhost:8000/api/auth/instagram/url', '_blank', 'width=600,height=700');
+                            window.open(`${envConfig.apiBaseUrl}/api/auth/instagram/url`, '_blank', 'width=600,height=700');
                           }}
                           className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                         >
@@ -169,7 +170,7 @@ const Header: React.FC = () => {
                       <button
                         onClick={() => {
                           // This will open the Instagram auth flow
-                          window.open('http://localhost:8000/api/auth/instagram/url', '_blank', 'width=600,height=700');
+                          window.open(`${envConfig.apiBaseUrl}/api/auth/instagram/url`, '_blank', 'width=600,height=700');
                         }}
                         className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                       >
