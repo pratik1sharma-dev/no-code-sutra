@@ -29,9 +29,17 @@ AVAILABLE INSTAGRAM TEMPLATES:
 - "split_screen": Organized layout with content on one side (best for: educational, tutorials, features)
 - "quote": Elegant quote-focused design (best for: inspirational quotes, testimonials, wisdom)
 
-You MUST follow the instructions exactly and return ONLY valid JSON without any additional text, explanations, or formatting.
+CRITICAL: If this content is for Instagram, you MUST return this exact JSON structure:
+{
+  "headline": "Main message (under 40 characters)",
+  "subhead": "Supporting description (optional)",
+  "bullets": ["Point 1", "Point 2", "Point 3"] (optional),
+  "caption": "Instagram caption with hashtags",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+  "recommended_template": "quote|minimal|bold|gradient|split_screen"
+}
 
-You MAY optionally include a "recommended_template" field if you think a specific template would work particularly well for this content."""
+You MUST follow the instructions exactly and return ONLY valid JSON without any additional text, explanations, or formatting."""
             user_prompt = prompt  # Use the workflow-generated contextual prompt
         else:
             if task == 'research':
