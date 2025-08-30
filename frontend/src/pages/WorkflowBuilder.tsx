@@ -240,9 +240,12 @@ const WorkflowBuilder: React.FC = () => {
     currentWorkflow?.edges || []
   );
 
-  // Sync React Flow state with Zustand store when nodes/edges change
+  // Track if workflow has been initially loaded to prevent overwriting user edits
+  const [isWorkflowLoaded, setIsWorkflowLoaded] = useState(false);
+
+  // Sync React Flow state with Zustand store ONLY on initial load
   useEffect(() => {
-    if (currentWorkflow) {
+    if (currentWorkflow && !isWorkflowLoaded) {
       const reactFlowNodes = currentWorkflow.nodes.map((node: any) => ({
         id: node.id,
         type: node.type,
@@ -264,8 +267,9 @@ const WorkflowBuilder: React.FC = () => {
         targetHandle: null
       }));
       setEdges(reactFlowEdges);
+      setIsWorkflowLoaded(true);
     }
-  }, [currentWorkflow?.id, currentWorkflow?.nodes, currentWorkflow?.edges, setNodes, setEdges]);
+  }, [currentWorkflow?.id, isWorkflowLoaded, setNodes, setEdges]);
 
   const nodeTypes: NodeTypes = useMemo(() => {
     const types: NodeTypes = {};
