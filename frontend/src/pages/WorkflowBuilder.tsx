@@ -15,11 +15,12 @@ import 'reactflow/dist/style.css';
 import { DndContext, DragOverlay, useDroppable } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { v4 as uuidv4 } from 'uuid';
-import { Play, Save, Settings, Sparkles, ZoomIn, ZoomOut, Maximize2, Grid, LayoutGrid, Clock } from 'lucide-react';
+import { Play, Save, Settings, Sparkles, ZoomIn, ZoomOut, Maximize2, Grid, LayoutGrid, Clock, History } from 'lucide-react';
 import { useWorkflowStore } from '../stores/workflowStore';
 import { useNodeRegistry, NODE_TYPES } from '../components/workflow/nodes/NodeRegistry';
 import { NodePalette } from '../components/workflow/NodePalette';
 import ScheduleModal from '../components/ui/ScheduleModal';
+import WorkflowExecutionHistory from '../components/ui/WorkflowExecutionHistory';
 import type { WorkflowNodeData, WorkflowNode, WorkflowEdge, NodeType } from '../types/workflow';
 import type { ScheduleConfig } from '../types/scheduler';
 import { apiService } from '../services/api';
@@ -158,6 +159,7 @@ const WorkflowBuilder: React.FC = () => {
   const [searchParams] = useSearchParams(); // Added for generated workflow import
   const [isNodePaletteCollapsed, setIsNodePaletteCollapsed] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'editor' | 'history'>('editor');
   const { 
     currentWorkflow, 
     setCurrentWorkflow, 
@@ -173,35 +175,135 @@ const WorkflowBuilder: React.FC = () => {
   
   const { getNodeComponent } = useNodeRegistry();
 
+  // Load workflow data from API when editing an existing workflow
+  const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // Initialize workflow if not exists or with generated data
   useEffect(() => {
     if (!currentWorkflow) {
-      const generatedWorkflowData = searchParams.get('generated');
-      if (generatedWorkflowData) {
-        try {
-          const workflowData = JSON.parse(decodeURIComponent(generatedWorkflowData));
-          console.log('🔍 Raw workflow data:', workflowData);
-          
-          // Handle both nested and flat workflow structures
-          const workflow = workflowData.workflow || workflowData;
-          console.log('🔍 Processed workflow:', workflow);
-          console.log('🔍 Workflow nodes:', workflow.nodes);
-          console.log('🔍 Workflow edges:', workflow.edges);
-          
-          setCurrentWorkflow({
-            ...workflow,
-            id: id || uuidv4(),
-            status: 'draft' as const,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            executionCount: 0,
-            tags: []
+      // If we have an ID in the URL, try to load the workflow from API
+      if (id) {
+        console.log('🔍 Loading workflow from API with ID:', id);
+        setIsLoadingWorkflow(true);
+        setLoadError(null);
+        
+        // Fetch workflow data from API - try getWorkflow first
+        apiService.getWorkflow(id)
+          .then(response => {
+            console.log('🔍 Loaded workflow data:', response);
+            
+            if (response && response.data) {
+              // Handle direct workflow response
+              setCurrentWorkflow({
+                id: response.id,
+                name: response.name,
+                description: response.description || '',
+                nodes: response.data.nodes || [],
+                edges: response.data.edges || [],
+                status: response.status || 'draft' as const,
+                createdAt: new Date(response.created_at),
+                updatedAt: new Date(response.updated_at),
+                executionCount: response.execution_count || 0,
+                tags: response.tags || []
+              });
+            } else {
+              throw new Error('Invalid workflow data format');
+            }
+          })
+          .catch(error => {
+            console.error('❌ Failed to load workflow with getWorkflow:', error);
+            console.log('🔄 Trying fallback method: getWorkflowVersions');
+            
+            // Try fallback to workflow versions API
+            return apiService.getWorkflowVersions(id, true);
+          })
+          .then(response => {
+            if (!response) return; // Skip if this is from the first then block
+            
+            console.log('🔍 Loaded workflow versions data:', response);
+            // Find the current version
+            const currentVersion = response.versions.find(v => v.is_current);
+            if (currentVersion && currentVersion.data) {
+              setCurrentWorkflow({
+                id: currentVersion.id,
+                name: currentVersion.name,
+                description: currentVersion.description || '',
+                nodes: currentVersion.data.nodes || [],
+                edges: currentVersion.data.edges || [],
+                status: 'draft' as const,
+                createdAt: new Date(currentVersion.created_at),
+                updatedAt: new Date(currentVersion.updated_at),
+                executionCount: 0,
+                tags: []
+              });
+            } else {
+              throw new Error('No current version found for workflow');
+            }
+          })
+          .catch(error => {
+            console.error('❌ All workflow loading methods failed:', error);
+            setLoadError('Failed to load workflow. Please try again.');
+            // Create a new workflow as fallback
+            setCurrentWorkflow({
+              id: uuidv4(),
+              name: 'New Workflow',
+              description: '',
+              nodes: [],
+              edges: [],
+              status: 'draft' as const,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              executionCount: 0,
+              tags: []
+            });
+          })
+          .finally(() => {
+            setIsLoadingWorkflow(false);
           });
-        } catch (error) {
-          console.error('❌ Failed to parse generated workflow:', error);
-          console.error('❌ Raw data:', generatedWorkflowData);
+      } else {
+        // Handle generated workflow data from URL params
+        const generatedParam = searchParams.get('generated');
+        if (generatedParam) {
+          try {
+            const workflowData = JSON.parse(decodeURIComponent(generatedParam));
+            console.log('🔍 Raw workflow data:', workflowData);
+            
+            // Handle both nested and flat workflow structures
+            const workflow = workflowData.workflow || workflowData;
+            console.log('🔍 Processed workflow:', workflow);
+            console.log('🔍 Workflow nodes:', workflow.nodes);
+            console.log('🔍 Workflow edges:', workflow.edges);
+            
+            setCurrentWorkflow({
+              ...workflow,
+              id: uuidv4(),
+              status: 'draft' as const,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              executionCount: 0,
+              tags: []
+            });
+          } catch (error) {
+            console.error('❌ Failed to parse generated workflow:', error);
+            console.error('❌ Raw data:', generatedParam);
+            setCurrentWorkflow({
+              id: uuidv4(),
+              name: 'New Workflow',
+              description: '',
+              nodes: [],
+              edges: [],
+              status: 'draft' as const,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              executionCount: 0,
+              tags: []
+            });
+          }
+        } else {
+          // Create a new empty workflow
           setCurrentWorkflow({
-            id: id || uuidv4(),
+            id: uuidv4(),
             name: 'New Workflow',
             description: '',
             nodes: [],
@@ -213,20 +315,6 @@ const WorkflowBuilder: React.FC = () => {
             tags: []
           });
         }
-      } else {
-        const newWorkflow = {
-          id: id || uuidv4(),
-          name: 'New Workflow',
-          description: '',
-          nodes: [],
-          edges: [],
-          status: 'draft' as const,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          executionCount: 0,
-          tags: []
-        };
-        setCurrentWorkflow(newWorkflow);
       }
     }
   }, [currentWorkflow, id, setCurrentWorkflow, searchParams]);
@@ -418,6 +506,36 @@ const WorkflowBuilder: React.FC = () => {
     if (nextId !== null) setSelectedNode(nextId);
   }, [setSelectedNode]);
 
+  // Show loading indicator when fetching workflow data
+  if (isLoadingWorkflow) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 h-12 w-12 mb-4"></div>
+          <p className="text-gray-600">Loading workflow...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error message if loading failed
+  if (loadError) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="text-center bg-red-50 p-6 rounded-lg border border-red-200 max-w-md">
+          <div className="text-red-600 text-xl mb-2">Error Loading Workflow</div>
+          <p className="text-gray-700 mb-4">{loadError}</p>
+          <button 
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            onClick={() => window.location.reload()}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DndContext onDragEnd={onDragEnd}>
       <div className="flex h-full w-full">
@@ -480,37 +598,79 @@ const WorkflowBuilder: React.FC = () => {
             </div>
           </div>
           
-          {/* Canvas + Inspector */}
-          <div className="flex-1 min-w-0 flex">
-            <div className="relative flex-1">
-              <DroppableReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={handleNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onNodeClick={handleNodeClick}
-                onSelectionChange={handleSelectionChange}
-                nodeTypes={nodeTypes}
-                fitView
-                snapToGrid
-                snapGrid={[10, 10]}
-                attributionPosition="bottom-left"
+          {/* Tabs */}
+          <div className="border-b border-gray-200">
+            <div className="flex">
+              <button
+                className={`px-4 py-2 text-sm font-medium ${activeTab === 'editor' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setActiveTab('editor')}
               >
-                <Controls />
-                {showGrid && <Background gap={20} color="#f0f0f0" />}
-                <MiniMap />
-                <CanvasControls 
-                  showGrid={showGrid} 
-                  onToggleGrid={() => setShowGrid(v => !v)} 
-                  onArrangeNodes={arrangeNodesInGrid}
-                />
-              </DroppableReactFlow>
+                <div className="flex items-center">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Workflow Editor
+                </div>
+              </button>
+              <button
+                className={`px-4 py-2 text-sm font-medium ${activeTab === 'history' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setActiveTab('history')}
+                disabled={!currentWorkflow?.id}
+                title={!currentWorkflow?.id ? 'Save workflow first to view execution history' : 'View execution history'}
+              >
+                <div className="flex items-center">
+                  <History className="w-4 h-4 mr-2" />
+                  Execution History
+                </div>
+              </button>
             </div>
-
-            {/* Inspector */}
-            <InspectorPanel />
           </div>
+          
+          {activeTab === 'editor' ? (
+            /* Canvas + Inspector */
+            <div className="flex-1 min-w-0 flex">
+              <div className="relative flex-1">
+                <DroppableReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={handleNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={onConnect}
+                  onNodeClick={handleNodeClick}
+                  onSelectionChange={handleSelectionChange}
+                  nodeTypes={nodeTypes}
+                  fitView
+                  snapToGrid
+                  snapGrid={[10, 10]}
+                  attributionPosition="bottom-left"
+                >
+                  <Controls />
+                  {showGrid && <Background gap={20} color="#f0f0f0" />}
+                  <MiniMap />
+                  <CanvasControls 
+                    showGrid={showGrid} 
+                    onToggleGrid={() => setShowGrid(v => !v)} 
+                    onArrangeNodes={arrangeNodesInGrid}
+                  />
+                </DroppableReactFlow>
+              </div>
+
+              {/* Inspector */}
+              <InspectorPanel />
+            </div>
+          ) : (
+            /* Execution History */
+            <div className="flex-1 p-6 overflow-auto bg-gray-50">
+              {currentWorkflow?.id ? (
+                <WorkflowExecutionHistory 
+                  workflowId={currentWorkflow.id} 
+                  onRefresh={() => {}} 
+                />
+              ) : (
+                <div className="text-center p-8 text-gray-500">
+                  Please save the workflow first to view execution history.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       
