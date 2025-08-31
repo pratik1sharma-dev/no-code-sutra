@@ -647,7 +647,7 @@ class QuoteTemplate(BaseTemplate):
         # Author/source (use subhead if different from headline)
         if 'subhead' in content and content['subhead'] != quote_text:
             author_font = self.get_font('regular', 24)
-            author = f"— {content['subhead']}"
+            author = f"- {content['subhead']}"
             
             bbox = draw.textbbox((0, 0), author, font=author_font)
             text_width = bbox[2] - bbox[0]
