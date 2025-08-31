@@ -453,6 +453,8 @@ async def execute_workflow(request: WorkflowExecutionRequest, http_request: Requ
 				"execution_id": result.get("execution_id"),
 				"status": result.get("status"),
 				"error": result.get("error"),
+				"failed_nodes": result.get("failed_nodes", []),
+				"error_details": result.get("error_details", []),
 				"execution_time": execution_time,
 				"timestamp": datetime.utcnow().isoformat()
 			}
