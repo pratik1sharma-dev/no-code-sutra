@@ -1,20 +1,32 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CheckCircle, Clock, DollarSign, Settings, ArrowRight, Zap } from 'lucide-react';
+import WorkflowVersionSelector from './WorkflowVersionSelector';
+import WorkflowSharingControls from './WorkflowSharingControls';
+import { WorkflowVersion } from '../../services/api';
 
 interface WorkflowPreviewProps {
   workflow: any;
   onCustomize: () => void;
   onRegenerate?: () => void;
+  onVersionChange?: (version: WorkflowVersion) => void;
+  onSharingChange?: (isPublic: boolean) => void;
+  showVersioning?: boolean;
+  showSharing?: boolean;
 }
 
 const WorkflowPreview: React.FC<WorkflowPreviewProps> = ({
   workflow,
   onCustomize,
-  onRegenerate
+  onRegenerate,
+  onVersionChange,
+  onSharingChange,
+  showVersioning = false,
+  showSharing = false
 }) => {
   const metadata = workflow.metadata || {};
   const nodes = workflow.nodes || [];
   const edges = workflow.edges || [];
+  const [isPublic, setIsPublic] = useState(workflow.is_public || false);
 
   const getNodeIcon = (type: string) => {
     switch (type) {
@@ -63,6 +75,39 @@ const WorkflowPreview: React.FC<WorkflowPreviewProps> = ({
             Ready to customize
           </div>
         </div>
+        
+        {/* Version and Sharing Controls */}
+        {(showVersioning || showSharing) && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-gray-100">
+            <div className="flex items-center gap-3">
+              {showVersioning && workflow.id && (
+                <WorkflowVersionSelector 
+                  workflowId={workflow.id}
+                  currentVersion={workflow.version}
+                  onVersionChange={(version) => {
+                    if (onVersionChange) onVersionChange(version);
+                  }}
+                />
+              )}
+              
+              {workflow.version && (
+                <div className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                  v{workflow.version}
+                </div>
+              )}
+            </div>
+            
+            {showSharing && (
+              <WorkflowSharingControls 
+                isPublic={isPublic}
+                onTogglePublic={(newIsPublic) => {
+                  setIsPublic(newIsPublic);
+                  if (onSharingChange) onSharingChange(newIsPublic);
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       <div className="p-6">
