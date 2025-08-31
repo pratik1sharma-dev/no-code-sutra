@@ -24,6 +24,7 @@
     "@tailwindcss/typography": "^0.5.16",
     "@types/uuid": "^10.0.0",
     "axios": "^1.11.0",
+    "date-fns": "^4.1.0",
     "happy-dom": "^14.12.3",
     "lucide-react": "^0.536.0",
     "react": "^19.1.0",
