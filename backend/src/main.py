@@ -78,26 +78,26 @@ app = FastAPI(
 # Ensure DB is initialized at startup
 @app.on_event("startup")
 async def _startup_init_db():
-	print("🔍 Starting database initialization...")
+	logger.info("Starting database initialization")
 	init_db()
-	print("🔍 Database initialization complete")
+	logger.info("Database initialization complete")
 	
 	# Initialize scheduler
-	print("⏰ Starting scheduler initialization...")
+	logger.info("Starting scheduler initialization")
 	try:
 		await SchedulerFactory.initialize_scheduler()
-		print("⏰ Scheduler initialization complete")
+		logger.info("Scheduler initialization complete")
 	except Exception as e:
-		print(f"❌ Scheduler initialization failed: {e}")
+		logger.error(f"Scheduler initialization failed: {e}", exc_info=True)
 
 @app.on_event("shutdown")
 async def _shutdown_scheduler():
-	print("⏰ Shutting down scheduler...")
+	logger.info("Shutting down scheduler")
 	try:
 		await SchedulerFactory.shutdown_scheduler()
-		print("⏰ Scheduler shutdown complete")
+		logger.info("Scheduler shutdown complete")
 	except Exception as e:
-		print(f"❌ Scheduler shutdown failed: {e}")
+		logger.error(f"Scheduler shutdown failed: {e}", exc_info=True)
 
 # Security middleware (order matters!)
 if security_config.SECURITY_LOG_ENABLED:
@@ -440,7 +440,11 @@ async def execute_workflow(request: WorkflowExecutionRequest, http_request: Requ
 			await apply_rate_limit(http_request, identifier, "workflow", bool(user))
 		import time
 		start_time = time.time()
-		print(f"Executing workflow with {len(request.workflow.get('nodes', []))} nodes")
+		logger.info(f"Executing workflow with {len(request.workflow.get('nodes', []))} nodes", extra={
+			"user_id": request.user_id,
+			"node_count": len(request.workflow.get('nodes', [])),
+			"workflow_id": request.workflow.get('id', 'unknown')
+		})
 		result = langgraph_executor.execute_workflow(
 			workflow_data=request.workflow,
 			input_data=request.input_data
@@ -482,9 +486,7 @@ async def execute_workflow(request: WorkflowExecutionRequest, http_request: Requ
 					response_data[key] = str(value)
 		return response_data
 	except Exception as e:
-		print(f"Error in workflow execution endpoint: {e}")
-		import traceback
-		traceback.print_exc()
+		logger.error(f"Error in workflow execution endpoint: {e}", exc_info=True)
 		raise HTTPException(status_code=500, detail=f"Workflow execution failed: {str(e)}")
 
 # Instagram OAuth endpoints
@@ -512,30 +514,35 @@ async def instagram_oauth_callback(http_request: Request, code: str, state: Opti
 		if security_config.RATE_LIMIT_ENABLED:
 			identifier = get_user_identifier(http_request, None)
 			await apply_rate_limit(http_request, identifier, "auth", False)
-		print(f"🔍 OAuth Callback - Code: {code[:20]}..., State: {state}, User ID: {user_id}")
+		logger.info(f"Instagram OAuth Callback received", extra={
+			"state": state,
+			"user_id": user_id,
+			"has_code": bool(code)
+		})
 		
 		if not code:
-			print("❌ No authorization code provided")
+			logger.warning("No authorization code provided in Instagram OAuth callback")
 			raise HTTPException(status_code=400, detail="Authorization code is required")
 		
 		# Use a default user_id if not provided (for demo purposes)
 		user_id = user_id or "default_user"
-		print(f"🔍 Using user_id: {user_id}")
+		logger.info(f"Using user_id: {user_id}")
 		
 		# Complete the OAuth flow
-		print("🔍 Starting OAuth flow completion...")
+		logger.info("Starting Instagram OAuth flow completion")
 		token_data = instagram_oauth_service.complete_oauth_flow(code)
-		print(f"🔍 OAuth flow completed successfully. Token type: {token_data.get('token_type')}")
+		logger.info(f"Instagram OAuth flow completed successfully", extra={
+			"token_type": token_data.get('token_type'),
+			"user_id": user_id
+		})
 		
 		# Automatically save credentials to database
-		print("🔍 Attempting to save credentials to database...")
+		logger.info("Attempting to save Instagram credentials to database")
 		try:
 			saved = instagram_credentials_service.save_credentials(user_id, token_data)
-			print(f"🔍 Credentials saved: {saved}")
+			logger.info(f"Instagram credentials saved: {saved}")
 		except Exception as save_error:
-			print(f"❌ Error saving credentials: {save_error}")
-			import traceback
-			traceback.print_exc()
+			logger.error(f"Error saving Instagram credentials: {save_error}", exc_info=True)
 			# Continue even if saving fails
 			saved = False
 		
@@ -546,9 +553,7 @@ async def instagram_oauth_callback(http_request: Request, code: str, state: Opti
 		success_url = f"{frontend_url}/auth/instagram/callback?success=true&user_id={user_id}"
 		return RedirectResponse(url=success_url, status_code=302)
 	except Exception as e:
-		print(f"❌ OAuth callback error: {e}")
-		import traceback
-		traceback.print_exc()
+		logger.error(f"Instagram OAuth callback error: {e}", exc_info=True)
 		raise HTTPException(status_code=500, detail=f"OAuth flow failed: {str(e)}")
 
 @app.post("/api/auth/instagram/validate")
@@ -636,34 +641,35 @@ async def get_canva_auth_url():
 async def canva_oauth_callback(code: str = None, state: Optional[str] = None, user_id: Optional[str] = None, error: Optional[str] = None, error_description: Optional[str] = None):
     """Handle Canva OAuth callback and complete the flow"""
     try:
-        print("🎨 Canva OAuth Callback Received:")
-        print(f"   Code: {code[:20] + '...' if code else 'None'}")
-        print(f"   State: {state}")
-        print(f"   User ID: {user_id}")
-        print(f"   Error: {error}")
-        print(f"   Error Description: {error_description}")
-        print("🎨 End of Canva OAuth Callback")
+        logger.info("Canva OAuth Callback Received", extra={
+            "has_code": bool(code),
+            "state": state,
+            "user_id": user_id,
+            "error": error,
+            "error_description": error_description
+        })
         
         if error:
-            print(f"❌ Canva OAuth Error: {error} - {error_description}")
+            logger.error(f"Canva OAuth Error: {error} - {error_description}")
             raise HTTPException(status_code=400, detail=f"Canva OAuth error: {error} - {error_description}")
         
         if not code:
+            logger.warning("No authorization code provided in Canva OAuth callback")
             raise HTTPException(status_code=400, detail="Authorization code is required")
         
         # Use a default user_id if not provided
         user_id = user_id or "default_user"
         
-        print("🎨 Starting Canva OAuth flow completion...")
+        logger.info("Starting Canva OAuth flow completion", extra={"user_id": user_id})
         token_data = canva_integration.exchange_code_for_token(code, state)
-        print(f"🎨 Canva OAuth flow completed successfully")
+        logger.info("Canva OAuth flow completed successfully")
         
         # Save credentials to database
         try:
             saved = canva_credentials_service.save_credentials(user_id, token_data)
-            print(f"🎨 Credentials saved: {saved}")
+            logger.info(f"Canva credentials saved: {saved}", extra={"user_id": user_id})
         except Exception as save_error:
-            print(f"❌ Error saving credentials: {save_error}")
+            logger.error(f"Error saving Canva credentials: {save_error}", exc_info=True)
             saved = False
         
         # Redirect to frontend with success message
@@ -674,7 +680,7 @@ async def canva_oauth_callback(code: str = None, state: Optional[str] = None, us
         return RedirectResponse(url=success_url, status_code=302)
         
     except Exception as e:
-        print(f"❌ Canva OAuth callback error: {e}")
+        logger.error(f"Canva OAuth callback error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Canva OAuth flow failed: {str(e)}")
 
 @app.post("/api/auth/canva/reconnect")

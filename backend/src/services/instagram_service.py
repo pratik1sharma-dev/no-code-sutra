@@ -4,6 +4,7 @@ import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import logging
+import traceback
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,28 +36,26 @@ class InstagramService:
     def _validate_access_token(self) -> bool:
         """Validate the access token and check permissions"""
         try:
-            print(f"🔍 Validating access token: {self.access_token[:20]}...")
+            logger.info(f"Validating access token: {self.access_token[:20]}...")
             url = f"{self.base_url}/me"
             params = {
                 'access_token': self.access_token,
                 'fields': 'id,name'
             }
             
-            print(f"🔍 Making validation request to: {url}")
+            logger.debug(f"Making validation request to: {url}")
             response = requests.get(url, params=params)
-            print(f"🔍 Response status: {response.status_code}")
-            print(f"🔍 Response content: {response.text[:200]}...")
+            logger.debug(f"Response status: {response.status_code}")
+            logger.debug(f"Response content: {response.text[:200]}...")
             
             response.raise_for_status()
             
             data = response.json()
-            print(f"🔍 ✅ Access token validated for user: {data.get('name', 'Unknown')}")
             logger.info(f"Access token validated for user: {data.get('name', 'Unknown')}")
             return True
             
         except Exception as e:
-            print(f"🔍 ❌ Access token validation failed: {e}")
-            logger.error(f"Access token validation failed: {e}")
+            logger.error(f"Access token validation failed: {e}", exc_info=True)
             return False
     
     def _get_instagram_business_account_id(self) -> str:
@@ -187,14 +186,15 @@ class InstagramService:
             Response data from Instagram API
         """
         try:
-            print(f"🔍 Instagram Service: Starting post_text_only")
-            print(f"🔍 Caption length: {len(caption)}")
-            print(f"🔍 Image URL: {image_url}")
-            print(f"🔍 Instagram Business Account ID: {self.instagram_business_account_id}")
+            logger.info("Starting post_text_only", extra={
+                "caption_length": len(caption),
+                "has_image": image_url is not None,
+                "instagram_account_id": self.instagram_business_account_id
+            })
             
             # Instagram requires at least one media item
             if not image_url:
-                print(f"🔍 ❌ No image URL provided - Instagram requires media")
+                logger.warning("No image URL provided - Instagram requires media")
                 return {
                     'status': 'failed',
                     'error': 'Instagram requires media for posts. Please provide an image_url parameter.',
@@ -202,17 +202,17 @@ class InstagramService:
                 }
             
             # Create a media container with the provided image
-            print(f"🔍 Creating media container...")
+            logger.info("Creating media container")
             media_result = self.create_media_container(caption, "IMAGE", image_url)
             creation_id = media_result.get('id')
-            print(f"🔍 Media container result: {media_result}")
-            print(f"🔍 Creation ID: {creation_id}")
+            logger.debug(f"Media container result: {media_result}")
+            logger.info(f"Media container created with ID: {creation_id}")
             
             if creation_id:
                 # Publish the media
-                print(f"🔍 Publishing media with creation ID: {creation_id}")
+                logger.info(f"Publishing media with creation ID: {creation_id}")
                 publish_result = self.publish_media(creation_id)
-                print(f"🔍 Publish result: {publish_result}")
+                logger.debug(f"Publish result: {publish_result}")
                 
                 # Truncate caption for response
                 truncated_caption = self._truncate_caption(caption)
@@ -230,13 +230,9 @@ class InstagramService:
                 raise ValueError("Failed to create media container")
                 
         except Exception as e:
-            print(f"🔍 ❌ Instagram post_text_only failed: {e}")
-            logger.error(f"Failed to post text-only content: {e}")
+            logger.error(f"Instagram post_text_only failed: {e}", exc_info=True)
             if hasattr(e, 'response') and e.response is not None:
-                print(f"🔍 Response content: {e.response.text}")
                 logger.error(f"Response content: {e.response.text}")
-            import traceback
-            traceback.print_exc()
             return {
                 'status': 'failed',
                 'error': str(e),
@@ -310,13 +306,15 @@ class InstagramService:
             Response data from Instagram API
         """
         try:
-            print(f"🔍 Instagram Service: Starting post_carousel")
-            print(f"🔍 Caption length: {len(caption)}")
-            print(f"🔍 Number of images: {len(image_urls)}")
-            print(f"🔍 Image URLs: {image_urls}")
+            logger.info("Starting post_carousel", extra={
+                "caption_length": len(caption),
+                "image_count": len(image_urls),
+                "instagram_account_id": self.instagram_business_account_id
+            })
             
             # Validate input
             if not image_urls or len(image_urls) < 2:
+                logger.warning("Carousel requires at least 2 images")
                 return {
                     'status': 'failed',
                     'error': 'Carousel requires at least 2 images',
@@ -324,6 +322,7 @@ class InstagramService:
                 }
             
             if len(image_urls) > 10:
+                logger.warning("Carousel cannot have more than 10 images")
                 return {
                     'status': 'failed',
                     'error': 'Carousel cannot have more than 10 images',
@@ -336,11 +335,11 @@ class InstagramService:
             url = f"{self.base_url}/{self.instagram_business_account_id}/media"
             
             # Step 1: Create child media objects (upload each image as carousel item)
-            print(f"🔍 Creating child media objects for {len(image_urls)} images...")
+            logger.info(f"Creating child media objects for {len(image_urls)} images")
             media_ids = []
             
             for i, image_url in enumerate(image_urls):
-                print(f"🔍 Uploading image {i+1}/{len(image_urls)}...")
+                logger.debug(f"Uploading image {i+1}/{len(image_urls)}")
                 
                 # Create child media object with is_carousel_item=true
                 child_data = {
@@ -357,14 +356,14 @@ class InstagramService:
                 
                 if child_id:
                     media_ids.append(child_id)
-                    print(f"✅ Image {i+1} uploaded")
+                    logger.debug(f"Image {i+1} uploaded successfully")
                 else:
                     raise ValueError(f"Failed to upload image {i+1}")
             
-            print(f"🔍 All {len(media_ids)} images uploaded successfully")
+            logger.info(f"All {len(media_ids)} images uploaded successfully")
             
             # Wait for child media objects to be ready
-            print(f"🔍 Waiting for child media objects to be ready...")
+            logger.info("Waiting for child media objects to be ready")
             import time
             
             for i, media_id in enumerate(media_ids):
@@ -379,7 +378,7 @@ class InstagramService:
                         status_code = status_data.get('status_code')
                         
                         if status_code == 'FINISHED':
-                            print(f"✅ Image {i+1} ready")
+                            logger.debug(f"Image {i+1} ready")
                             break
                         elif status_code == 'ERROR':
                             raise ValueError(f"Image {i+1} failed")
@@ -391,7 +390,7 @@ class InstagramService:
                     raise ValueError(f"Image {i+1} not ready after {max_retries} attempts")
             
             # Step 2: Create carousel container
-            print(f"🔍 Creating carousel container...")
+            logger.info("Creating carousel container")
             
             carousel_data = {
                 'access_token': self.access_token,
@@ -400,23 +399,23 @@ class InstagramService:
                 'children': json.dumps(media_ids)
             }
             
-            print(f"🔍 Creating carousel with {len(media_ids)} images...")
+            logger.info(f"Creating carousel with {len(media_ids)} images")
             
             response = requests.post(url, data=carousel_data)
             response.raise_for_status()
             
             carousel_result = response.json()
             creation_id = carousel_result.get('id')
-            print(f"🔍 Carousel media container result: {carousel_result}")
-            print(f"🔍 Creation ID: {creation_id}")
+            logger.debug(f"Carousel media container result: {carousel_result}")
+            logger.info(f"Carousel container created with ID: {creation_id}")
             
             if creation_id:
                 # Publish the carousel
-                print(f"🔍 Publishing carousel with creation ID: {creation_id}")
+                logger.info(f"Publishing carousel with creation ID: {creation_id}")
                 publish_result = self.publish_media(creation_id)
-                print(f"🔍 Publish result: {publish_result}")
+                logger.debug(f"Publish result: {publish_result}")
                 
-                print(f"✅ Carousel posted successfully! Post ID: {publish_result.get('id')}")
+                logger.info(f"Carousel posted successfully! Post ID: {publish_result.get('id')}")
                 
                 return {
                     'status': 'success',
@@ -434,13 +433,9 @@ class InstagramService:
                 raise ValueError("Failed to create carousel media container")
                 
         except Exception as e:
-            print(f"🔍 ❌ Instagram post_carousel failed: {e}")
-            logger.error(f"Failed to post carousel: {e}")
+            logger.error(f"Instagram post_carousel failed: {e}", exc_info=True)
             if hasattr(e, 'response') and e.response is not None:
-                print(f"🔍 Response content: {e.response.text}")
                 logger.error(f"Response content: {e.response.text}")
-            import traceback
-            traceback.print_exc()
             return {
                 'status': 'failed',
                 'error': str(e),

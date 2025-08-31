@@ -9,10 +9,14 @@ import json
 import hashlib
 import secrets
 import time
+import logging
 from typing import Dict, List, Optional, Any
 from urllib.parse import urlencode
 import base64
 from datetime import datetime, timedelta
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 class CanvaIntegration:
     """Canva API integration service"""
@@ -72,10 +76,7 @@ class CanvaIntegration:
         ]
         
         # Log the scopes being used
-        print("🎨 Canva OAuth Scopes:")
-        print(f"   Scopes: {scopes}")
-        print(f"   Scopes string: {' '.join(scopes)}")
-        print("🎨 End of Canva OAuth Scopes")
+        logger.debug("Canva OAuth scopes configured", extra={"scopes": scopes, "scopes_string": ' '.join(scopes)})
         
         # Store code_verifier in state for later retrieval
         if state:
@@ -112,18 +113,13 @@ class CanvaIntegration:
         auth_url = f"{self.auth_url}?{urlencode(params)}"
         
         # Log the final parameters
-        print("🎨 Canva OAuth Parameters:")
-        print(f"   Parameters: {params}")
-        print("🎨 End of Canva OAuth Parameters")
-        
-        # Log the generated URL for debugging
-        print("🎨 Generated Canva Authorization URL:")
-        print(f"   Auth URL: {self.auth_url}")
-        print(f"   Client ID: {self.client_id}")
-        print(f"   Redirect URI: {self.redirect_uri}")
-        print(f"   State: {state or 'default_state'}")
-        print(f"   Full URL: {auth_url}")
-        print("🎨 End of Canva Authorization URL")
+        logger.debug("Generated Canva authorization URL", extra={
+            "auth_url": self.auth_url,
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "state": state or 'default_state',
+            "full_url": auth_url
+        })
         
         return auth_url
     
@@ -163,18 +159,18 @@ class CanvaIntegration:
         
         # Check if the authorization code is a JWT (Canva might use a different flow)
         if authorization_code.startswith('eyJ'):
-            print("🎨 Detected JWT authorization code - this might be a different OAuth flow")
+            logger.info("Detected JWT authorization code - using JWT OAuth flow")
             # For JWT-based flows, we might need to decode and use differently
             import jwt
             try:
                 # Try to decode the JWT (without verification for now)
                 decoded = jwt.decode(authorization_code, options={"verify_signature": False})
-                print(f"🎨 JWT Decoded: {decoded}")
+                logger.debug("JWT authorization code decoded", extra={"decoded_keys": list(decoded.keys())})
                 
                 # If it's a JWT, we might not need to exchange it
                 # The JWT might contain the access token directly
                 if 'access_token' in decoded:
-                    print("🎨 JWT contains access token directly")
+                    logger.info("JWT contains access token directly")
                     token_data = {
                         'access_token': decoded['access_token'],
                         'token_type': 'Bearer',
@@ -184,7 +180,7 @@ class CanvaIntegration:
                     return token_data
                 
                 # If JWT doesn't contain access_token, the JWT itself might be the access token
-                print("🎨 JWT doesn't contain access_token - using JWT as access token")
+                logger.info("Using JWT as access token")
                 token_data = {
                     'access_token': authorization_code,  # Use the JWT as the access token
                     'token_type': 'Bearer',
@@ -194,7 +190,7 @@ class CanvaIntegration:
                 return token_data
                     
             except Exception as jwt_error:
-                print(f"🎨 JWT decode error: {jwt_error}")
+                logger.error("Failed to decode JWT authorization code", extra={"error": str(jwt_error)})
         
         # Standard OAuth flow (fallback)
         headers = {
@@ -212,29 +208,23 @@ class CanvaIntegration:
         }
         
         # Log the token exchange request for debugging
-        print("🎨 Canva Token Exchange Request:")
-        print(f"   Token URL: {self.token_url}")
-        print(f"   Headers: {headers}")
-        print(f"   Client ID: {self.client_id}")
-        print(f"   Redirect URI: {self.redirect_uri}")
-        print(f"   Code: {authorization_code[:20]}...")
-        print(f"   Code Verifier: {code_verifier[:20] if code_verifier else 'None'}...")
-        print(f"   Request Data: {data}")
-        print("🎨 End of Token Exchange Request")
+        logger.debug("Canva token exchange request", extra={
+            "token_url": self.token_url,
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "code_preview": authorization_code[:20] + "...",
+            "has_code_verifier": code_verifier is not None
+        })
         
         # Try with explicit headers
         response = requests.post(self.token_url, data=data, headers=headers)
         
         # Log the response for debugging
-        print("🎨 Canva Token Exchange Response:")
-        print(f"   Status Code: {response.status_code}")
-        print(f"   Response Headers: {dict(response.headers)}")
-        try:
-            response_text = response.text
-            print(f"   Response Body: {response_text}")
-        except:
-            print("   Response Body: [Could not read]")
-        print("🎨 End of Token Exchange Response")
+        logger.debug("Canva token exchange response", extra={
+            "status_code": response.status_code,
+            "response_headers": dict(response.headers),
+            "response_body": response.text if response.text else "[Empty response]"
+        })
         
         response.raise_for_status()
         
@@ -555,7 +545,7 @@ class CanvaIntegration:
             design = self.create_design_from_template(template_id, canva_content)
             return design
         except Exception as e:
-            print(f"🎨 Canva design creation failed (likely dev mode): {e}")
+            logger.warning("Canva design creation failed, using fallback", extra={"template_id": template_id, "error": str(e)})
             # Fallback: Create custom design using template structure
             return self._create_custom_design_from_template(template_id, content_data)
     
@@ -631,7 +621,7 @@ class CanvaIntegration:
             }
             
         except Exception as e:
-            print(f"🎨 Custom design creation failed: {e}")
+            logger.error("Custom design creation failed, returning mock design", extra={"template_id": template_id, "error": str(e)})
             # Return a mock design with template info
             return {
                 'design_id': f"mock_design_{template_id}",
