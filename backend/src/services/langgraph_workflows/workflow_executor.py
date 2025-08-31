@@ -9,9 +9,11 @@ import logging
 
 from ..node_dispatcher import NodeDispatcher
 
-# Configure structured logging
+# Configure structured logging with environment-based level
+import os
+log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level, logging.INFO),
     format='%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -189,9 +191,9 @@ class LangGraphWorkflowExecutor:
                     logger.error(f"❌ Node {node_id} failed: {node_result.get('error', 'Unknown error')}")
                 else:
                     logger.info(f"✅ Node {node_id} completed with status: {status}")
-                logger.debug(f"State keys after {node_id}: {list(current_state.keys())}")
+                logger.info(f"📊 State keys after {node_id}: {list(current_state.keys())}")
                 if 'node_results' in current_state:
-                    logger.debug(f"Node results available: {list(current_state['node_results'].keys())}")
+                    logger.info(f"📋 Node results available: {list(current_state['node_results'].keys())}")
             # Check if any nodes failed
             failed_nodes = [node for node in current_state.get('nodes_executed', []) if node.get('status') == 'failed']
             has_failures = len(failed_nodes) > 0
@@ -242,8 +244,8 @@ class LangGraphWorkflowExecutor:
                 **config
             })
             logger.info(f"🔧 Executing {node_type} node - ID: {current_node_id or 'unknown'}")
-            logger.debug(f"Node config: {config}")
-            logger.debug(f"Input state keys: {list(input_data.keys())}")
+            logger.info(f"⚙️ Node config: {config}")
+            logger.info(f"📥 Input state keys: {list(input_data.keys())}")
             executor = self.dispatcher.get_executor(node_type)
             if node_type == 'aiAgent':
                 state['prompt'] = config.get('prompt', '')
@@ -302,7 +304,7 @@ class LangGraphWorkflowExecutor:
                 
             if 'result' in result:
                 content_preview = str(result['result'])[:100]
-                logger.debug(f"Content preview for {node_type}[{node_id}]: {content_preview}...")
+                logger.info(f"📄 Content preview for {node_type}[{node_id}]: {content_preview}...")
                 
             return result
         except Exception as e:
