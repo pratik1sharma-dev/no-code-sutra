@@ -1,9 +1,13 @@
 import os
+import logging
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from .db import SessionLocal
 from .models import InstagramCredentials
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 
 class InstagramCredentialsService:
@@ -25,21 +29,20 @@ class InstagramCredentialsService:
         """
         try:
 
-            print(f"🔍 Saving credentials for user: {user_id}")
-            print(f"🔍 Token data keys: {list(token_data.keys())}")
+            logger.info("Saving Instagram credentials", extra={"user_id": user_id, "token_keys": list(token_data.keys())})
             
             db = SessionLocal()
-            print("🔍 Database session created")
+            logger.debug("Database session created", extra={"user_id": user_id})
             
             # Check if credentials already exist for this user
             existing = db.query(InstagramCredentials).filter(
                 InstagramCredentials.user_id == user_id
             ).first()
             
-            print(f"🔍 Existing credentials found: {existing is not None}")
+            logger.debug("Checked for existing credentials", extra={"user_id": user_id, "exists": existing is not None})
             
             if existing:
-                print("🔍 Updating existing credentials")
+                logger.info("Updating existing Instagram credentials", extra={"user_id": user_id})
                 # Update existing credentials
                 existing.access_token = token_data['access_token']
                 existing.token_type = token_data['token_type']
@@ -53,9 +56,9 @@ class InstagramCredentialsService:
                     existing.page_id = account['page_id']
                     existing.page_name = account['page_name']
                     existing.username = account['instagram_account']['username']
-                    print(f"🔍 Updated Instagram account: {account['instagram_account']['username']}")
+                    logger.info("Updated Instagram account info", extra={"user_id": user_id, "username": account['instagram_account']['username']})
             else:
-                print("🔍 Creating new credentials")
+                logger.info("Creating new Instagram credentials", extra={"user_id": user_id})
                 # Create new credentials
                 instagram_accounts = token_data.get('instagram_accounts', [])
                 account = instagram_accounts[0] if instagram_accounts else {}
@@ -72,20 +75,17 @@ class InstagramCredentialsService:
                     username=account.get('instagram_account', {}).get('username')
                 )
                 db.add(credentials)
-                print(f"🔍 New credentials object created")
+                logger.debug("New credentials object created", extra={"user_id": user_id})
             
-            print("🔍 Committing to database...")
             db.commit()
-            print("🔍 Database commit successful")
+            logger.info("Instagram credentials saved successfully", extra={"user_id": user_id})
             return True
             
         except Exception as e:
-            print(f"❌ Error saving Instagram credentials: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Failed to save Instagram credentials", extra={"user_id": user_id, "error": str(e)}, exc_info=True)
             return False
         finally:
-            print("🔍 Closing database session")
+            logger.debug("Closing database session", extra={"user_id": user_id})
             db.close()
     
     def get_credentials(self, user_id: str) -> Optional[Dict[str, Any]]:
@@ -119,7 +119,7 @@ class InstagramCredentialsService:
             return None
             
         except Exception as e:
-            print(f"Error getting Instagram credentials: {e}")
+            logger.error("Failed to get Instagram credentials", extra={"user_id": user_id, "error": str(e)})
             return None
         finally:
             db.close()
@@ -147,7 +147,7 @@ class InstagramCredentialsService:
             return False
             
         except Exception as e:
-            print(f"Error deleting Instagram credentials: {e}")
+            logger.error("Failed to delete Instagram credentials", extra={"user_id": user_id, "error": str(e)})
             return False
         finally:
             db.close()
@@ -163,29 +163,28 @@ class InstagramCredentialsService:
             True if token exists and is not expired
         """
         try:
-            print(f"🔍 Checking token validity for user: {user_id}")
+            logger.debug("Checking Instagram token validity", extra={"user_id": user_id})
             db = SessionLocal()
             credentials = db.query(InstagramCredentials).filter(
                 InstagramCredentials.user_id == user_id
             ).first()
             
             if not credentials:
-                print(f"🔍 ❌ No credentials found for user: {user_id}")
+                logger.warning("No Instagram credentials found", extra={"user_id": user_id})
                 return False
             
-            print(f"🔍 Found credentials, expires at: {credentials.expires_at}")
-            print(f"🔍 Current time: {datetime.utcnow()}")
+            logger.debug("Found Instagram credentials", extra={"user_id": user_id, "expires_at": credentials.expires_at, "current_time": datetime.utcnow()})
             
             # Check if token is expired
             if credentials.expires_at and credentials.expires_at < datetime.utcnow():
-                print(f"🔍 ❌ Token is expired")
+                logger.warning("Instagram token is expired", extra={"user_id": user_id})
                 return False
             
-            print(f"🔍 ✅ Token is valid")
+            logger.debug("Instagram token is valid", extra={"user_id": user_id})
             return True
             
         except Exception as e:
-            print(f"🔍 ❌ Error checking token validity: {e}")
+            logger.error("Failed to check Instagram token validity", extra={"user_id": user_id, "error": str(e)})
             return False
         finally:
             db.close()
@@ -200,19 +199,18 @@ class InstagramCredentialsService:
         Returns:
             Access token or None if not found/expired
         """
-        print(f"🔍 Getting access token for user: {user_id}")
+        logger.debug("Getting Instagram access token", extra={"user_id": user_id})
         
         if not self.is_token_valid(user_id):
-            print(f"🔍 ❌ Token is not valid for user: {user_id}")
+            logger.warning("Instagram token is not valid", extra={"user_id": user_id})
             return None
         
         credentials = self.get_credentials(user_id)
         if credentials:
-            print(f"🔍 ✅ Found credentials for user: {user_id}")
-            print(f"🔍 Token preview: {credentials['access_token'][:20]}...")
+            logger.debug("Found Instagram credentials", extra={"user_id": user_id, "token_preview": credentials['access_token'][:20] + "..."})
             return credentials['access_token']
         else:
-            print(f"🔍 ❌ No credentials found for user: {user_id}")
+            logger.warning("No Instagram credentials found", extra={"user_id": user_id})
             return None
     
     def should_refresh_token(self, user_id: str) -> bool:
@@ -239,7 +237,7 @@ class InstagramCredentialsService:
             return credentials.expires_at < seven_days_from_now
             
         except Exception as e:
-            print(f"Error checking if token should be refreshed: {e}")
+            logger.error("Failed to check if Instagram token should be refreshed", extra={"user_id": user_id, "error": str(e)})
             return False
         finally:
             db.close()

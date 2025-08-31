@@ -4,11 +4,15 @@ Manages Canva OAuth tokens in the database
 """
 
 import os
+import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from .db import SessionLocal
 from .models import CanvaCredentials
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 class CanvaCredentialsService:
     """Service for managing Canva OAuth credentials in database"""
@@ -63,11 +67,11 @@ class CanvaCredentialsService:
                 db.add(credentials)
             
             db.commit()
-            print(f"✅ Canva credentials saved for user: {user_id}")
+            logger.info(f"Canva credentials saved successfully", extra={"user_id": user_id})
             return True
                 
         except Exception as e:
-            print(f"❌ Error saving Canva credentials: {e}")
+            logger.error(f"Failed to save Canva credentials", extra={"user_id": user_id, "error": str(e)})
             return False
         finally:
             db.close()
@@ -103,7 +107,7 @@ class CanvaCredentialsService:
             }
             
         except Exception as e:
-            print(f"❌ Error getting Canva credentials: {e}")
+            logger.error(f"Failed to retrieve Canva credentials", extra={"user_id": user_id, "error": str(e)})
             return None
         finally:
             db.close()
@@ -133,7 +137,7 @@ class CanvaCredentialsService:
             return True
             
         except Exception as e:
-            print(f"❌ Error checking Canva token validity: {e}")
+            logger.error(f"Failed to check Canva token validity", extra={"user_id": user_id, "error": str(e)})
             return False
     
     def refresh_token(self, user_id: str) -> bool:
@@ -166,7 +170,7 @@ class CanvaCredentialsService:
             return self.save_credentials(user_id, refreshed_data)
             
         except Exception as e:
-            print(f"❌ Error refreshing Canva token: {e}")
+            logger.error(f"Failed to refresh Canva token", extra={"user_id": user_id, "error": str(e)})
             return False
     
     def delete_credentials(self, user_id: str) -> bool:
@@ -188,14 +192,14 @@ class CanvaCredentialsService:
             if credentials:
                 db.delete(credentials)
                 db.commit()
-                print(f"✅ Canva credentials deleted for user: {user_id}")
+                logger.info(f"Canva credentials deleted successfully", extra={"user_id": user_id})
                 return True
             else:
-                print(f"⚠️ No Canva credentials found for user: {user_id}")
+                logger.warning(f"No Canva credentials found for deletion", extra={"user_id": user_id})
                 return False
                 
         except Exception as e:
-            print(f"❌ Error deleting Canva credentials: {e}")
+            logger.error(f"Failed to delete Canva credentials", extra={"user_id": user_id, "error": str(e)})
             return False
         finally:
             db.close()
@@ -220,7 +224,7 @@ class CanvaCredentialsService:
             return credentials.get('access_token') if credentials else None
             
         except Exception as e:
-            print(f"❌ Error getting Canva access token: {e}")
+            logger.error(f"Failed to get Canva access token", extra={"user_id": user_id, "error": str(e)})
             return None
 
 # Global instance

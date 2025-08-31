@@ -6,9 +6,13 @@ Provides business logic layer on top of scheduler backends
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 import uuid
+import logging
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
+
+# Configure module logger
+logger = logging.getLogger(__name__)
 
 from services.scheduler.base import ScheduleConfig, ScheduleResult, ExecutionResult
 from services.scheduler.factory import get_scheduler
@@ -312,7 +316,7 @@ class WorkflowSchedulerService:
             return result
             
         except Exception as e:
-            print(f"Failed to list user schedules: {e}")
+            logger.error(f"Failed to list user schedules: {e}", extra={"user_id": user_id}, exc_info=True)
             return []
     
     def get_execution_history(
@@ -348,7 +352,7 @@ class WorkflowSchedulerService:
             return result
             
         except Exception as e:
-            print(f"Failed to get execution history: {e}")
+            logger.error(f"Failed to get execution history: {e}", extra={"workflow_id": workflow_id}, exc_info=True)
             return []
     
     def _validate_cron_expression(self, cron_expression: str) -> bool:

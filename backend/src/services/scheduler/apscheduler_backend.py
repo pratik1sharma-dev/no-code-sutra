@@ -6,6 +6,7 @@ Provides PostgreSQL-backed scheduling without Redis dependency
 import asyncio
 import json
 import uuid
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
@@ -16,6 +17,9 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.job import Job
 import pytz
+
+# Configure module logger
+logger = logging.getLogger(__name__)
 
 from services.scheduler.base import (
     SchedulerInterface, 
@@ -67,13 +71,13 @@ class APSchedulerBackend(SchedulerInterface):
         """Start the APScheduler"""
         if self.scheduler and not self.scheduler.running:
             self.scheduler.start()
-            print("🚀 APScheduler started successfully")
+            logger.info("APScheduler started successfully")
     
     async def shutdown(self) -> None:
         """Shutdown the APScheduler"""
         if self.scheduler and self.scheduler.running:
             self.scheduler.shutdown(wait=True)
-            print("🛑 APScheduler shutdown completed")
+            logger.info("APScheduler shutdown completed")
     
     async def schedule_recurring_workflow(
         self,
@@ -162,7 +166,7 @@ class APSchedulerBackend(SchedulerInterface):
             self.scheduler.pause_job(job_id)
             return True
         except Exception as e:
-            print(f"Failed to pause job {job_id}: {e}")
+            logger.error(f"Failed to pause job {job_id}: {e}", exc_info=True)
             return False
     
     async def resume_schedule(self, job_id: str) -> bool:
@@ -171,7 +175,7 @@ class APSchedulerBackend(SchedulerInterface):
             self.scheduler.resume_job(job_id)
             return True
         except Exception as e:
-            print(f"Failed to resume job {job_id}: {e}")
+            logger.error(f"Failed to resume job {job_id}: {e}", exc_info=True)
             return False
     
     async def remove_schedule(self, job_id: str) -> bool:
@@ -180,7 +184,7 @@ class APSchedulerBackend(SchedulerInterface):
             self.scheduler.remove_job(job_id)
             return True
         except Exception as e:
-            print(f"Failed to remove job {job_id}: {e}")
+            logger.error(f"Failed to remove job {job_id}: {e}", exc_info=True)
             return False
     
     async def get_schedule_info(self, job_id: str) -> Optional[Dict[str, Any]]:
@@ -200,7 +204,7 @@ class APSchedulerBackend(SchedulerInterface):
                 'misfire_grace_time': job.misfire_grace_time
             }
         except Exception as e:
-            print(f"Failed to get job info for {job_id}: {e}")
+            logger.error(f"Failed to get job info for {job_id}: {e}", exc_info=True)
             return None
     
     async def list_user_schedules(self, user_id: str) -> List[Dict[str, Any]]:
@@ -224,7 +228,7 @@ class APSchedulerBackend(SchedulerInterface):
             
             return user_jobs
         except Exception as e:
-            print(f"Failed to list user schedules for {user_id}: {e}")
+            logger.error(f"Failed to list user schedules for {user_id}: {e}", exc_info=True)
             return []
     
     async def get_execution_history(
@@ -249,7 +253,12 @@ class APSchedulerBackend(SchedulerInterface):
         started_at = datetime.utcnow()
         
         try:
-            print(f"🚀 Executing scheduled workflow {workflow_id} for user {user_id}")
+            logger.info(f"Executing scheduled workflow", extra={
+                "workflow_id": workflow_id,
+                "user_id": user_id,
+                "job_id": job_id,
+                "execution_id": execution_id
+            })
             
             # Import here to avoid circular imports
             from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
@@ -284,7 +293,12 @@ class APSchedulerBackend(SchedulerInterface):
                 )
             )
             
-            print(f"✅ Workflow {workflow_id} executed successfully")
+            logger.info(f"Workflow executed successfully", extra={
+                "workflow_id": workflow_id,
+                "user_id": user_id,
+                "execution_id": execution_id,
+                "duration_ms": (completed_at - started_at).total_seconds() * 1000
+            })
             
         except Exception as e:
             completed_at = datetime.utcnow()
@@ -303,7 +317,12 @@ class APSchedulerBackend(SchedulerInterface):
                 )
             )
             
-            print(f"❌ Workflow {workflow_id} execution failed: {error_message}")
+            logger.error(f"Workflow execution failed: {error_message}", extra={
+                "workflow_id": workflow_id,
+                "user_id": user_id,
+                "execution_id": execution_id,
+                "duration_ms": (completed_at - started_at).total_seconds() * 1000
+            }, exc_info=True)
             
             # Re-raise to let APScheduler handle it
             raise
@@ -324,7 +343,13 @@ class APSchedulerBackend(SchedulerInterface):
         """Log execution result to database"""
         # TODO: Implement execution logging to database
         # This would store execution results for history and monitoring
-        print(f"📊 Execution {result.execution_id}: {'SUCCESS' if result.success else 'FAILED'}")
+        logger.info(f"Execution logged", extra={
+            "execution_id": result.execution_id,
+            "workflow_id": result.workflow_id,
+            "user_id": result.user_id,
+            "status": "SUCCESS" if result.success else "FAILED",
+            "duration_ms": (result.completed_at - result.started_at).total_seconds() * 1000 if result.completed_at and result.started_at else None
+        })
     
     @property
     def backend_type(self) -> SchedulerBackend:
