@@ -289,7 +289,7 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    For Text Overlay → Image Upload:
    {{
      "data_mapping": {{
-       "image_data_url": "text_overlay_1.output.image_data_url"
+       "image_data_url": "textOverlay_1.output.image_data_url"
      }}
    }}
    
