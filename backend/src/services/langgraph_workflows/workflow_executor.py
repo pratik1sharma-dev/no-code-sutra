@@ -5,8 +5,16 @@ from langgraph.checkpoint.memory import MemorySaver
 import json
 from datetime import datetime
 import uuid
+import logging
 
 from ..node_dispatcher import NodeDispatcher
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 class LangGraphWorkflowExecutor:
@@ -45,13 +53,13 @@ class LangGraphWorkflowExecutor:
                         return state.get(field_path[0])
                     return None
                 else:
-                    print(f"Warning: Invalid reference format: {reference}")
-                    return None
-            else:
-                return state.get(reference, None)
-        except Exception as e:
-            print(f"Error resolving data reference '{reference}': {e}")
+                    logger.warning(f"Invalid reference format: {reference}")
             return None
+        else:
+            return state.get(reference, None)
+    except Exception as e:
+        logger.error(f"Error resolving data reference '{reference}': {e}")
+        return None
     
     def standardize_node_output(self, result: Dict[str, Any], node_id: str, node_type: str) -> Dict[str, Any]:
         """Standardize node output format for consistent state management"""
@@ -137,16 +145,17 @@ class LangGraphWorkflowExecutor:
                 workflow.add_edge("start", END)
             return workflow.compile(checkpointer=self.memory)
         except Exception as e:
-            print(f"Error building workflow: {e}")
+            logger.error(f"Error building workflow: {e}", exc_info=True)
             return self._create_default_workflow()
     
     def execute_workflow(self, workflow_data: Dict[str, Any], input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a workflow using LangGraph"""
         try:
-            print(f"Executing workflow: {workflow_data.get('name', 'Unknown')}")
-            print(f"Input data keys: {list(input_data.keys())}")
+            workflow_id = str(uuid.uuid4())
+            logger.info(f"🚀 Starting workflow execution - ID: {workflow_id}, Name: {workflow_data.get('name', 'Unknown')}")
+            logger.info(f"📥 Input data keys: {list(input_data.keys())}")
             initial_state = {
-                'workflow_id': str(uuid.uuid4()),
+                'workflow_id': workflow_id,
                 'start_time': datetime.now().isoformat(),
                 'input_data': input_data,
                 'workflow_name': workflow_data.get('name', 'Unknown'),
@@ -155,12 +164,12 @@ class LangGraphWorkflowExecutor:
             }
             current_state = initial_state.copy()
             execution_order = self._get_execution_order(workflow_data['nodes'], workflow_data['edges'])
-            print(f"Execution order: {execution_order}")
+            logger.info(f"📋 Execution order: {execution_order}")
             for node_id in execution_order:
-                print(f"\nExecuting node: {node_id}")
+                logger.info(f"🔄 Executing node: {node_id}")
                 node_data = next((node for node in workflow_data['nodes'] if node['id'] == node_id), None)
                 if not node_data:
-                    print(f"Warning: Node {node_id} not found in workflow")
+                    logger.warning(f"Node {node_id} not found in workflow")
                     continue
                 current_state['current_node'] = node_id
                 current_state['node_config'] = node_data.get('data', {}).get('config', {})
@@ -175,13 +184,24 @@ class LangGraphWorkflowExecutor:
                     node_id
                 )
                 current_state = self.merge_node_result(current_state, node_result, node_id)
-                print(f"Node {node_id} completed with status: {node_result.get('status', 'unknown')}")
-                print(f"State after {node_id}: {list(current_state.keys())}")
+                status = node_result.get('status', 'unknown')
+                if status == 'failed':
+                    logger.error(f"❌ Node {node_id} failed: {node_result.get('error', 'Unknown error')}")
+                else:
+                    logger.info(f"✅ Node {node_id} completed with status: {status}")
+                logger.debug(f"State keys after {node_id}: {list(current_state.keys())}")
                 if 'node_results' in current_state:
-                    print(f"  Node results: {list(current_state['node_results'].keys())}")
+                    logger.debug(f"Node results available: {list(current_state['node_results'].keys())}")
             # Check if any nodes failed
             failed_nodes = [node for node in current_state.get('nodes_executed', []) if node.get('status') == 'failed']
             has_failures = len(failed_nodes) > 0
+            
+            if has_failures:
+                logger.warning(f"⚠️ Workflow {workflow_id} completed with {len(failed_nodes)} failed nodes")
+                for failed_node in failed_nodes:
+                    logger.error(f"Failed node details - ID: {failed_node.get('node_id')}, Error: {failed_node.get('result', {}).get('error', 'Unknown')}")
+            else:
+                logger.info(f"🎉 Workflow {workflow_id} completed successfully")
             
             # Create clean result without circular references
             result = {
@@ -201,7 +221,7 @@ class LangGraphWorkflowExecutor:
                     result[key] = self._sanitize_for_json(current_state[key])
             return result
         except Exception as e:
-            print(f"Error executing workflow: {e}")
+            logger.error(f"💥 Critical workflow execution error: {e}", exc_info=True)
             return {
                 'status': 'failed',
                 'error': str(e),
@@ -221,8 +241,9 @@ class LangGraphWorkflowExecutor:
                 'start_time': datetime.now().isoformat(),
                 **config
             })
-            print(f"Executing {node_type} with config: {config}")
-            print(f"Input state keys: {list(input_data.keys())}")
+            logger.info(f"🔧 Executing {node_type} node - ID: {current_node_id or 'unknown'}")
+            logger.debug(f"Node config: {config}")
+            logger.debug(f"Input state keys: {list(input_data.keys())}")
             executor = self.dispatcher.get_executor(node_type)
             if node_type == 'aiAgent':
                 state['prompt'] = config.get('prompt', '')
@@ -266,16 +287,32 @@ class LangGraphWorkflowExecutor:
             result = executor(state)
             result['end_time'] = datetime.now().isoformat()
             result['node_type'] = node_type
-            print(f"Node {node_type} result: {result.get('status', 'unknown')}")
+            
+            # Enhanced logging with node context
+            status = result.get('status', 'unknown')
+            node_id = current_node_id or 'unknown'
+            
+            if status == 'failed':
+                error_msg = result.get('error', 'Unknown error')
+                logger.error(f"❌ Node {node_type}[{node_id}] failed: {error_msg}")
+            elif status == 'completed':
+                logger.info(f"✅ Node {node_type}[{node_id}] completed successfully")
+            else:
+                logger.info(f"🔄 Node {node_type}[{node_id}] status: {status}")
+                
             if 'result' in result:
-                print(f"Content preview: {str(result['result'])[:100]}...")
+                content_preview = str(result['result'])[:100]
+                logger.debug(f"Content preview for {node_type}[{node_id}]: {content_preview}...")
+                
             return result
         except Exception as e:
-            print(f"Error executing node {node_type}: {e}")
+            node_id = current_node_id or 'unknown'
+            logger.error(f"💥 Exception in node {node_type}[{node_id}]: {e}", exc_info=True)
             return {
                 'status': 'failed',
                 'error': str(e),
                 'node_type': node_type,
+                'node_id': node_id,
                 'end_time': datetime.now().isoformat()
             }
     
