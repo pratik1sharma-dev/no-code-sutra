@@ -88,6 +88,11 @@ def get_scheduler_service(db: Session = Depends(get_db)) -> WorkflowSchedulerSer
     return WorkflowSchedulerService(db)
 
 
+@router.options("/recurring")
+async def recurring_options():
+    """Handle OPTIONS preflight request for recurring endpoint"""
+    return {"message": "OK"}
+
 @router.post("/recurring", response_model=ScheduleResponse)
 async def create_recurring_schedule(
     request: CreateRecurringScheduleRequest,
