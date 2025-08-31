@@ -56,9 +56,9 @@ class LangGraphWorkflowExecutor:
                     return None
                 else:
                     logger.warning(f"Invalid reference format: {reference}")
-            return None
-        else:
-            return state.get(reference, None)
+                    return None
+            else:
+                return state.get(reference, None)
     except Exception as e:
         logger.error(f"Error resolving data reference '{reference}': {e}")
         return None
