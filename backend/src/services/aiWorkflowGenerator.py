@@ -91,14 +91,15 @@ class AIWorkflowGenerator:
 				node_types_list.append(f"- {node_type}: {metadata.description}")
 		node_types_text = "\n".join(node_types_list)
 		node_count = node_registry.get_node_count()
-		return f"""You are an expert AI workflow designer for No Code Sutra, a platform that creates automation workflows from natural language descriptions.
+		header = f"""You are an expert AI workflow designer for No Code Sutra, a platform that creates automation workflows from natural language descriptions.
 
 Your task is to analyze user requests and generate structured workflow definitions that can be executed by our platform.
 
 AVAILABLE NODE TYPES ({node_count} Core Types):
 {node_types_text}
 
-CRITICAL: You MUST use the EXACT node type names listed above. Do not create variations or use camelCase versions. For example:
+"""
+		body = """CRITICAL: You MUST use the EXACT node type names listed above. Do not create variations or use camelCase versions. For example:
 - Use "instagram_post" (not "instagramPost")
 - Use "textOverlay" (not "text_overlay") 
 - Use "imageUpload" (not "image_upload")
@@ -203,7 +204,7 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    
    Content must be VISUAL, ENGAGING, and MOBILE-OPTIMIZED for Instagram. Use modern, professional tone.
    Focus on ONE main message with ONE supporting element. Keep it simple and impactful.
-   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"bullets\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"minimal\"}}"
+   Return JSON: {\"headline\": \"...\", \"subhead\": \"...\", \"bullets\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"minimal\"}"
 
    **INSTAGRAM CAROUSEL:**
    "Create Instagram carousel content (2-5 slides). Generate:
@@ -220,7 +221,7 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    
    Each slide should be self-contained but connected to the main theme.
    For image_search_terms, provide 3 visual, descriptive terms that would find good background images.
-   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"slides\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"split_screen\"}}"
+   Return JSON: {\"headline\": \"...\", \"subhead\": \"...\", \"slides\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"split_screen\"}"
 
    **INSTAGRAM VIDEO REEL:**
    "Create Instagram video reel content. Generate:
@@ -233,7 +234,7 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - Recommended template: Choose from minimal|bold|gradient|split_screen|quote
    
    Content should be engaging and suitable for video format.
-   Return JSON: {{\"headline\": \"...\", \"subhead\": \"...\", \"script\": \"...\", \"key_points\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"bold\"}}"
+   Return JSON: {\"headline\": \"...\", \"subhead\": \"...\", \"script\": \"...\", \"key_points\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"bold\"}"
 
    **INSTAGRAM STORY:**
    "Create Instagram story content. Generate:
@@ -245,7 +246,7 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - Recommended template: Choose from minimal|bold|gradient|split_screen|quote
    
    Content should be time-sensitive and engaging for stories.
-   Return JSON: {{\"headline\": \"...\", \"content\": \"...\", \"call_to_action\": \"...\", \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"minimal\"}}"
+   Return JSON: {\"headline\": \"...\", \"content\": \"...\", \"call_to_action\": \"...\", \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"minimal\"}"
 
 4. TEMPLATE RECOMMENDATION GUIDELINES:
    Choose the appropriate template based on content type:
@@ -315,6 +316,7 @@ Before returning the response, verify:
 - Image workflows include imageGenerator for dynamic backgrounds
 - 🚨 FOR INSTAGRAM: imageGenerator comes BEFORE textOverlay (mandatory for templates) 🚨
 - Check execution order: dependencies must be satisfied before dependent nodes"""
+		return header + body
 	
 	def _build_user_prompt(self, user_prompt: str) -> str:
 		return f"""Please analyze this user request and generate a workflow:
