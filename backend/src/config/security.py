@@ -25,6 +25,7 @@ class SecurityConfig:
         "http://localhost:3000",
         "http://localhost:5173", 
         "http://localhost:5174",
+        "http://localhost:5175",
         "https://no-code-sutra.vercel.app",
         "https://no-code-sutra-production.up.railway.app"
     ]

@@ -187,3 +187,26 @@ class SeoOptimizerOutputV1(BaseModel):
     target_keywords: List[str]
     optimized_at: str
 
+
+class TextOverlayInputV1(BaseModel):
+    structured_data: Dict[str, Any]
+    image_url: Optional[str] = None
+    image_width: int = 1080
+    image_height: int = 1080
+    platform: str = "instagram"
+    post_type: str = "single"
+    use_instagram_template: bool = True
+    instagram_template_name: Optional[str] = None
+    use_canva_template: bool = False
+    canva_template_id: Optional[str] = None
+
+
+class TextOverlayOutputV1(BaseModel):
+    image_url: str
+    image_data_url: str
+    template_used: Optional[str] = None
+    platform_used: str
+    post_type: str
+    status: str = "completed"
+    timestamp: str
+

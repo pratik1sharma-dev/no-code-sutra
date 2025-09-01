@@ -9,6 +9,7 @@ import os
 import math
 import random
 from abc import ABC, abstractmethod
+from ..contracts import TextOverlayInputV1, TextOverlayOutputV1
 
 # Import the new Instagram Template Engine
 try:
@@ -881,89 +882,10 @@ class SmartTextPlacement:
                     pixels[idx + width]   # bottom
                 ]
                 
-                # Count significant brightness differences
+                        # Count significant brightness differences
                 for neighbor in neighbors:
-                    if abs(current - neighbor) > 30:  # Threshold for edge detection
-                        edge_count += 1
-                
-                total_pixels += 1
-        
-        # Return edge density as busyness score
-        return (edge_count / (total_pixels * 4)) * 100 if total_pixels > 0 else 0
-    
-    def _calculate_readability(self, brightness: float, contrast: float, busyness: float) -> float:
-        """Calculate overall readability score (0-100)"""
-        # Optimal brightness: 100-200 (not too dark, not too bright)
-        brightness_score = max(0, 100 - abs(brightness - 150) / 1.5)
-        
-        # Higher contrast = better readability
-        contrast_score = min(contrast / 2, 100)
-        
-        # Lower busyness = better readability  
-        busyness_score = max(100 - busyness, 0)
-        
-        # Weighted average
-        return (brightness_score * 0.4 + contrast_score * 0.4 + busyness_score * 0.2)
-    
-    def _get_zone_size(self, zone_name: str) -> int:
-        """Calculate the area of a zone in pixels"""
-        zone_coords = {
-            'top': (0, 0, self.width, int(self.height * 0.2)),
-            'bottom': (0, int(self.height * 0.75), self.width, self.height),
-            'left': (0, 0, int(self.width * 0.3), self.height),
-            'right': (int(self.width * 0.7), 0, self.width, self.height),
-            'center': (int(self.width * 0.3), int(self.height * 0.3), 
-                      int(self.width * 0.7), int(self.height * 0.7))
-        }
-        
-        x1, y1, x2, y2 = zone_coords[zone_name]
-        return (x2 - x1) * (y2 - y1)
-    
-    def select_best_zone(self, content_type: str, content_length: int) -> Tuple[str, Dict[str, Any]]:
-        """Select the best zone based on content type and image analysis"""
-        
-        # Content type preferences
-        content_preferences = {
-            'headline': ['top', 'center', 'left', 'right', 'bottom'],
-            'subhead': ['top', 'center', 'left', 'right', 'bottom'], 
-            'bullets': ['bottom', 'left', 'right', 'center', 'top'],
-            'quote': ['left', 'right', 'center', 'top', 'bottom'],
-            'caption': ['bottom', 'left', 'right', 'center', 'top']
-        }
-        
-        # Get preferred zones for this content type
-        preferred_zones = content_preferences.get(content_type, ['center', 'top', 'bottom'])
-        
-        # Score each preferred zone
-        zone_rankings = []
-        
-        for zone_name in preferred_zones:
-            if zone_name in self.zone_scores:
-                score = self.zone_scores[zone_name]['readability']
-                
-                # Adjust score based on content length
-                if content_length > 100:  # Long content
-                    # Prefer larger zones
-                    zone_size = self._get_zone_size(zone_name)
-                    size_bonus = min(zone_size / 1000, 20)  # Max 20 point bonus
-                    score += size_bonus
-                elif content_length < 30:  # Short content
-                    # Prefer center zones for impact
-                    if zone_name == 'center':
-                        score += 15
-                
-                zone_rankings.append((zone_name, score))
-        
-        # Sort by score (highest first)
-        zone_rankings.sort(key=lambda x: x[1], reverse=True)
-        
-        # Return best zone and its data
-        best_zone = zone_rankings[0][0] if zone_rankings else 'center'
-        return best_zone, self.zone_scores[best_zone]
-    
-    def adapt_text_style(self, zone_name: str) -> Dict[str, Any]:
-        """Adapt text styling based on zone characteristics"""
-        
+                    if abs(current[0] - neighbor[0]) > 20:  # Threshold for significant difference
+                        contrast += 1
         zone_data = self.zone_scores[zone_name]
         brightness = zone_data['brightness']
         contrast = zone_data['contrast']
@@ -986,6 +908,23 @@ class SmartTextPlacement:
             'zone_coordinates': zone_data['coordinates']
         }
     
+    def calculate_readability(self, zone_name: str) -> float:
+        """Calculate readability score based on brightness and contrast"""
+        zone_data = self.zone_scores[zone_name]
+        brightness = zone_data['brightness']
+        contrast = zone_data['contrast']
+        
+        # Choose text color based on background brightness
+        if brightness > 150:  # Light background
+            text_color = (0, 0, 0, 255)  # Black text
+            bg_opacity = 0.8  # More opaque background
+        else:  # Dark background  
+            text_color = (255, 255, 255, 255)  # White text
+            bg_opacity = 0.6  # More transparent background
+            
+        # Simple readability score (higher is better)
+        return contrast * bg_opacity
+
     def get_optimal_text_area(self, zone_name: str, content_length: int) -> Tuple[int, int, int, int]:
         """Get optimal text area within the selected zone"""
         
@@ -1009,58 +948,48 @@ class SmartTextPlacement:
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        # Get the structured data from AI agent or any other source
-        overlay_text = state.get('structured_data') or state.get('overlay_text') or state.get('result') or state.get('output')
-        print(f"Text overlay node processing - overlay_text: {overlay_text} type: {type(overlay_text)}")
-
-        # Get platform and post type
-        platform = state.get('platform', 'instagram')
-        post_type = state.get('post_type', 'single')  # NEW: Get post type
-        
-        # Check template preferences
-        canva_template_id = state.get('canva_template_id', 'EAGFcgTrfLo')  # Default template ID
-        use_canva_template = state.get('use_canva_template', False)  # Default to False now
-        use_instagram_template = state.get('use_instagram_template', True)  # NEW: Default to True
-        instagram_template_name = state.get('instagram_template_name')  # NEW: Specific template
+        # Validate input using the contract
+        validated_input = TextOverlayInputV1(**state)
+        overlay_text = validated_input.structured_data
         
         # NEW: Priority order - Instagram Templates > Canva > Smart Placement
-        if TEMPLATES_AVAILABLE and use_instagram_template:
-            print(f"🎨 Using Instagram Template Engine (template: {instagram_template_name or 'auto-select'})")
-            return generate_instagram_template_overlay(state, overlay_text, platform, post_type)
-        elif canva_template_id and use_canva_template:
-            print(f"🎨 Using Canva template: {canva_template_id}")
-            return generate_canva_template_overlay(state, overlay_text, platform, post_type)
+        if TEMPLATES_AVAILABLE and validated_input.use_instagram_template:
+            print(f"🎨 Using Instagram Template Engine (template: {validated_input.instagram_template_name or 'auto-select'})")
+            return generate_instagram_template_overlay(state, overlay_text, validated_input.platform, validated_input.post_type)
+        elif validated_input.canva_template_id and validated_input.use_canva_template:
+            print(f"🎨 Using Canva template: {validated_input.canva_template_id}")
+            return generate_canva_template_overlay(state, overlay_text, validated_input.platform, validated_input.post_type)
         
         # Auto-detect post type from content structure
         if isinstance(overlay_text, dict):
             if 'slides' in overlay_text and isinstance(overlay_text['slides'], list) and len(overlay_text['slides']) > 1:
-                post_type = 'carousel'
+                validated_input.post_type = 'carousel'
                 print(f"🎯 Auto-detected carousel post type from slides array ({len(overlay_text['slides'])} slides)")
             elif 'script' in overlay_text or 'key_points' in overlay_text:
-                post_type = 'video_reel'
+                validated_input.post_type = 'video_reel'
                 print(f"🎯 Auto-detected video_reel post type from content structure")
             elif 'call_to_action' in overlay_text:
-                post_type = 'story'
+                validated_input.post_type = 'story'
                 print(f"🎯 Auto-detected story post type from content structure")
         
-        print(f"Text overlay - Platform: {platform}, Post Type: {post_type}")
+        print(f"Text overlay - Platform: {validated_input.platform}, Post Type: {validated_input.post_type}")
 
         # Process structured data intelligently for any JSON structure
         if isinstance(overlay_text, dict):
-            content_converter = ContentStructureConverter(platform, post_type)
+            content_converter = ContentStructureConverter(validated_input.platform, validated_input.post_type)
             structured_content = content_converter.convert_to_platform_structure(overlay_text)
         else:
             structured_content = None
 
         # Route to appropriate rendering function based on post type
-        if post_type == 'carousel':
-            return generate_carousel_overlay(state, structured_content, platform)
-        elif post_type == 'video_reel':
-            return generate_video_reel_overlay(state, structured_content, platform)
-        elif post_type == 'story':
-            return generate_story_overlay(state, structured_content, platform)
+        if validated_input.post_type == 'carousel':
+            return generate_carousel_overlay(state, structured_content, validated_input.platform)
+        elif validated_input.post_type == 'video_reel':
+            return generate_video_reel_overlay(state, structured_content, validated_input.platform)
+        elif validated_input.post_type == 'story':
+            return generate_story_overlay(state, structured_content, validated_input.platform)
         else:
-            return generate_single_overlay(state, structured_content, platform, post_type)
+            return generate_single_overlay(state, structured_content, validated_input.platform, validated_input.post_type)
             
     except Exception as e:
         print(f"Error in text overlay node: {e}")
@@ -1098,16 +1027,15 @@ def generate_single_overlay(state: Dict[str, Any], structured_content: Dict[str,
         image_data = buffer.getvalue()
         image_data_url = f"data:image/png;base64,{base64.b64encode(image_data).decode()}"
         
-        # Update state with results
-        state['image_url'] = image_data_url
-        state['image_data_url'] = image_data_url
-        state['overlay_text_used'] = str(structured_content) if structured_content else 'No content'
-        state['platform_used'] = platform
-        state['post_type'] = post_type
-        state['status'] = 'completed'
-        state['timestamp'] = datetime.now().isoformat()
-        state['smart_placement_used'] = True
-        return state
+        # Structure the output using the contract
+        output = TextOverlayOutputV1(
+            image_url=image_data_url,
+            image_data_url=image_data_url,
+            platform_used=platform,
+            post_type=post_type,
+            timestamp=datetime.now().isoformat()
+        )
+        return output.dict()
         
     except Exception as e:
         print(f"Error in single overlay generation: {e}")
@@ -1664,22 +1592,16 @@ def generate_instagram_template_overlay(state: Dict[str, Any], overlay_text: Dic
         )
         
         if result['success']:
-            # Update state with results
-            state.update({
-                'image_url': result['image_data_url'],
-                'image_data_url': result['image_data_url'],
-                'template_used': result['template_used'],
-                'template_engine': 'instagram_templates',
-                'available_templates': result['available_templates'],
-                'overlay_text_used': str(content),
-                'platform_used': platform,
-                'post_type': post_type,
-                'status': 'completed',
-                'timestamp': datetime.now().isoformat()
-            })
-            
-            print(f"✅ Instagram template overlay completed using template: {result['template_used']}")
-            return state
+            # Structure the output using the contract
+            output = TextOverlayOutputV1(
+                image_url=result.get('image_url', ''),
+                image_data_url=result.get('image_data_url', ''),
+                template_used=result.get('template_name', 'unknown'),
+                platform_used=platform,
+                post_type=post_type,
+                timestamp=datetime.now().isoformat()
+            )
+            return output.dict()
         else:
             raise Exception(f"Template generation failed: {result.get('error', 'Unknown error')}")
             
@@ -1767,19 +1689,22 @@ def generate_canva_template_overlay(state: Dict[str, Any], overlay_text: Dict[st
         
         print(f"🎨 Canva design exported successfully")
         
-        # Update state with results
-        state['image_url'] = data_url
-        state['image_data_url'] = data_url
-        state['canva_design_id'] = design_id
-        state['canva_design_url'] = design_url
-        state['overlay_text_used'] = str(content)
-        state['platform_used'] = platform
-        state['post_type'] = post_type
-        state['canva_template_used'] = True
-        state['status'] = 'completed'
-        state['timestamp'] = datetime.now().isoformat()
-        
-        return state
+        # Structure the output using the contract
+        output = TextOverlayOutputV1(
+            image_url=data_url,
+            image_data_url=data_url,
+            template_used=f"canva_{design_id}",
+            platform_used=platform,
+            post_type=post_type,
+            timestamp=datetime.now().isoformat()
+        )
+
+        # Combine contract-validated data with Canva-specific outputs
+        final_output = output.dict()
+        final_output['canva_design_id'] = design_id
+        final_output['canva_design_url'] = design_url
+
+        return final_output
         
     except Exception as e:
         print(f"❌ Error in Canva template overlay: {e}")

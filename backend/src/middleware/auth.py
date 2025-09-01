@@ -5,10 +5,15 @@ from fastapi import HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, List
 import jwt
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 import os
 from datetime import datetime, timedelta
 import hashlib
 import secrets
+from dotenv import load_dotenv
+
+# Ensure environment variables from .env are loaded before accessing them
+load_dotenv()
 
 # Security configuration
 JWT_SECRET = os.getenv("JWT_SECRET", secrets.token_urlsafe(32))
@@ -58,9 +63,9 @@ def verify_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         raise AuthenticationError("Token has expired")
-    except jwt.JWTError:
+    except InvalidTokenError:
         raise AuthenticationError("Invalid token")
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):

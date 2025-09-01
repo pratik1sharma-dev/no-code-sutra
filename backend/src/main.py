@@ -21,10 +21,41 @@ from config.security import security_config
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=getattr(logging, security_config.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+import os
+from logging.handlers import RotatingFileHandler
+
+# Create logs directory if it doesn't exist
+logs_dir = os.getenv('LOG_DIR', 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
+# Set up log format
+log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+log_level = getattr(logging, security_config.LOG_LEVEL)
+
+# Configure root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(log_level)
+
+# Clear any existing handlers to avoid duplication
+if root_logger.handlers:
+    root_logger.handlers.clear()
+
+# Add console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter(log_format))
+root_logger.addHandler(console_handler)
+
+# Add file handler with rotation
+log_file = os.path.join(logs_dir, 'app.log')
+file_handler = RotatingFileHandler(
+    log_file,
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5
 )
+file_handler.setFormatter(logging.Formatter(log_format))
+root_logger.addHandler(file_handler)
+
+# Get module-specific logger
 logger = logging.getLogger(__name__)
 
 # Import LangGraph services

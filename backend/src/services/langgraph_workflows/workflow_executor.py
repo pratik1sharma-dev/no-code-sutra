@@ -140,6 +140,28 @@ class LangGraphWorkflowExecutor:
         })
         return merged_state
     
+    def _sanitize_for_json(self, value: Any) -> Any:
+        """Recursively sanitize values so they are JSON-serializable."""
+        try:
+            # Primitive types pass through
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                return value
+            # datetime -> ISO string
+            from datetime import datetime as _dt
+            if isinstance(value, _dt):
+                return value.isoformat()
+            # dict -> sanitize keys/values
+            if isinstance(value, dict):
+                return {str(k): self._sanitize_for_json(v) for k, v in value.items()}
+            # list/tuple -> sanitize items
+            if isinstance(value, (list, tuple)):
+                return [self._sanitize_for_json(v) for v in value]
+            # Fallback: string representation
+            return str(value)
+        except Exception:
+            return str(value)
+    
+    
     def _apply_edge_data_mappings(self, state: Dict[str, Any], edges: List[Dict[str, Any]], current_node_id: str) -> Dict[str, Any]:
         """Apply data_mapping from incoming edges to the current node's input state."""
         if not edges:
@@ -338,7 +360,14 @@ class LangGraphWorkflowExecutor:
                 'node_results': {}
             }
             graph = self.build_workflow(workflow_data)
-            final_state = graph.invoke(initial_state)
+            # Provide required configurable keys for checkpointer
+            checkpoint_ns = os.getenv('CHECKPOINT_NAMESPACE', 'workflows')
+            config = {"configurable": {"thread_id": workflow_id, "checkpoint_ns": checkpoint_ns}}
+            final_state = graph.invoke(initial_state, config=config)
+            # Determine failures from executed nodes
+            executed_nodes = final_state.get('nodes_executed', []) or []
+            failed_nodes = [n for n in executed_nodes if (n or {}).get('status') == 'failed']
+            has_failures = len(failed_nodes) > 0
             result = {
                 'workflow_id': str(initial_state['workflow_id']),
                 'start_time': str(initial_state['start_time']),
@@ -348,7 +377,13 @@ class LangGraphWorkflowExecutor:
                 'execution_id': str(initial_state['workflow_id']),
                 'end_time': datetime.now().isoformat(),
                 'failed_nodes': self._sanitize_for_json(failed_nodes) if has_failures else [],
-                'error_details': [{'node_id': str(node.get('node_id', '')), 'error': str(node.get('result', {}).get('error', 'Unknown error'))} for node in failed_nodes] if has_failures else []
+                'error_details': [
+                    {
+                        'node_id': str(node.get('node_id', '')),
+                        'error': str((node.get('result') or {}).get('error', 'Unknown error'))
+                    }
+                    for node in failed_nodes
+                ] if has_failures else []
             }
             essential_keys = ['result', 'output', 'content', 'status', 'timestamp', 'image_url', 'social_data', 'instagram_post', 'node_results', 'nodes_executed']
             for key in essential_keys:
@@ -530,9 +565,12 @@ class LangGraphWorkflowExecutor:
                 'node_results': {}
             }
             graph = self.build_workflow(workflow_data)
+            # Provide required configurable keys for checkpointer
+            checkpoint_ns = os.getenv('CHECKPOINT_NAMESPACE', 'workflows')
+            config = {"configurable": {"thread_id": initial_state['workflow_id'], "checkpoint_ns": checkpoint_ns}}
             try:
                 # Preferred: use LangGraph streaming API if available
-                for event in graph.stream(initial_state):  # type: ignore[attr-defined]
+                for event in graph.stream(initial_state, config=config):  # type: ignore[attr-defined]
                     # event is typically a (node_name, state) or dict depending on version
                     try:
                         import json as _json
@@ -550,7 +588,7 @@ class LangGraphWorkflowExecutor:
                     except Exception:
                         continue
                 # Final state after stream completes
-                final_state = graph.invoke(initial_state)
+                final_state = graph.invoke(initial_state, config=config)
                 import json as _json
                 yield f"data: {_json.dumps({'type': 'completed', 'execution_id': final_state.get('workflow_id')})}\n\n"
             except Exception:

@@ -76,6 +76,40 @@ def run_migrations():
             "CREATE INDEX IF NOT EXISTS idx_workflow_name ON workflows (name)"
         ))
         
+        # Ensure executions table has required columns and indexes
+        exec_user_id_exists = connection.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='executions' AND column_name='user_id'"
+        )).fetchone()
+        
+        if not exec_user_id_exists:
+            logger.info("Adding user_id column to executions table and creating indexes")
+            # Add missing user_id column
+            connection.execute(text(
+                "ALTER TABLE executions ADD COLUMN user_id VARCHAR"
+            ))
+            
+            # Create helpful indexes (no-ops if they already exist)
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_executions_user_id ON executions (user_id)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_executions_workflow_id ON executions (workflow_id)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_executions_status ON executions (status)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_executions_started_at ON executions (started_at)"
+            ))
+            # Composite indexes used by queries
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_execution_workflow_user ON executions (workflow_id, user_id)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_execution_status_time ON executions (status, started_at)"
+            ))
+        
         db.commit()
         logger.info("Database migrations completed successfully")
         
