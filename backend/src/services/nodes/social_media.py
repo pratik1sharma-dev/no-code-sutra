@@ -22,8 +22,11 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         print(f"🔍 Content: {content}")
         
         if platform == 'instagram' or platform == 'instagram_post':
-            # First try to get structured_data from AI Agent
-            if 'structured_data' in state and state['structured_data']:
+            # Get content, prioritizing the 'dynamic' key from aiAgent
+            if 'dynamic' in state and state['dynamic']:
+                content = state['dynamic']
+                print(f"🔍 Using content from 'dynamic' key.")
+            elif 'structured_data' in state and state['structured_data']:
                 content = state['structured_data']
                 print(f"🔍 Using structured_data: {content}")
             elif not content:
@@ -155,11 +158,8 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                             'real_post': True,
                             'api_response': result['api_response']
                         }
-                        state['social_data'] = social_data
-                        state['instagram_post'] = social_data
-                        state['status'] = 'posted'
-                        state['timestamp'] = datetime.now().isoformat()
-                        return state
+                        # Return a dictionary matching the declared 'writes' from the contract
+                        return {'post_id': result.get('instagram_post_id')}
                     else:
                         print(f"🔍 ❌ Instagram post failed with status: {result.get('status')}")
                         print(f"🔍 Error details: {result.get('error', 'No error details')}")
@@ -182,10 +182,8 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                 'image_url_used': image_url or 'none'
             }
             state['social_data'] = social_data
-            state['instagram_post'] = social_data
-            state['status'] = 'posted'
-            state['timestamp'] = datetime.now().isoformat()
-            return state
+            # Return a dictionary matching the declared 'writes' from the contract
+            return {'post_id': social_data.get('post_id', 'simulated_post_id')}
         else:
             social_data = {
                 'platform': platform,

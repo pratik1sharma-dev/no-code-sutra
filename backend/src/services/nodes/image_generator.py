@@ -329,20 +329,20 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
             'generated_at': datetime.now().isoformat()
         }
         
-        # Update state
-        state['image_data'] = image_data
-        state['image_url'] = image_url
-        state['background_image_url'] = image_url  # For text overlay compatibility
-        state['image'] = image_data
-        state['status'] = 'completed'
-        state['timestamp'] = datetime.now().isoformat()
-        
         print(f"Image generator completed - Source: {source}, URL: {image_url}")
-        return state
+
+        # Return a dictionary matching the declared 'writes' from the contract
+        return {
+            'image_url': image_url,
+            'source': source,
+            'keywords': image_fetcher.extract_keywords(content) if content else []
+        }
         
     except Exception as e:
         print(f"Error in image generator node: {e}")
-        state['status'] = 'failed'
-        state['error'] = str(e)
-        state['timestamp'] = datetime.now().isoformat()
-        return state
+        # Even on failure, return the expected structure
+        return {
+            'image_url': None,
+            'source': 'error',
+            'keywords': []
+        }
