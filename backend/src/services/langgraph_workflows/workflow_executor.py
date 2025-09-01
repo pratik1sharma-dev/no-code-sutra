@@ -8,6 +8,11 @@ try:
     from langgraph.checkpoint.sqlite import SqliteSaver  # type: ignore
 except Exception:  # pragma: no cover
     SqliteSaver = None  # type: ignore
+try:
+    # Optional Postgres checkpointer (if available in installed langgraph version)
+    from langgraph.checkpoint.postgres import PostgresSaver  # type: ignore
+except Exception:  # pragma: no cover
+    PostgresSaver = None  # type: ignore
 import json
 from datetime import datetime
 import uuid
@@ -20,7 +25,19 @@ class LangGraphWorkflowExecutor:
         self.dispatcher = NodeDispatcher()
         # Choose checkpointer: durable sqlite if configured, else in-memory
         checkpoint_backend = os.getenv('CHECKPOINT_BACKEND', 'memory').lower()
-        if checkpoint_backend == 'sqlite' and SqliteSaver is not None:
+        if checkpoint_backend == 'postgres' and PostgresSaver is not None:
+            pg_url = os.getenv('CHECKPOINT_POSTGRES_URL') or os.getenv('DATABASE_URL')
+            if not pg_url:
+                print("LangGraph postgres checkpointer requested but no URL provided; falling back to memory")
+                self.memory = MemorySaver()
+            else:
+                try:
+                    self.memory = PostgresSaver(pg_url)  # type: ignore
+                    print("LangGraph checkpointer: postgres")
+                except Exception as e:
+                    print(f"LangGraph postgres checkpointer init failed: {e}; falling back to memory")
+                    self.memory = MemorySaver()
+        elif checkpoint_backend == 'sqlite' and SqliteSaver is not None:
             db_path = os.getenv('CHECKPOINT_SQLITE_PATH', '/workspace/.checkpoints/langgraph_checkpoints.sqlite')
             # Ensure directory exists
             try:
