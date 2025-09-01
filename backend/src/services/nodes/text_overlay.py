@@ -1010,9 +1010,13 @@ class SmartTextPlacement:
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        # Validate input using the contract
-        validated_input = TextOverlayInputV1(**state)
-        overlay_text = validated_input.structured_data
+        # Get content, prioritizing 'dynamic' from aiAgent, then 'structured_data'
+        overlay_text = state.get('dynamic') or state.get('structured_data') or {}
+        print(f"🧠 Text overlay received content: {overlay_text}")
+
+        # Validate input using the contract, merging overlay_text
+        input_data = {**state, 'structured_data': overlay_text}
+        validated_input = TextOverlayInputV1(**input_data)
         
         # NEW: Priority order - Instagram Templates > Canva > Smart Placement
         if TEMPLATES_AVAILABLE and validated_input.use_instagram_template:
