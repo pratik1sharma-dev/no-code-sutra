@@ -1010,13 +1010,9 @@ class SmartTextPlacement:
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        # Get content, prioritizing 'dynamic' from aiAgent, then 'structured_data'
-        overlay_text = state.get('dynamic') or state.get('structured_data') or {}
-        print(f"🧠 Text overlay received content: {overlay_text}")
-
-        # Validate input using the contract, merging overlay_text
-        input_data = {**state, 'structured_data': overlay_text}
-        validated_input = TextOverlayInputV1(**input_data)
+        # Validate input using the contract
+        validated_input = TextOverlayInputV1(**state)
+        overlay_text = validated_input.structured_data
         
         # NEW: Priority order - Instagram Templates > Canva > Smart Placement
         if TEMPLATES_AVAILABLE and validated_input.use_instagram_template:
@@ -1027,7 +1023,6 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
             return generate_canva_template_overlay(state, overlay_text, validated_input.platform, validated_input.post_type)
         
         # Auto-detect post type from content structure
-        print(f"🕵️‍♂️ Auto-detecting post type from content: {overlay_text}")
         if isinstance(overlay_text, dict):
             if 'slides' in overlay_text and isinstance(overlay_text['slides'], list) and len(overlay_text['slides']) > 1:
                 validated_input.post_type = 'carousel'
@@ -1066,65 +1061,6 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         return state
 
 
-def _apply_smart_text_placement(image: Image.Image, structured_content: Dict[str, Any], design_system: 'PlatformDesignSystem', font_system: 'ModernFontSystem') -> Image.Image:
-    """Analyzes image, finds best text placement, and renders content."""
-    import json
-    
-    print(f"🧠 Applying smart text placement for content: {structured_content}")
-    
-    if not structured_content:
-        print("⚠️ No structured content provided for text overlay. Skipping.")
-        return image
-
-    # 1. Analyze the image
-    placement = SmartTextPlacement(image)
-    
-    # 2. Select best zone based on content length
-    content_length = len(json.dumps(structured_content))
-    best_zone, zone_data = placement.select_best_zone(
-        'headline' if 'headline' in structured_content else 'body', 
-        content_length
-    )
-    print(f"🎯 Best zone selected: {best_zone} with readability {zone_data.get('readability', 0):.2f}")
-    
-    # 3. Adapt text style for the zone
-    text_style = placement.adapt_text_style(best_zone)
-    print(f"🎨 Adapted text style: color={text_style['text_color']}, bg_opacity={text_style['background_opacity']:.2f}")
-    
-    # 4. Get optimal text area
-    text_area_x1, text_area_y1, text_area_x2, text_area_y2 = placement.get_optimal_text_area(best_zone, content_length)
-    text_area_width = text_area_x2 - text_area_x1
-    
-    # 5. Create a modern card background for the text
-    card_image = design_system.create_modern_card(image, (text_area_x1, text_area_y1, text_area_x2, text_area_y2))
-    image.paste(card_image, (0, 0), card_image)
-    
-    # 6. Render the text
-    draw = ImageDraw.Draw(image)
-    renderer = ModernTextRenderer(font_system)
-    
-    y_offset = text_area_y1
-    print(f"✍️ Rendering content in zone '{best_zone}' at ({text_area_x1}, {y_offset}) with width {text_area_width}")
-    
-    if structured_content.get('headline'):
-        print(f"  - Rendering headline: '{structured_content['headline']}'")
-        y_offset += renderer.render_text_block(draw, structured_content['headline'], 'headline', (text_area_x1, y_offset), text_area_width, text_style['text_color'])
-    
-    if structured_content.get('subhead'):
-        print(f"  - Rendering subhead: '{structured_content['subhead']}'")
-        y_offset += renderer.render_text_block(draw, structured_content['subhead'], 'subhead', (text_area_x1, y_offset), text_area_width, text_style['text_color'])
-        
-    if structured_content.get('bullets'):
-        for bullet in structured_content['bullets']:
-            print(f"  - Rendering bullet: '{bullet}'")
-            y_offset += renderer.render_text_block(draw, f"• {bullet}", 'bullet', (text_area_x1, y_offset), text_area_width, text_style['text_color'])
-            
-    if structured_content.get('quote'):
-        print(f"  - Rendering quote: '\"{structured_content['quote']}\"'" )
-        y_offset += renderer.render_text_block(draw, f"\"{structured_content['quote']}\"", 'quote', (text_area_x1, y_offset), text_area_width, text_style['text_color'])
-        
-    return image
-
 def generate_single_overlay(state: Dict[str, Any], structured_content: Dict[str, Any], platform: str, post_type: str = 'single') -> Dict[str, Any]:
     """Generate single image overlay (existing logic)"""
     try:
@@ -1143,23 +1079,475 @@ def generate_single_overlay(state: Dict[str, Any], structured_content: Dict[str,
         base_image = _load_modern_background(background_url, width, height)
         image_rgba = base_image.convert('RGBA')
         
-        # Apply smart text placement
-        final_image = _apply_smart_text_placement(image_rgba, structured_content, design_system, font_system)
+        # Apply smart text placement instead of fixed layout
+        # This analyzes the image and places text in optimal zones
+        final_image = _apply_smart_text_placement(image_rgba, structured_content, design_system)
         
         # Convert to base64 for return
         buffer = io.BytesIO()
         final_image.save(buffer, format='PNG')
         image_data = buffer.getvalue()
         image_data_url = f"data:image/png;base64,{base64.b64encode(image_data).decode()}"
-
+        
         # Structure the output using the contract
         output = TextOverlayOutputV1(
+            image_url=image_data_url,
             image_data_url=image_data_url,
             platform_used=platform,
             post_type=post_type,
             timestamp=datetime.now().isoformat()
         )
         return output.dict()
+        
+    except Exception as e:
+        print(f"Error in single overlay generation: {e}")
+        state['status'] = 'failed'
+        state['error'] = str(e)
+        state['timestamp'] = datetime.now().isoformat()
+        return state
+
+
+def generate_carousel_overlay(state: Dict[str, Any], structured_content: Dict[str, Any], platform: str) -> Dict[str, Any]:
+    """Generate carousel overlay with multiple slides"""
+    try:
+        slides_data = structured_content.get('slides', [])
+        print(f"🎨 Starting carousel overlay generation...")
+        print(f"🎨 Found {len(slides_data)} slides to process")
+        
+        if not slides_data:
+            print(f"🎨 No slides found, falling back to single overlay")
+            # Fallback to single overlay if no slides
+            return generate_single_overlay(state, structured_content, platform)
+        
+        generated_slides = []
+        
+        for i, slide in enumerate(slides_data):
+            print(f"🎨 Generating slide {i+1}/{len(slides_data)}...")
+            print(f"🎨 Slide {i+1} data: {slide}")
+            
+            # Create slide-specific state
+            slide_state = state.copy()
+            slide_state['slide_index'] = i
+            slide_state['slide_data'] = slide
+            
+            # Generate single slide image
+            slide_image = generate_single_slide(slide_state, slide, platform)
+            generated_slides.append(slide_image)
+            
+            print(f"✅ Slide {i+1} generated successfully")
+        
+        print(f"🎯 Carousel generation summary:")
+        print(f"🎯 Total slides generated: {len(generated_slides)}")
+        
+        # Structure the output using the contract
+        output = TextOverlayOutputV1(
+            carousel_images=generated_slides,
+            platform_used=platform,
+            post_type='carousel',
+            timestamp=datetime.now().isoformat()
+        )
+        return output.dict()
+        
+    except Exception as e:
+        print(f"❌ Error in carousel overlay generation: {e}")
+        state['status'] = 'failed'
+        state['error'] = str(e)
+        state['timestamp'] = datetime.now().isoformat()
+        return state
+
+
+def generate_single_slide(state: Dict[str, Any], slide_data: Dict[str, Any], platform: str) -> Dict[str, Any]:
+    """Generate a single slide for carousel with slide-specific background"""
+    try:
+        width = int(state.get('image_width', 1080))
+        height = int(state.get('image_height', 1080))
+        
+        # Get slide-specific background image
+        background_url = _get_slide_specific_background(slide_data, state)
+        
+        print(f"🎨 Slide {state.get('slide_index', 0) + 1}: Using background from search terms: {slide_data.get('image_search_terms', [])}")
+        
+        # Initialize systems
+        font_system = ModernFontSystem(width, height, platform)
+        text_renderer = ModernTextRenderer(font_system)
+        design_system = PlatformDesignSystem(width, height, platform)
+
+        # Load base image
+        base_image = _load_modern_background(background_url, width, height)
+        image_rgba = base_image.convert('RGBA')
+        
+        # Apply smart text placement for carousel slides too
+        final_image = _apply_smart_text_placement(image_rgba, slide_data, design_system)
+        
+        # Convert and encode
+        output_image = final_image.convert('RGB')
+        buffer = io.BytesIO()
+        output_image.save(buffer, format='JPEG', quality=95)
+        encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        data_url = f"data:image/jpeg;base64,{encoded}"
+
+        return {
+            'slide_index': state.get('slide_index', 0),
+            'image_data_url': data_url,
+            'slide_data': slide_data,
+            'smart_placement_used': True
+        }
+        
+    except Exception as e:
+        print(f"Error in single slide generation: {e}")
+        return {
+            'slide_index': state.get('slide_index', 0),
+            'error': str(e)
+        }
+
+
+def generate_video_reel_overlay(state: Dict[str, Any], structured_content: Dict[str, Any], platform: str) -> Dict[str, Any]:
+    """Generate video reel overlay (placeholder for now)"""
+    # For now, generate a single image with video reel content
+    return generate_single_overlay(state, structured_content, platform)
+
+
+def generate_story_overlay(state: Dict[str, Any], structured_content: Dict[str, Any], platform: str) -> Dict[str, Any]:
+    """Generate story overlay (placeholder for now)"""
+    # For now, generate a single image with story content
+    return generate_single_overlay(state, structured_content, platform)
+
+
+def _load_modern_background(background_url: Optional[str], width: int, height: int) -> Image.Image:
+    """Load or create modern background"""
+    base_image = None
+    
+    if background_url and isinstance(background_url, str) and background_url.startswith('http'):
+        try:
+            resp = requests.get(background_url, timeout=10)
+            resp.raise_for_status()
+            base_image = Image.open(io.BytesIO(resp.content)).convert('RGB')
+        except Exception as e:
+            print(f"Failed to load background image: {e}")
+            base_image = None
+
+    if base_image is None:
+        # Create modern Instagram-style background
+        base_image = _create_modern_instagram_background(width, height)
+    
+    return base_image
+
+
+def _get_slide_specific_background(slide_data: Dict[str, Any], state: Dict[str, Any]) -> str:
+    """Get slide-specific background image using image_search_terms"""
+    try:
+        # Get image search terms from slide data
+        search_terms = slide_data.get('image_search_terms', [])
+        
+        if not search_terms:
+            # Fallback to generic background
+            print(f"⚠️ No image_search_terms found, using fallback background")
+            return state.get('image_url') or state.get('background_image_url') or None
+        
+        # Create search query from terms
+        search_query = ' '.join(search_terms[:3])  # Use top 3 terms
+        print(f"🔍 Searching for slide background: {search_query}")
+        
+        # Use existing image fetcher to get background
+        from .image_generator import DynamicImageFetcher
+        image_fetcher = DynamicImageFetcher()
+        
+        # Create content dict for image fetcher
+        content = {
+            'headline': slide_data.get('title', ''),
+            'subhead': slide_data.get('content', ''),
+            'caption': f"{slide_data.get('title', '')} {slide_data.get('content', '')}"
+        }
+        
+        # Override keywords with slide-specific search terms
+        content['_custom_keywords'] = search_terms
+        
+        # Get background image
+        background_url = image_fetcher.fetch_relevant_image(content)
+        
+        if background_url:
+            print(f"✅ Found slide-specific background: {background_url}")
+            return background_url
+        else:
+            print(f"⚠️ Failed to find slide-specific background, using fallback")
+            return state.get('image_url') or state.get('background_image_url') or None
+            
+    except Exception as e:
+        print(f"❌ Error getting slide-specific background: {e}")
+        return state.get('image_url') or state.get('background_image_url') or None
+
+
+def _create_modern_instagram_background(width: int, height: int) -> Image.Image:
+    """Create a modern Instagram-style background"""
+    # Create base with modern gradient
+    base_image = Image.new('RGB', (width, height), (255, 255, 255))
+    
+    # Create modern gradient overlay
+    overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    
+    # Modern gradient from top-left to bottom-right
+    for y in range(height):
+        for x in range(width):
+            # Calculate gradient based on position
+            progress_x = x / width
+            progress_y = y / height
+            
+            # Modern color palette
+            r = int(240 + (245 - 240) * progress_x)
+            g = int(245 + (250 - 245) * progress_y)
+            b = int(250 + (255 - 250) * (progress_x + progress_y) / 2)
+            
+            # Add subtle variation
+            variation = int(10 * math.sin(progress_x * 3.14) * math.cos(progress_y * 3.14))
+            r = max(0, min(255, r + variation))
+            g = max(0, min(255, g + variation))
+            b = max(0, min(255, b + variation))
+            
+            overlay_draw.point((x, y), fill=(r, g, b, 255))
+    
+    # Composite the gradient
+    base_image.paste(overlay, (0, 0), overlay)
+    
+    return base_image
+
+
+def _create_modern_platform_layout(image_rgba: Image.Image, width: int, height: int, design_system: PlatformDesignSystem, platform: str) -> Image.Image:
+    """Create dramatic, professional layout with enhanced styling"""
+    # Create dramatic card overlay with better proportions
+    margin = int(min(width, height) * 0.08)  # Larger margins for drama
+    card_top = int(height * 0.15)    # Start higher for impact
+    card_bottom = int(height * 0.85) # End higher for balance
+    
+    # Create dramatic card
+    card_image = design_system.create_modern_card(image_rgba, (margin, card_top, width - margin, card_bottom))
+    
+    # Composite the card
+    result = Image.alpha_composite(image_rgba, card_image)
+    
+    return result
+
+
+def _apply_smart_text_placement(image: Image.Image, structured_content: Dict[str, Any], 
+                               design_system: PlatformDesignSystem) -> Image.Image:
+    """Apply smart text placement with intelligent styling and minimal overlays"""
+    
+    # Initialize smart placement system
+    smart_placement = SmartTextPlacement(image)
+    
+    # Create a copy for text overlay
+    result_image = image.copy()
+    draw = ImageDraw.Draw(result_image)
+    
+    # Get platform configuration
+    platform_config = PlatformConfig('instagram')
+    font_system = ModernFontSystem(image.width, image.height, 'instagram')
+    text_renderer = ModernTextRenderer(font_system)
+    
+    # Process each content type with smart placement
+    content_structure = platform_config.config['post_types']['single']['content_structure']
+    
+    for content_type in content_structure:
+        if content_type in structured_content and structured_content[content_type]:
+            content = structured_content[content_type]
+            content_length = len(str(content))
+            
+            # Select best zone for this content
+            zone_name, zone_data = smart_placement.select_best_zone(content_type, content_length)
+            
+            # Get optimal text area within the zone
+            text_area = smart_placement.get_optimal_text_area(zone_name, content_length)
+            
+            # Get intelligent styling based on image colors
+            style_data = _get_intelligent_text_styling(image, zone_data, content_type)
+            
+            # Decide if we need any overlay for readability
+            overlay_needed = _should_add_overlay(zone_data)
+            
+            if overlay_needed:
+                # Add minimal overlay only when needed
+                _add_minimal_overlay(result_image, text_area, style_data)
+            
+            # Render text with intelligent styling
+            _render_text_with_smart_styling(
+                draw, content, content_type, text_area, 
+                style_data, text_renderer
+            )
+    
+    return result_image
+
+
+def _get_intelligent_text_styling(image: Image.Image, zone_data: Dict[str, Any], content_type: str) -> Dict[str, Any]:
+    """Get intelligent text styling based on image colors and content type"""
+    
+    # Extract dominant colors from the zone
+    zone_coords = zone_data['coordinates']
+    zone_image = image.crop(zone_coords)
+    dominant_colors = _extract_dominant_colors(zone_image)
+    
+    # Analyze color temperature
+    color_temp = _analyze_color_temperature(dominant_colors)
+    
+    # Select harmonious text color
+    if color_temp == 'warm':
+        # Warm image (reds, oranges, yellows) → use cool colors
+        text_color = (59, 130, 246, 255)  # Instagram blue
+    elif color_temp == 'cool':
+        # Cool image (blues, greens, purples) → use warm colors  
+        text_color = (251, 146, 60, 255)  # Orange
+    else:
+        # Neutral image → use high contrast
+        brightness = zone_data['brightness']
+        if brightness > 150:
+            text_color = (0, 0, 0, 255)  # Black
+        else:
+            text_color = (255, 255, 255, 255)  # White
+    
+    # Add shadow for better readability
+    shadow_color = (0, 0, 0, 100) if text_color[0] > 128 else (255, 255, 255, 100)
+    
+    return {
+        'text_color': text_color,
+        'shadow_color': shadow_color,
+        'font_size': _get_adaptive_font_size(content_type, zone_data),
+        'overlay_opacity': _calculate_overlay_opacity(zone_data)
+    }
+
+
+def _extract_dominant_colors(image: Image.Image, num_colors: int = 3) -> List[Tuple[int, int, int]]:
+    """Extract dominant colors from image using simple color analysis"""
+    
+    # Convert to RGB and get pixel data
+    rgb_image = image.convert('RGB')
+    pixels = list(rgb_image.getdata())
+    
+    # Simple color clustering (k-means approximation)
+    colors = []
+    for i in range(0, len(pixels), 100):  # Sample every 100th pixel
+        colors.append(pixels[i])
+    
+    # Group similar colors
+    color_groups = {}
+    for color in colors:
+        # Round to nearest 32 for grouping
+        rounded = tuple((c // 32) * 32 for c in color)
+        if rounded in color_groups:
+            color_groups[rounded] += 1
+        else:
+            color_groups[rounded] = 1
+    
+    # Get most frequent colors
+    sorted_colors = sorted(color_groups.items(), key=lambda x: x[1], reverse=True)
+    return [color for color, count in sorted_colors[:num_colors]]
+
+
+def _analyze_color_temperature(colors: List[Tuple[int, int, int]]) -> str:
+    """Analyze if colors are warm, cool, or neutral"""
+    
+    if not colors:
+        return 'neutral'
+    
+    # Calculate average RGB values
+    avg_r = sum(c[0] for c in colors) / len(colors)
+    avg_g = sum(c[1] for c in colors) / len(colors)
+    avg_b = sum(c[2] for c in colors) / len(colors)
+    
+    # Simple temperature analysis
+    if avg_r > avg_b + 30:  # More red than blue
+        return 'warm'
+    elif avg_b > avg_r + 30:  # More blue than red
+        return 'cool'
+    else:
+        return 'neutral'
+
+
+def _should_add_overlay(zone_data: Dict[str, Any]) -> bool:
+    """Decide if overlay is needed for readability"""
+    
+    readability = zone_data['readability']
+    busyness = zone_data['busyness']
+    
+    # No overlay if high readability and low busyness
+    if readability > 75 and busyness < 3:
+        return False
+    
+    # Add overlay if low readability or high busyness
+    return readability < 60 or busyness > 8
+
+
+def _add_minimal_overlay(image: Image.Image, text_area: Tuple[int, int, int, int], style_data: Dict[str, Any]):
+    """Add minimal overlay only when needed"""
+    
+    x1, y1, x2, y2 = text_area
+    
+    # Create very subtle overlay
+    overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    
+    # Add minimal background with very low opacity
+    opacity = style_data.get('overlay_opacity', 30)
+    overlay_draw.rectangle([x1-10, y1-10, x2+10, y2+10], 
+                          fill=(255, 255, 255, opacity))
+    
+    # Composite the overlay
+    image.paste(overlay, (0, 0), overlay)
+
+
+def _render_text_with_smart_styling(draw: ImageDraw.Draw, content: Any, content_type: str, 
+                                   text_area: Tuple[int, int, int, int], style_data: Dict[str, Any], 
+                                   text_renderer: ModernTextRenderer):
+    """Render text with intelligent styling"""
+    
+    x1, y1, x2, y2 = text_area
+    text_color = style_data['text_color']
+    shadow_color = style_data['shadow_color']
+    
+    # Calculate text position
+    if content_type == 'headline':
+        text_x = x1 + 20
+        text_y = y1 + 20
+    elif content_type == 'subhead':
+        text_x = x1 + 20
+        text_y = y1 + 80
+    elif content_type == 'bullets':
+        text_x = x1 + 20
+        text_y = y1 + 140
+    
+    # Render text with shadow for better readability
+    text_width = x2 - x1 - 40
+    
+    if content_type == 'bullets' and isinstance(content, list):
+        for i, bullet in enumerate(content[:3]):
+            bullet_text = f"• {bullet}"
+            bullet_y = text_y + (i * 40)
+            
+            # Draw shadow first
+            text_renderer.render_text_block(
+                draw, bullet_text, 'bullet',
+                (text_x + 2, bullet_y + 2), text_width,
+                color=shadow_color
+            )
+            
+            # Draw main text
+            text_renderer.render_text_block(
+                draw, bullet_text, 'bullet',
+                (text_x, bullet_y), text_width,
+                color=text_color
+            )
+    else:
+        # Draw shadow first
+        text_renderer.render_text_block(
+            draw, str(content), content_type,
+            (text_x + 2, text_y + 2), text_width,
+            color=shadow_color
+        )
+        
+        # Draw main text
+        text_renderer.render_text_block(
+            draw, str(content), content_type,
+            (text_x, text_y), text_width,
+            color=text_color
+        )
 
 
 def _get_adaptive_font_size(content_type: str, zone_data: Dict[str, Any]) -> int:

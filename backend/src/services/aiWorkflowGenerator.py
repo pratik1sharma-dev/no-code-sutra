@@ -83,8 +83,11 @@ class AIWorkflowGenerator:
 			return self._generate_fallback_workflow(prompt)
 	
 	def _build_system_prompt(self) -> str:
-		# Import centralized node registry
-		from .node_registry import node_registry
+		# Force reload of node_registry to get latest contracts
+		import importlib
+		from . import node_registry as nr_module
+		importlib.reload(nr_module)
+		node_registry = nr_module.node_registry
 		# Build node types list dynamically
 		node_types_list = []
 		for node_type, metadata in node_registry._nodes.items():

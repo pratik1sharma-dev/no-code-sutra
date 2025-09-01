@@ -133,11 +133,15 @@ Optionally, if you think a specific visual template would work particularly well
         state['status'] = 'completed'
         state['timestamp'] = datetime.now().isoformat()
 
-        # Return a dictionary matching the declared 'writes' from the contract
-        return {'dynamic': state.get('result', {})}
+        # Return the structured data in the format expected by the contract
+        return {
+            'structured_data': state['structured_data']
+        }
     except Exception as e:
         state['status'] = 'failed'
         state['error'] = str(e)
         state['timestamp'] = datetime.now().isoformat()
         # Even on failure, return the expected structure
-        return {'dynamic': {'error': str(e), 'status': 'failed'}}
+        return {
+            'structured_data': {'error': str(e), 'status': 'failed'}
+        }

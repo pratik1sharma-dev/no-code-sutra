@@ -22,11 +22,8 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         print(f"🔍 Content: {content}")
         
         if platform == 'instagram' or platform == 'instagram_post':
-            # Get content, prioritizing the 'dynamic' key from aiAgent
-            if 'dynamic' in state and state['dynamic']:
-                content = state['dynamic']
-                print(f"🔍 Using content from 'dynamic' key.")
-            elif 'structured_data' in state and state['structured_data']:
+            # First try to get structured_data from AI Agent
+            if 'structured_data' in state and state['structured_data']:
                 content = state['structured_data']
                 print(f"🔍 Using structured_data: {content}")
             elif not content:

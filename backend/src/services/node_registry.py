@@ -48,7 +48,7 @@ class NodeRegistry:
             color='primary',
             required_inputs=['task', 'prompt'],
             optional_inputs=['model', 'temperature', 'max_tokens'],
-            output_schema={'type': 'object', 'properties': {'dynamic': {'type': 'any'}}}
+            output_schema={'type': 'object', 'properties': {'structured_data': {'type': 'object'}}} # The AI-generated content
         )
         
         # Social Media Nodes
