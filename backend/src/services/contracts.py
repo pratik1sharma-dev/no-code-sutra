@@ -68,3 +68,54 @@ def normalize_to_content_v1(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     return normalized
 
+class EmailInputV1(BaseModel):
+    to: str = ""
+    subject: str = ""
+    body: str = ""
+
+
+class EmailOutputV1(BaseModel):
+    message_id: Optional[str] = None
+    status: str = "sent"
+    sent_at: str
+    provider_meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SlackInputV1(BaseModel):
+    channel: str = ""
+    message: str = ""
+
+
+class SlackOutputV1(BaseModel):
+    message_ts: Optional[str] = None
+    status: str = "sent"
+    sent_at: str
+    provider_meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ImageUploadInputV1(BaseModel):
+    image_data_url: Optional[str] = None
+    image_url: Optional[str] = None
+    carousel_images: Optional[List[Any]] = None
+
+
+class ImageUploadOutputV1(BaseModel):
+    public_url: str
+    public_id: Optional[str] = None
+    version: Optional[str] = None
+    provider: str = "cloudinary"
+
+
+class CanvaTemplateInputV1(BaseModel):
+    template_id: str
+    content: Dict[str, Any]
+    export_format: str = "png"
+    export_width: int = 1080
+    export_height: int = 1080
+
+
+class CanvaTemplateOutputV1(BaseModel):
+    canva_design_id: Optional[str] = None
+    canva_design_url: Optional[str] = None
+    image_data_url: str
+

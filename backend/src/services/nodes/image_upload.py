@@ -5,6 +5,7 @@ import time
 import base64
 import hashlib
 import requests
+from ..contracts import ImageUploadInputV1, ImageUploadOutputV1
 
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,6 +71,8 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
 
         state['image_url'] = secure_url
         state['cloudinary_result'] = {'public_id': result.get('public_id'), 'version': result.get('version')}
+        out = ImageUploadOutputV1(public_url=secure_url, public_id=result.get('public_id'), version=str(result.get('version') or ''))
+        state['image_upload_output'] = out.model_dump()
         state['status'] = 'uploaded'
         state['timestamp'] = datetime.now().isoformat()
         return state

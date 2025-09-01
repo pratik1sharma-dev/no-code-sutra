@@ -14,6 +14,7 @@ from io import BytesIO
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from services.canva_integration import CanvaIntegration
+from services.contracts import CanvaTemplateInputV1, CanvaTemplateOutputV1
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -38,17 +39,19 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         print("🎨 Executing Canva Template Node...")
         
-        # Get parameters from state
-        template_id = state.get('template_id')
-        content = state.get('content', {})
-        export_format = state.get('export_format', 'png')
-        export_width = state.get('export_width', 1080)
-        export_height = state.get('export_height', 1080)
+        # Get parameters from state and validate
+        inp = CanvaTemplateInputV1(
+            template_id=state.get('template_id'),
+            content=state.get('content', {}),
+            export_format=state.get('export_format', 'png'),
+            export_width=state.get('export_width', 1080),
+            export_height=state.get('export_height', 1080)
+        )
         
-        if not template_id:
+        if not inp.template_id:
             raise ValueError("template_id is required in state")
         
-        if not content:
+        if not inp.content:
             raise ValueError("content is required in state")
         
         print(f"📋 Template ID: {template_id}")
@@ -62,7 +65,7 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         
         # Apply content to template
         print("🎨 Applying content to Canva template...")
-        design = canva.apply_content_to_template(template_id, content)
+        design = canva.apply_content_to_template(inp.template_id, inp.content)
         
         design_id = design.get('id')
         design_url = design.get('url')
@@ -73,9 +76,9 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         print("📤 Exporting design...")
         image_data = canva.export_design(
             design_id, 
-            format=export_format,
-            width=export_width,
-            height=export_height
+            format=inp.export_format,
+            width=inp.export_width,
+            height=inp.export_height
         )
         
         # Convert to base64
@@ -95,6 +98,12 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
             'canva_image_data_url': data_url,  # For compatibility with other nodes
             'status': 'completed'
         })
+        state['canva_template_input'] = inp.model_dump()
+        state['canva_template_output'] = CanvaTemplateOutputV1(
+            canva_design_id=design_id,
+            canva_design_url=design_url,
+            image_data_url=data_url
+        ).model_dump()
         
         print("✅ Canva Template Node completed successfully!")
         return state
