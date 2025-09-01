@@ -333,6 +333,7 @@ Generate the workflow in the specified JSON format."""
 	
 	def _parse_ai_response(self, response: str, original_prompt: str) -> Dict[str, Any]:
 		logger.info("Parsing AI response")
+		logger.debug(f"Full LLM response: {response}")
 		try:
 			# Prefer fenced JSON blocks if present
 			import re
