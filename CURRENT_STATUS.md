@@ -205,6 +205,13 @@ The Instagram integration is **fully functional** and ready for production use. 
 - **Effort**: High (5-7 days)
 - **ROI**: Medium (competitive advantage)
 
+### **Option 5: LangGraph-Native Execution & Data Contracts (RFC Adoption)**
+- **Focus**: Replace custom topological executor with LangGraph edges/conditions; add durable checkpointing (Redis/Postgres); enforce typed node I/O contracts with validation/normalization; enable event streaming
+- **Impact**: Higher reliability, resumability, and parallel/branching support; fewer schema-related failures; better observability
+- **Effort**: Medium-High (4-6 days)
+- **ROI**: High (robustness, scalability, developer velocity)
+- **Dependencies**: Redis/Postgres for checkpoints, minor UI updates for live step logs, incremental node schema updates
+
 ---
 
 ## 📈 **SUCCESS METRICS**
