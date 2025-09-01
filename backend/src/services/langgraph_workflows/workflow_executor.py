@@ -1,7 +1,13 @@
 from typing import Dict, Any, List, Optional
+import os
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
+try:
+    # Prefer a durable SQL-based checkpointer when configured
+    from langgraph.checkpoint.sqlite import SqliteSaver  # type: ignore
+except Exception:  # pragma: no cover
+    SqliteSaver = None  # type: ignore
 import json
 from datetime import datetime
 import uuid
@@ -12,7 +18,21 @@ from ..node_dispatcher import NodeDispatcher
 class LangGraphWorkflowExecutor:
     def __init__(self):
         self.dispatcher = NodeDispatcher()
-        self.memory = MemorySaver()
+        # Choose checkpointer: durable sqlite if configured, else in-memory
+        checkpoint_backend = os.getenv('CHECKPOINT_BACKEND', 'memory').lower()
+        if checkpoint_backend == 'sqlite' and SqliteSaver is not None:
+            db_path = os.getenv('CHECKPOINT_SQLITE_PATH', '/workspace/.checkpoints/langgraph_checkpoints.sqlite')
+            # Ensure directory exists
+            try:
+                os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            except Exception:
+                pass
+            self.memory = SqliteSaver(db_path)
+            print(f"LangGraph checkpointer: sqlite at {db_path}")
+        else:
+            self.memory = MemorySaver()
+            if checkpoint_backend != 'memory':
+                print(f"LangGraph checkpointer fallback to memory (requested: {checkpoint_backend})")
     
     def resolve_data_reference(self, reference: str, state: Dict[str, Any]) -> Any:
         """Resolve data references like 'node2.post_data' or 'ai_agent_1.output'.
@@ -93,43 +113,133 @@ class LangGraphWorkflowExecutor:
         return updated
     
     def build_workflow(self, workflow_data: Dict[str, Any]) -> StateGraph:
-        """Build a LangGraph workflow from frontend workflow data"""
+        """Build and compile a LangGraph workflow from frontend workflow data.
+        - Wrap node executors to merge results back into state
+        - Respect optional `entry`
+        - Support optional `conditions` for conditional routing
+        - Preserve linear edges and END
+        """
         try:
-            workflow = StateGraph(Dict[str, Any])
-            nodes_data = workflow_data.get('nodes', [])
-            edges_data = workflow_data.get('edges', [])
-            node_functions: Dict[str, Any] = {}
+            builder = StateGraph(Dict[str, Any])
+            nodes_data = workflow_data.get('nodes', []) or []
+            edges_data = workflow_data.get('edges', []) or []
+            conditions_data = workflow_data.get('conditions', []) or []
+
+            # Precompute node configs and types
+            node_config_by_id: Dict[str, Dict[str, Any]] = {}
+            node_type_by_id: Dict[str, str] = {}
             for node in nodes_data:
                 node_id = node['id']
                 node_type = node['type']
-                # Map node types to functions via dispatcher (OCP)
-                node_functions[node_id] = self.dispatcher.get_executor(node_type)
-                workflow.add_node(node_id, node_functions[node_id])
-            # Add edges to the graph
+                node_type_by_id[node_id] = node_type
+                node_config_by_id[node_id] = (node.get('data', {}) or {}).get('config', {}) or {}
+
+            # Wrapper to adapt executors to LangGraph state updates
+            def make_node_wrapper(node_id: str):
+                node_type = node_type_by_id.get(node_id, 'unknown')
+                node_config = node_config_by_id.get(node_id, {})
+
+                def _wrapper(state: Dict[str, Any]) -> Dict[str, Any]:
+                    # Apply edge-level data mappings targeting this node
+                    node_input_state = self._apply_edge_data_mappings(state, edges_data, node_id)
+                    # Execute using existing single-node logic for consistency
+                    node_result = self.execute_node(
+                        node_type=node_type,
+                        node_config=node_config,
+                        input_data=node_input_state,
+                        edges=edges_data,
+                        current_node_id=node_id
+                    )
+                    # Merge back into state for downstream nodes
+                    merged = self.merge_node_result(state, node_result, node_id)
+                    return merged
+
+                return _wrapper
+
+            # Add nodes
+            for node in nodes_data:
+                node_id = node['id']
+                builder.add_node(node_id, make_node_wrapper(node_id))
+
+            # Add linear edges
+            node_ids = {n['id'] for n in nodes_data}
             for edge in edges_data:
-                source = edge['source']
-                target = edge['target']
-                if source in node_functions and target in node_functions:
-                    workflow.add_edge(source, target)
+                source = edge.get('source')
+                target = edge.get('target')
+                if source in node_ids and target in node_ids:
+                    builder.add_edge(source, target)
+
+            # Add conditional edges (optional)
+            # Expected shape: {"source": "n1", "guards": [{"if": "content_type == 'image'", "target": "n2"}, ...]}
+            def _make_route_fn(guards: List[Dict[str, Any]]):
+                def _route(state: Dict[str, Any]) -> str:
+                    # Very simple evaluator: supports equality of dotted keys to string/numeric literals
+                    def _get_value(path: str):
+                        parts = path.split('.')
+                        val = state
+                        for p in parts:
+                            if isinstance(val, dict) and p in val:
+                                val = val[p]
+                            else:
+                                return None
+                        return val
+
+                    for g in guards:
+                        expr = (g.get('if') or '').strip()
+                        tgt = g.get('target')
+                        if not expr or not tgt:
+                            continue
+                        # Handle patterns like: key == 'value' or key == 123
+                        if '==' in expr:
+                            left, right = expr.split('==', 1)
+                            left = left.strip()
+                            right = right.strip().strip()  # keep quotes for now
+                            left_val = _get_value(left)
+                            # strip quotes if present
+                            if (right.startswith("'") and right.endswith("'")) or (right.startswith('"') and right.endswith('"')):
+                                right_val = right[1:-1]
+                            else:
+                                try:
+                                    right_val = json.loads(right)
+                                except Exception:
+                                    right_val = right
+                            if left_val == right_val:
+                                return tgt
+                    return '__end__'
+
+                return _route
+
+            for cond in conditions_data:
+                source = cond.get('source')
+                guards = cond.get('guards') or []
+                if not source or not isinstance(guards, list):
+                    continue
+                targets = {g.get('target') for g in guards if g.get('target')}
+                mapping: Dict[str, Any] = {t: t for t in targets if t}
+                mapping['__end__'] = END
+                builder.add_conditional_edges(source, _make_route_fn(guards), mapping)
+
             # Entry/exit points
             if nodes_data:
-                entry_node = nodes_data[0]['id']
-                workflow.set_entry_point(entry_node)
+                entry_node = workflow_data.get('entry') or nodes_data[0]['id']
+                builder.set_entry_point(entry_node)
             else:
-                workflow.add_node("start", lambda state: state)
-                workflow.set_entry_point("start")
+                builder.add_node("start", lambda state: state)
+                builder.set_entry_point("start")
+                builder.add_edge("start", END)
+
             if nodes_data:
-                exit_node = nodes_data[-1]['id']
-                workflow.add_edge(exit_node, END)
-            else:
-                workflow.add_edge("start", END)
-            return workflow.compile(checkpointer=self.memory)
+                # Ensure at least one path to END from the last listed node
+                last_node = nodes_data[-1]['id']
+                builder.add_edge(last_node, END)
+
+            return builder.compile(checkpointer=self.memory)
         except Exception as e:
             print(f"Error building workflow: {e}")
             return self._create_default_workflow()
     
     def execute_workflow(self, workflow_data: Dict[str, Any], input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a workflow using LangGraph"""
+        """Execute a workflow using a compiled LangGraph with wrapped nodes."""
         try:
             print(f"Executing workflow: {workflow_data.get('name', 'Unknown')}")
             print(f"Input data keys: {list(input_data.keys())}")
@@ -141,32 +251,10 @@ class LangGraphWorkflowExecutor:
                 'nodes_executed': [],
                 'node_results': {}
             }
-            current_state = initial_state.copy()
-            execution_order = self._get_execution_order(workflow_data['nodes'], workflow_data['edges'])
-            print(f"Execution order: {execution_order}")
-            for node_id in execution_order:
-                print(f"\nExecuting node: {node_id}")
-                node_data = next((node for node in workflow_data['nodes'] if node['id'] == node_id), None)
-                if not node_data:
-                    print(f"Warning: Node {node_id} not found in workflow")
-                    continue
-                current_state['current_node'] = node_id
-                current_state['node_config'] = node_data.get('data', {}).get('config', {})
-                # Apply data mappings from incoming edges to produce the node's input view
-                node_input_state = self._apply_edge_data_mappings(current_state, workflow_data.get('edges', []), node_id)
-                # Execute the node
-                node_result = self.execute_node(
-                    node_data['type'],
-                    node_data.get('data', {}).get('config', {}),
-                    node_input_state,
-                    workflow_data.get('edges', []),
-                    node_id
-                )
-                current_state = self.merge_node_result(current_state, node_result, node_id)
-                print(f"Node {node_id} completed with status: {node_result.get('status', 'unknown')}")
-                print(f"State after {node_id}: {list(current_state.keys())}")
-                if 'node_results' in current_state:
-                    print(f"  Node results: {list(current_state['node_results'].keys())}")
+
+            graph = self.build_workflow(workflow_data)
+            final_state = graph.invoke(initial_state)
+
             result = {
                 'workflow_id': initial_state['workflow_id'],
                 'start_time': initial_state['start_time'],
@@ -176,10 +264,10 @@ class LangGraphWorkflowExecutor:
                 'execution_id': initial_state['workflow_id'],
                 'end_time': datetime.now().isoformat()
             }
-            essential_keys = ['result', 'output', 'content', 'status', 'timestamp', 'image_url', 'social_data', 'instagram_post']
+            essential_keys = ['result', 'output', 'content', 'status', 'timestamp', 'image_url', 'social_data', 'instagram_post', 'node_results', 'nodes_executed']
             for key in essential_keys:
-                if key in current_state:
-                    value = current_state[key]
+                if key in final_state:
+                    value = final_state[key]
                     if isinstance(value, (str, int, float, bool, type(None))):
                         result[key] = value
                     elif isinstance(value, dict):
