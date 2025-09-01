@@ -66,6 +66,7 @@ class AIWorkflowGenerator:
 			system_prompt = self._build_system_prompt()
 			user_prompt = self._build_user_prompt(prompt)
 			full_prompt = f"{system_prompt}\n\n{user_prompt}"
+			logger.info(f"Full prompt for LLM: {full_prompt}")
 			logger.info("Invoking LLM client")
 			# Run blocking call in thread to keep FastAPI happy if used async
 			response_content = await asyncio.to_thread(self.llm_client.generate, full_prompt)
@@ -88,7 +89,8 @@ class AIWorkflowGenerator:
 		node_types_list = []
 		for node_type, metadata in node_registry._nodes.items():
 			if metadata.is_active:
-				node_types_list.append(f"- {node_type}: {metadata.description}")
+				output_keys = list(metadata.output_schema.get('properties', {}).keys())
+				node_types_list.append(f"- {node_type}: {metadata.description}\n  - outputs: {output_keys}")
 		node_types_text = "\n".join(node_types_list)
 		node_count = node_registry.get_node_count()
 		header = f"""You are an expert AI workflow designer for No Code Sutra, a platform that creates automation workflows from natural language descriptions.
@@ -333,7 +335,7 @@ Generate the workflow in the specified JSON format."""
 	
 	def _parse_ai_response(self, response: str, original_prompt: str) -> Dict[str, Any]:
 		logger.info("Parsing AI response")
-		logger.debug(f"Full LLM response: {response}")
+		logger.info(f"Full LLM response: {response}")
 		try:
 			# Prefer fenced JSON blocks if present
 			import re
@@ -411,13 +413,20 @@ Generate the workflow in the specified JSON format."""
 			if original_type not in valid_node_types:
 				logger.warning(f"Invalid node type '{original_type}' for node {index + 1}, defaulting to 'aiAgent'")
 				original_type = 'aiAgent'
+
+			# Get the authoritative writes from the node registry
+			node_metadata = node_registry.get_node_metadata(original_type)
+			writes_from_contract = []
+			if node_metadata:
+				writes_from_contract = list(node_metadata.output_schema.get('properties', {}).keys())
+
 			enhanced_node = {
 				"id": node.get('id') or f"node_{index + 1}",
 				"type": original_type,
 				"label": node.get('label') or f"Step {index + 1}",
 				"position": node.get('position') or {"x": 100 + (index * 200), "y": 100},
 				"reads": node.get('reads') or [],
-				"writes": node.get('writes') or [],
+				"writes": writes_from_contract, # Overwrite with authoritative keys
 				"version": node.get('version') or 'v1',
 				"data": {
 					"label": node.get('data', {}).get('label') or node.get('label') or f"Step {index + 1}",
