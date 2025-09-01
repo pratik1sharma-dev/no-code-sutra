@@ -2,6 +2,7 @@ from typing import Dict, Any
 from datetime import datetime
 
 from ..llm.factory import get_llm_client
+from ..contracts import ContentV1, normalize_to_content_v1
 
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -74,27 +75,50 @@ Optionally, if you think a specific visual template would work particularly well
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
         response_content = llm.generate(full_prompt)
 
-        # Try to parse JSON
+        # Parse JSON and normalize to canonical schema with a light repair attempt
         parsed_json = None
-        try:
-            json_start = response_content.find('{')
-            json_end = response_content.rfind('}') + 1
-            if json_start != -1 and json_end > json_start:
-                import json as _json
-                json_str = response_content[json_start:json_end]
-                parsed_json = _json.loads(json_str)
-        except Exception:
-            parsed_json = None
+        for attempt in range(2):  # try once, then a repair re-prompt if needed
+            try:
+                json_start = response_content.find('{')
+                json_end = response_content.rfind('}') + 1
+                if json_start != -1 and json_end > json_start:
+                    import json as _json
+                    json_str = response_content[json_start:json_end]
+                    parsed_json = _json.loads(json_str)
+            except Exception:
+                parsed_json = None
 
-        if parsed_json:
-            state['result'] = parsed_json
-            state['output'] = parsed_json
-            state['content'] = response_content
-            state['structured_data'] = parsed_json
-        else:
-            state['result'] = response_content
-            state['output'] = response_content
-            state['content'] = response_content
+            try:
+                normalized = normalize_to_content_v1(parsed_json if parsed_json is not None else response_content)
+                # Validate against ContentV1
+                content_obj = ContentV1(**normalized)
+                # Success
+                state['raw_response'] = response_content
+                state['result'] = content_obj.model_dump()
+                state['output'] = state['result']
+                state['content'] = state['result']
+                state['structured_data'] = state['result']
+                break
+            except Exception:
+                # Repair: ask model to fix to exact schema
+                if attempt == 0:
+                    repair_prompt = (
+                        "Return ONLY valid JSON matching this schema: "
+                        '{"headline": string, "subhead": string, "bullets": string[], '
+                        '"caption": string, "hashtags": string[]} '
+                        f"Fix the previous output. Topic: {topic}"
+                    )
+                    response_content = llm.generate(repair_prompt)
+                    continue
+                else:
+                    # Last resort: wrap as minimal content
+                    fallback = ContentV1(headline=str(topic)[:40] if topic else "", caption=str(response_content)).model_dump()
+                    state['raw_response'] = response_content
+                    state['result'] = fallback
+                    state['output'] = fallback
+                    state['content'] = fallback
+                    state['structured_data'] = fallback
+                    break
 
         state['task'] = task
         state['topic'] = topic
