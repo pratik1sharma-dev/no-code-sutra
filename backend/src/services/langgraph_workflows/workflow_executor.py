@@ -54,6 +54,7 @@ class LangGraphWorkflowExecutor:
     def resolve_data_reference(self, reference: str, state: Dict[str, Any]) -> Any:
         """Resolve data references like 'node2.post_data' or 'ai_agent_1.output'.
         - If format is 'nodeId.field', first try node_results[nodeId][field], then top-level state[field]
+        - If format is 'input.something', read from state['input_data']
         - If plain 'field', return state.get(field)
         """
         try:
@@ -61,6 +62,11 @@ class LangGraphWorkflowExecutor:
                 parts = reference.split('.')
                 if len(parts) == 2:
                     node_id_ref, field_name = parts
+                    # Special-case: input.* reads initial input_data
+                    if node_id_ref == 'input':
+                        input_data = state.get('input_data', {}) or {}
+                        if isinstance(input_data, dict):
+                            return input_data.get(field_name)
                     # Try node-scoped result first
                     node_results = state.get('node_results', {}) or {}
                     if node_id_ref in node_results and isinstance(node_results[node_id_ref], dict):
@@ -132,9 +138,9 @@ class LangGraphWorkflowExecutor:
     def build_workflow(self, workflow_data: Dict[str, Any]) -> StateGraph:
         """Build and compile a LangGraph workflow from frontend workflow data.
         - Wrap node executors to merge results back into state
-        - Respect optional `entry`
+        - Require explicit `entry`
         - Support optional `conditions` for conditional routing
-        - Preserve linear edges and END
+        - Preserve declared linear edges and END
         """
         try:
             builder = StateGraph(Dict[str, Any])
@@ -142,23 +148,43 @@ class LangGraphWorkflowExecutor:
             edges_data = workflow_data.get('edges', []) or []
             conditions_data = workflow_data.get('conditions', []) or []
 
+            # Enforce no-backcompat schema: require entry + reads/writes
+            entry_node = workflow_data.get('entry')
+            if not entry_node:
+                raise ValueError("Workflow must specify explicit 'entry' node id")
+            for node in nodes_data:
+                if 'reads' not in node or 'writes' not in node:
+                    raise ValueError(f"Node {node.get('id')} must include 'reads' and 'writes' lists")
+
             # Precompute node configs and types
             node_config_by_id: Dict[str, Dict[str, Any]] = {}
             node_type_by_id: Dict[str, str] = {}
+            node_reads_by_id: Dict[str, List[str]] = {}
+            node_writes_by_id: Dict[str, List[str]] = {}
             for node in nodes_data:
                 node_id = node['id']
                 node_type = node['type']
                 node_type_by_id[node_id] = node_type
                 node_config_by_id[node_id] = (node.get('data', {}) or {}).get('config', {}) or {}
+                node_reads_by_id[node_id] = node.get('reads', []) or []
+                node_writes_by_id[node_id] = node.get('writes', []) or []
 
             # Wrapper to adapt executors to LangGraph state updates
             def make_node_wrapper(node_id: str):
                 node_type = node_type_by_id.get(node_id, 'unknown')
                 node_config = node_config_by_id.get(node_id, {})
+                reads = node_reads_by_id.get(node_id, [])
+                writes = node_writes_by_id.get(node_id, [])
 
                 def _wrapper(state: Dict[str, Any]) -> Dict[str, Any]:
-                    # Apply edge-level data mappings targeting this node
-                    node_input_state = self._apply_edge_data_mappings(state, edges_data, node_id)
+                    # Build node input view from declared reads
+                    node_input_state = state.copy()
+                    for read_key in reads:
+                        value = self.resolve_data_reference(str(read_key), state)
+                        if value is not None:
+                            # Assign to top-level by last segment name
+                            key_name = str(read_key).split('.')[-1]
+                            node_input_state[key_name] = value
                     # Execute using existing single-node logic for consistency
                     node_result = self.execute_node(
                         node_type=node_type,
@@ -169,6 +195,13 @@ class LangGraphWorkflowExecutor:
                     )
                     # Merge back into state for downstream nodes
                     merged = self.merge_node_result(state, node_result, node_id)
+                    # Validate declared writes exist in merged state
+                    missing = []
+                    for w in writes:
+                        if w not in merged and (not merged.get('node_results', {}).get(node_id, {}).get(w)):
+                            missing.append(w)
+                    if missing:
+                        raise ValueError(f"Node {node_id} did not produce declared writes: {missing}")
                     return merged
 
                 return _wrapper
@@ -237,18 +270,11 @@ class LangGraphWorkflowExecutor:
                 builder.add_conditional_edges(source, _make_route_fn(guards), mapping)
 
             # Entry/exit points
+            builder.set_entry_point(entry_node)
+            # Always add END edge for safety from any node without outgoing edge
+            # Here we conservatively add END from the last declared node
             if nodes_data:
-                entry_node = workflow_data.get('entry') or nodes_data[0]['id']
-                builder.set_entry_point(entry_node)
-            else:
-                builder.add_node("start", lambda state: state)
-                builder.set_entry_point("start")
-                builder.add_edge("start", END)
-
-            if nodes_data:
-                # Ensure at least one path to END from the last listed node
-                last_node = nodes_data[-1]['id']
-                builder.add_edge(last_node, END)
+                builder.add_edge(nodes_data[-1]['id'], END)
 
             return builder.compile(checkpointer=self.memory)
         except Exception as e:
