@@ -23,6 +23,7 @@ import ScheduleModal from '../components/ui/ScheduleModal';
 import type { WorkflowNodeData, WorkflowNode, WorkflowEdge, NodeType } from '../types/workflow';
 import type { ScheduleConfig } from '../types/scheduler';
 import { apiService } from '../services/api';
+import { WorkflowRunViewer } from '../components/workflow/WorkflowRunViewer';
 
 // Droppable React Flow wrapper
 const DroppableReactFlow: React.FC<{
@@ -172,6 +173,20 @@ const WorkflowBuilder: React.FC = () => {
   } = useWorkflowStore();
   
   const { getNodeComponent } = useNodeRegistry();
+
+  const strictWorkflow = useMemo(() => {
+    if (!currentWorkflow) return null;
+    const entry = (currentWorkflow as any).entry || (currentWorkflow.nodes?.[0]?.id ?? null);
+    const nodes = (currentWorkflow.nodes || []).map((n: any) => ({
+      ...n,
+      reads: Array.isArray((n as any).reads) ? (n as any).reads : [],
+      writes: Array.isArray((n as any).writes) ? (n as any).writes : [],
+      version: (n as any).version || 'v1',
+    }));
+    const edges = (currentWorkflow.edges || []).map((e: any) => ({ id: e.id, source: e.source, target: e.target, type: (e as any).type || 'default', label: (e as any).label || '' }));
+    const conditions = Array.isArray((currentWorkflow as any).conditions) ? (currentWorkflow as any).conditions : [];
+    return { ...currentWorkflow, entry, nodes, edges, conditions };
+  }, [currentWorkflow]);
 
   // Initialize workflow if not exists or with generated data
   useEffect(() => {
@@ -471,6 +486,13 @@ const WorkflowBuilder: React.FC = () => {
             </div>
           </div>
           
+          {/* Live Execution Viewer (shows during runs) */}
+          {isExecuting && strictWorkflow && (
+            <div className="bg-white border-b border-gray-200 px-6 py-3">
+              <WorkflowRunViewer workflow={strictWorkflow} input={{}} />
+            </div>
+          )}
+
           {/* Canvas + Inspector */}
           <div className="flex-1 min-w-0 flex">
             <div className="relative flex-1">
