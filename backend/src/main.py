@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import logging
+from sqlalchemy import or_  # Added missing import
 
 # Security imports
 from middleware.auth import get_current_user, optional_auth, require_permissions, require_api_key, get_user_identifier
@@ -66,6 +67,9 @@ class SaveWorkflowRequest(BaseModel):
 	name: str
 	description: Optional[str] = ""
 	data: Dict[str, Any]
+	is_public: Optional[bool] = False
+	version: Optional[int] = 1
+	parent_id: Optional[str] = None
 
 app = FastAPI(
 	title="No Code Sutra API",
@@ -242,18 +246,62 @@ async def execute_node(request: NodeExecutionRequest, http_request: Request, use
 
 @app.post("/api/workflows/save")
 async def save_workflow(req: SaveWorkflowRequest, http_request: Request, user: dict = Depends(get_current_user)):
+	"""
+	Save a workflow with versioning support
+	"""
 	try:
 		db = SessionLocal()
+		
+		# Get user_id from authenticated user
+		user_id = user.get('sub') if user else None
+		logger.info(f"Saving workflow for user: {user_id}", extra={
+			"workflow_id": req.id,
+			"workflow_name": req.name,
+			"user_id": user_id
+		})
+		
+		# Check if this is an update to an existing workflow
+		existing = db.query(WorkflowModel).filter(WorkflowModel.id == req.id).first()
+		
+		# Handle versioning
+		version = req.version
+		parent_id = req.parent_id
+		
+		if existing:
+			# If updating existing workflow, increment version
+			if not req.parent_id:
+				parent_id = existing.id
+				# Create a new ID for this version
+				new_id = f"{req.id}_v{version}"
+				logger.info(f"Creating new version of workflow: {new_id}", extra={
+					"original_id": req.id,
+					"new_id": new_id,
+					"version": version
+				})
+				req.id = new_id
+		
+		# Create or update the workflow
 		wf = WorkflowModel(
 			id=req.id,
 			name=req.name,
 			description=req.description or "",
+			user_id=user_id,
 			data=req.data,
+			is_public=req.is_public,
+			version=version,
+			parent_id=parent_id
 		)
 		db.merge(wf)
 		db.commit()
-		return {"success": True}
+		
+		return {
+			"success": True,
+			"workflow_id": req.id,
+			"version": version,
+			"parent_id": parent_id
+		}
 	except Exception as e:
+		logger.error(f"Error saving workflow: {e}", exc_info=True)
 		return {"success": False, "error": str(e)}
 	finally:
 		db.close()
@@ -262,41 +310,106 @@ async def save_workflow(req: SaveWorkflowRequest, http_request: Request, user: d
 async def save_execution(result: Dict[str, Any]):
 	try:
 		db = SessionLocal()
+		
+		# Generate ID if not provided
+		execution_id = result.get("execution_id")
+		if not execution_id:
+			execution_id = str(uuid.uuid4())
+		
+		# Extract user_id from result or use a default
+		user_id = result.get("user_id", "default-user")
+		
+		# Log the incoming data for debugging
+		print(f"Saving execution: ID={execution_id}, workflow_id={result.get('workflow_id', '')}, user_id={user_id}")
+		
 		exec_model = ExecutionModel(
-			id=result.get("execution_id"),
+			id=execution_id,
 			workflow_id=result.get("workflow_id", ""),
+			user_id=user_id,  # Add the required user_id field
 			status=result.get("status", "completed"),
 			result=result,
 			nodes_executed=len(result.get("nodes_executed", [])) if isinstance(result.get("nodes_executed"), list) else int(result.get("nodes_executed", 0) or 0),
+			started_at=datetime.fromisoformat(result.get("started_at")) if result.get("started_at") else datetime.utcnow(),
+			finished_at=datetime.fromisoformat(result.get("finished_at")) if result.get("finished_at") else datetime.utcnow()
 		)
+		
 		db.merge(exec_model)
 		db.commit()
 		return {"success": True}
 	except Exception as e:
+		print(f"Error saving execution: {str(e)}")
 		return {"success": False, "error": str(e)}
 	finally:
 		db.close()
 
 
 @app.get("/api/workflows")
-async def list_workflows(http_request: Request, user_id: Optional[str] = None, limit: int = 50, offset: int = 0, current_user: Optional[dict] = Depends(optional_auth)):
+async def list_workflows(
+	http_request: Request, 
+	user_id: Optional[str] = None, 
+	limit: int = 50, 
+	offset: int = 0, 
+	include_public: bool = True,
+	show_versions: bool = False,
+	current_user: Optional[dict] = Depends(optional_auth)
+):
 	"""
-	List saved workflows with optional user filtering
+	List saved workflows with filtering options:
+	- user_id: Filter by owner
+	- include_public: Include public workflows from other users
+	- show_versions: Show all versions (otherwise only shows latest)
 	"""
 	try:
 		# Apply rate limiting
 		if security_config.RATE_LIMIT_ENABLED:
 			identifier = get_user_identifier(http_request, current_user)
 			await apply_rate_limit(http_request, identifier, "default", bool(current_user))
+		
 		db = SessionLocal()
 		query = db.query(WorkflowModel)
 		
-		if user_id:
-			# TODO: Add user_id column to WorkflowModel when user management is implemented
-			# query = query.filter(WorkflowModel.user_id == user_id)
-			pass
+		# Get authenticated user's ID
+		auth_user_id = current_user.get('sub') if current_user else None
 		
-		workflows = query.order_by(WorkflowModel.updated_at.desc()).offset(offset).limit(limit).all()
+		# Filter by user_id if provided, otherwise use authenticated user
+		if user_id:
+			query = query.filter(WorkflowModel.user_id == user_id)
+		elif auth_user_id:
+			# If no specific user_id requested, show authenticated user's workflows
+			query = query.filter(WorkflowModel.user_id == auth_user_id)
+		
+		# Include public workflows if requested
+		if include_public and (user_id or auth_user_id):
+			# Use union to combine user's workflows with public ones
+			user_query = query
+			public_query = db.query(WorkflowModel).filter(WorkflowModel.is_public == True)
+			
+			if user_id:
+				public_query = public_query.filter(WorkflowModel.user_id != user_id)
+			elif auth_user_id:
+				public_query = public_query.filter(WorkflowModel.user_id != auth_user_id)
+			
+			# SQLAlchemy doesn't support UNION directly, so we'll fetch both and combine
+			user_workflows = user_query.all()
+			public_workflows = public_query.all()
+			workflows = user_workflows + public_workflows
+			
+			# Manual sorting since we combined two queries
+			workflows.sort(key=lambda wf: wf.updated_at, reverse=True)
+			
+			# Manual pagination
+			total_count = len(workflows)
+			workflows = workflows[offset:offset+limit]
+			
+		else:
+			# If not filtering by user, apply pagination at the database level
+			total_count = query.count()
+			workflows = query.order_by(WorkflowModel.updated_at.desc()).offset(offset).limit(limit).all()
+		
+		# Filter out versions if not requested
+		if not show_versions:
+			# Only include workflows that don't have a parent_id (they're originals)
+			workflows = [wf for wf in workflows if not wf.parent_id]
 		
 		return {
 			"workflows": [
@@ -304,6 +417,10 @@ async def list_workflows(http_request: Request, user_id: Optional[str] = None, l
 					"id": wf.id,
 					"name": wf.name,
 					"description": wf.description,
+					"user_id": wf.user_id,
+					"is_public": wf.is_public,
+					"version": wf.version,
+					"parent_id": wf.parent_id,
 					"created_at": wf.created_at.isoformat(),
 					"updated_at": wf.updated_at.isoformat(),
 					"node_count": len(wf.data.get("nodes", [])),
@@ -311,11 +428,17 @@ async def list_workflows(http_request: Request, user_id: Optional[str] = None, l
 				}
 				for wf in workflows
 			],
-			"total": query.count(),
+			"total": total_count,
 			"limit": limit,
-			"offset": offset
+			"offset": offset,
+			"filters": {
+				"user_id": user_id or auth_user_id,
+				"include_public": include_public,
+				"show_versions": show_versions
+			}
 		}
 	except Exception as e:
+		logger.error(f"Error listing workflows: {e}", exc_info=True)
 		raise HTTPException(status_code=500, detail=f"Error listing workflows: {str(e)}")
 	finally:
 		db.close()
@@ -324,7 +447,7 @@ async def list_workflows(http_request: Request, user_id: Optional[str] = None, l
 @app.get("/api/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str, http_request: Request, user: Optional[dict] = Depends(optional_auth)):
 	"""
-	Get a specific workflow by ID
+	Get a specific workflow by ID with permission checks
 	"""
 	try:
 		db = SessionLocal()
@@ -333,26 +456,61 @@ async def get_workflow(workflow_id: str, http_request: Request, user: Optional[d
 		if not workflow:
 			raise HTTPException(status_code=404, detail="Workflow not found")
 		
+		# Get authenticated user's ID
+		auth_user_id = user.get('sub') if user else None
+		
+		# Check permissions
+		if workflow.user_id and workflow.user_id != auth_user_id and not workflow.is_public:
+			# If workflow has an owner, current user is not the owner, and workflow is not public
+			logger.warning(f"Unauthorized access attempt to workflow {workflow_id}", extra={
+				"workflow_id": workflow_id,
+				"requested_by": auth_user_id,
+				"owner": workflow.user_id
+			})
+			raise HTTPException(status_code=403, detail="You don't have permission to access this workflow")
+		
+		# Get version history if this is the parent workflow
+		versions = []
+		if not workflow.parent_id:  # This is a parent workflow
+			versions = db.query(WorkflowModel)\
+				.filter(WorkflowModel.parent_id == workflow_id)\
+				.order_by(WorkflowModel.version.desc())\
+				.all()
+		
 		return {
 			"id": workflow.id,
 			"name": workflow.name,
 			"description": workflow.description,
+			"user_id": workflow.user_id,
+			"is_public": workflow.is_public,
+			"version": workflow.version,
+			"parent_id": workflow.parent_id,
 			"data": workflow.data,
 			"created_at": workflow.created_at.isoformat(),
-			"updated_at": workflow.updated_at.isoformat()
+			"updated_at": workflow.updated_at.isoformat(),
+			"versions": [
+				{
+					"id": v.id,
+					"version": v.version,
+					"updated_at": v.updated_at.isoformat()
+				} for v in versions
+			] if versions else []
 		}
 	except HTTPException:
+		# Re-raise HTTP exceptions
 		raise
 	except Exception as e:
+		logger.error(f"Error retrieving workflow: {e}", exc_info=True)
 		raise HTTPException(status_code=500, detail=f"Error retrieving workflow: {str(e)}")
 	finally:
 		db.close()
 
 
 @app.delete("/api/workflows/{workflow_id}")
-async def delete_workflow(workflow_id: str, http_request: Request, user: dict = Depends(get_current_user)):
+async def delete_workflow(workflow_id: str, http_request: Request, delete_versions: bool = False, user: dict = Depends(get_current_user)):
 	"""
-	Delete a workflow by ID
+	Delete a workflow by ID with permission checks
+	- delete_versions: If true, also delete all versions of this workflow
 	"""
 	try:
 		db = SessionLocal()
@@ -361,10 +519,49 @@ async def delete_workflow(workflow_id: str, http_request: Request, user: dict = 
 		if not workflow:
 			raise HTTPException(status_code=404, detail="Workflow not found")
 		
+		# Get authenticated user's ID
+		auth_user_id = user.get('sub') if user else None
+		
+		# Check permissions - only owner can delete
+		if workflow.user_id and workflow.user_id != auth_user_id:
+			logger.warning(f"Unauthorized deletion attempt for workflow {workflow_id}", extra={
+				"workflow_id": workflow_id,
+				"requested_by": auth_user_id,
+				"owner": workflow.user_id
+			})
+			raise HTTPException(status_code=403, detail="You don't have permission to delete this workflow")
+		
+		# Handle versioning
+		deleted_count = 1
+		deleted_versions = []
+		
+		# If this is a parent workflow and delete_versions is true, delete all versions
+		if delete_versions and not workflow.parent_id:
+			versions = db.query(WorkflowModel).filter(WorkflowModel.parent_id == workflow_id).all()
+			for version in versions:
+				deleted_versions.append({
+					"id": version.id,
+					"version": version.version
+				})
+				db.delete(version)
+				deleted_count += 1
+		
+		# Delete the workflow itself
 		db.delete(workflow)
 		db.commit()
 		
-		return {"success": True, "message": "Workflow deleted successfully"}
+		logger.info(f"Workflow {workflow_id} deleted successfully", extra={
+			"workflow_id": workflow_id,
+			"deleted_by": auth_user_id,
+			"deleted_versions": len(deleted_versions)
+		})
+		
+		return {
+			"success": True, 
+			"message": f"Workflow deleted successfully", 
+			"deleted_count": deleted_count,
+			"deleted_versions": deleted_versions
+		}
 	except HTTPException:
 		raise
 	except Exception as e:
@@ -373,26 +570,139 @@ async def delete_workflow(workflow_id: str, http_request: Request, user: dict = 
 		db.close()
 
 
-@app.get("/api/workflows/{workflow_id}/executions")
-async def get_workflow_executions(workflow_id: str, http_request: Request, limit: int = 20, offset: int = 0, user: Optional[dict] = Depends(optional_auth)):
+@app.get("/api/workflows/{workflow_id}/versions")
+async def get_workflow_versions(workflow_id: str, http_request: Request, include_data: bool = False, user: Optional[dict] = Depends(optional_auth)):
 	"""
-	Get execution history for a specific workflow
+	Get version history for a workflow
+	- include_data: If true, include the full workflow data for each version
 	"""
 	try:
 		db = SessionLocal()
-		executions = db.query(ExecutionModel).filter(
-			ExecutionModel.workflow_id == workflow_id
-		).order_by(ExecutionModel.started_at.desc()).offset(offset).limit(limit).all()
+		
+		# First check if this is a valid workflow
+		workflow = db.query(WorkflowModel).filter(WorkflowModel.id == workflow_id).first()
+		if not workflow:
+			raise HTTPException(status_code=404, detail="Workflow not found")
+		
+		# Get authenticated user's ID
+		auth_user_id = user.get('sub') if user else None
+		
+		# Check permissions
+		if workflow.user_id and workflow.user_id != auth_user_id and not workflow.is_public:
+			logger.warning(f"Unauthorized access attempt to workflow versions {workflow_id}", extra={
+				"workflow_id": workflow_id,
+				"requested_by": auth_user_id,
+				"owner": workflow.user_id
+			})
+			raise HTTPException(status_code=403, detail="You don't have permission to access this workflow")
+		
+		# Find the parent workflow if this is a version
+		parent_id = workflow.parent_id if workflow.parent_id else workflow_id
+		
+		# Get all versions including the parent
+		versions = db.query(WorkflowModel).filter(
+			or_(
+				WorkflowModel.id == parent_id,
+				WorkflowModel.parent_id == parent_id
+			)
+		).order_by(WorkflowModel.version).all()
+		
+		return {
+			"workflow_id": parent_id,
+			"current_version": workflow.version,
+			"total_versions": len(versions),
+			"versions": [
+				{
+					"id": v.id,
+					"version": v.version,
+					"name": v.name,
+					"description": v.description,
+					"updated_at": v.updated_at.isoformat(),
+					"created_at": v.created_at.isoformat(),
+					"is_current": v.id == workflow_id,
+					"data": v.data if include_data else None
+				} for v in versions
+			]
+		}
+	except HTTPException:
+		raise
+	except Exception as e:
+		logger.error(f"Error retrieving workflow versions: {e}", exc_info=True)
+		raise HTTPException(status_code=500, detail=f"Error retrieving workflow versions: {str(e)}")
+	finally:
+		db.close()
+
+
+@app.get("/api/workflows/{workflow_id}/executions")
+async def get_workflow_executions(workflow_id: str, http_request: Request, limit: int = 20, offset: int = 0, status: Optional[str] = None, user: Optional[dict] = Depends(optional_auth)):
+	"""
+	Get execution history for a specific workflow with filtering options
+	"""
+	try:
+		# Apply rate limiting
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, user)
+			await apply_rate_limit(http_request, identifier, "workflow", bool(user))
+		
+		# Check if user is authenticated
+		if not user:
+			raise HTTPException(status_code=401, detail="Authentication required")
+		
+		db = SessionLocal()
+		
+		# Check if user has access to this workflow
+		workflow = db.query(WorkflowModel).filter(WorkflowModel.id == workflow_id).first()
+		if not workflow:
+			raise HTTPException(status_code=404, detail="Workflow not found")
+		
+		# Check permissions - user must own the workflow or it must be public
+		user_id = user.get('id')
+		has_access = False
+		
+		if workflow.user_id == user_id:
+			# User owns the workflow
+			has_access = True
+			
+		elif workflow.is_public:
+			# Workflow is public
+			has_access = True
+			
+		else:
+			# Check for explicit permissions
+			permission = db.query(WorkflowPermission).filter(
+				WorkflowPermission.workflow_id == workflow_id,
+				WorkflowPermission.user_id == user_id,
+				WorkflowPermission.permission.in_(['read', 'write', 'admin', 'execute'])
+			).first()
+			has_access = permission is not None
+		
+		if not has_access:
+			raise HTTPException(status_code=403, detail="You don't have permission to view this workflow's executions")
+		
+		# Build the query with filters
+		query = db.query(ExecutionModel).filter(ExecutionModel.workflow_id == workflow_id)
+		
+		# Add status filter if provided
+		if status:
+			query = query.filter(ExecutionModel.status == status)
+		
+		# Get total count before pagination
+		total_count = query.count()
+		
+		# Apply sorting and pagination
+		executions = query.order_by(ExecutionModel.started_at.desc()).offset(offset).limit(limit).all()
 		
 		return {
 			"executions": [
 				{
 					"id": exec.id,
 					"workflow_id": exec.workflow_id,
+					"user_id": exec.user_id,
 					"status": exec.status,
 					"nodes_executed": exec.nodes_executed,
 					"started_at": exec.started_at.isoformat(),
 					"finished_at": exec.finished_at.isoformat() if exec.finished_at else None,
+					"duration_ms": (exec.finished_at - exec.started_at).total_seconds() * 1000 if exec.finished_at else None,
 					"result_summary": {
 						"success": exec.result.get("status") == "completed" if exec.result else False,
 						"error": exec.result.get("error") if exec.result else None
@@ -400,14 +710,159 @@ async def get_workflow_executions(workflow_id: str, http_request: Request, limit
 				}
 				for exec in executions
 			],
-			"total": db.query(ExecutionModel).filter(ExecutionModel.workflow_id == workflow_id).count(),
+			"total": total_count,
 			"limit": limit,
-			"offset": offset
+			"offset": offset,
+			"status_filter": status
 		}
+	except HTTPException:
+		raise
 	except Exception as e:
+		logger.error(f"Error retrieving executions: {e}", exc_info=True)
 		raise HTTPException(status_code=500, detail=f"Error retrieving executions: {str(e)}")
 	finally:
 		db.close()
+
+@app.get("/api/executions/{execution_id}")
+async def get_execution_details(execution_id: str, http_request: Request, user: Optional[dict] = Depends(optional_auth)):
+	"""
+	Get detailed information about a specific workflow execution
+	"""
+	try:
+		# Apply rate limiting
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, user)
+			await apply_rate_limit(http_request, identifier, "workflow", bool(user))
+		
+		# Check if user is authenticated
+		if not user:
+			raise HTTPException(status_code=401, detail="Authentication required")
+		
+		db = SessionLocal()
+		
+		# Get the execution record
+		execution = db.query(ExecutionModel).filter(ExecutionModel.id == execution_id).first()
+		if not execution:
+			raise HTTPException(status_code=404, detail="Execution record not found")
+		
+		# Get the associated workflow
+		workflow = db.query(WorkflowModel).filter(WorkflowModel.id == execution.workflow_id).first()
+		if not workflow:
+			# Orphaned execution record, but we'll still allow access if user created the execution
+			if execution.user_id != user.get('id'):
+				raise HTTPException(status_code=403, detail="You don't have permission to view this execution")
+		else:
+			# Check permissions - user must own the workflow, own the execution, or have explicit permissions
+			user_id = user.get('id')
+			has_access = False
+			
+			if workflow.user_id == user_id or execution.user_id == user_id:
+				# User owns the workflow or execution
+				has_access = True
+				
+			elif workflow.is_public:
+				# Workflow is public
+				has_access = True
+				
+			else:
+				# Check for explicit permissions
+				permission = db.query(WorkflowPermission).filter(
+					WorkflowPermission.workflow_id == execution.workflow_id,
+					WorkflowPermission.user_id == user_id,
+					WorkflowPermission.permission.in_(['read', 'write', 'admin', 'execute'])
+				).first()
+				has_access = permission is not None
+			
+			if not has_access:
+				raise HTTPException(status_code=403, detail="You don't have permission to view this execution")
+		
+		# Calculate duration if possible
+		duration_ms = None
+		if execution.started_at and execution.finished_at:
+			duration_ms = (execution.finished_at - execution.started_at).total_seconds() * 1000
+		
+		# Prepare the response
+		response = {
+			"id": execution.id,
+			"workflow_id": execution.workflow_id,
+			"user_id": execution.user_id,
+			"status": execution.status,
+			"nodes_executed": execution.nodes_executed,
+			"started_at": execution.started_at.isoformat(),
+			"finished_at": execution.finished_at.isoformat() if execution.finished_at else None,
+			"duration_ms": duration_ms,
+			"result": execution.result
+		}
+		
+		return response
+	except HTTPException:
+		raise
+	except Exception as e:
+		logger.error(f"Error retrieving execution details: {e}", exc_info=True)
+		raise HTTPException(status_code=500, detail=f"Error retrieving execution details: {str(e)}")
+	finally:
+		db.close()
+
+
+@app.delete("/api/executions/{execution_id}")
+async def delete_execution(execution_id: str, http_request: Request, user: Optional[dict] = Depends(optional_auth)):
+	"""
+	Delete a specific workflow execution record
+	"""
+	try:
+		# Apply rate limiting
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, user)
+			await apply_rate_limit(http_request, identifier, "workflow", bool(user))
+		
+		# Check if user is authenticated
+		if not user:
+			raise HTTPException(status_code=401, detail="Authentication required")
+		
+		db = SessionLocal()
+		
+		# Get the execution record
+		execution = db.query(ExecutionModel).filter(ExecutionModel.id == execution_id).first()
+		if not execution:
+			raise HTTPException(status_code=404, detail="Execution record not found")
+		
+		# Check permissions - user must own the execution or the workflow
+		user_id = user.get('id')
+		has_access = False
+		
+		if execution.user_id == user_id:
+			# User owns the execution
+			has_access = True
+		else:
+			# Check if user owns the workflow
+			workflow = db.query(WorkflowModel).filter(WorkflowModel.id == execution.workflow_id).first()
+			if workflow and workflow.user_id == user_id:
+				has_access = True
+			else:
+				# Check for admin permissions
+				permission = db.query(WorkflowPermission).filter(
+					WorkflowPermission.workflow_id == execution.workflow_id,
+					WorkflowPermission.user_id == user_id,
+					WorkflowPermission.permission == 'admin'
+				).first()
+				has_access = permission is not None
+		
+		if not has_access:
+			raise HTTPException(status_code=403, detail="You don't have permission to delete this execution")
+		
+		# Delete the execution record
+		db.delete(execution)
+		db.commit()
+		
+		return {"success": True, "message": "Execution record deleted successfully"}
+	except HTTPException:
+		raise
+	except Exception as e:
+		logger.error(f"Error deleting execution: {e}", exc_info=True)
+		raise HTTPException(status_code=500, detail=f"Error deleting execution: {str(e)}")
+	finally:
+		db.close()
+
 
 @app.get("/api/nodes/registry")
 async def get_node_registry():
@@ -450,8 +905,10 @@ async def execute_workflow(request: WorkflowExecutionRequest, http_request: Requ
 			input_data=request.input_data
 		)
 		execution_time = time.time() - start_time
+		
+		# Prepare response data
 		if result.get('status') == 'failed':
-			return {
+			response_data = {
 				"success": False,
 				"data": result,
 				"execution_id": result.get("execution_id"),
@@ -462,28 +919,57 @@ async def execute_workflow(request: WorkflowExecutionRequest, http_request: Requ
 				"execution_time": execution_time,
 				"timestamp": datetime.utcnow().isoformat()
 			}
-		response_data = {
-			"success": True,
-			"data": result,
-			"execution_id": result.get("execution_id"),
-			"status": result.get("status"),
-			"execution_time": execution_time,
-			"timestamp": datetime.utcnow().isoformat()
-		}
-		if 'node_results' in result:
-			response_data['node_results'] = result['node_results']
-		if 'nodes_executed' in result:
-			response_data['nodes_executed'] = result['nodes_executed']
-		for key, value in result.items():
-			if key not in ['execution_id', 'status', 'node_results', 'nodes_executed']:
-				if isinstance(value, (str, int, float, bool, type(None))):
-					response_data[key] = value
-				elif isinstance(value, list):
-					response_data[key] = [str(item) if not isinstance(item, (str, int, float, bool, type(None))) else item for item in value]
-				elif isinstance(value, dict):
-					response_data[key] = {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v for k, v in value.items()}
-				else:
-					response_data[key] = str(value)
+		else:
+			response_data = {
+				"success": True,
+				"data": result,
+				"execution_id": result.get("execution_id"),
+				"status": result.get("status"),
+				"execution_time": execution_time,
+				"timestamp": datetime.utcnow().isoformat()
+			}
+			if 'node_results' in result:
+				response_data['node_results'] = result['node_results']
+			if 'nodes_executed' in result:
+				response_data['nodes_executed'] = result['nodes_executed']
+			for key, value in result.items():
+				if key not in ['execution_id', 'status', 'node_results', 'nodes_executed']:
+					if isinstance(value, (str, int, float, bool, type(None))):
+						response_data[key] = value
+					elif isinstance(value, list):
+						response_data[key] = [str(item) if not isinstance(item, (str, int, float, bool, type(None))) else item for item in value]
+					elif isinstance(value, dict):
+						response_data[key] = {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v for k, v in value.items()}
+					else:
+						response_data[key] = str(value)
+		
+		# Save execution result to database
+		try:
+			db = SessionLocal()
+			user_id = request.user_id or (user.get('id') if user else None) or "anonymous"
+			workflow_id = request.workflow.get('id')
+			
+			# Calculate nodes executed count
+			nodes_executed = len(result.get("nodes_executed", [])) if isinstance(result.get("nodes_executed"), list) else 0
+			
+			# Create execution record
+			exec_model = ExecutionModel(
+				id=result.get("execution_id"),
+				workflow_id=workflow_id,
+				user_id=user_id,  # Add user_id to the execution record
+				status=result.get("status", "completed"),
+				result=result,
+				nodes_executed=nodes_executed,
+				started_at=datetime.fromisoformat(result.get("start_time")) if result.get("start_time") else datetime.utcnow(),
+				finished_at=datetime.utcnow()
+			)
+			db.merge(exec_model)
+			db.commit()
+			logger.info(f"Saved execution result to database: {exec_model.id}")
+		except Exception as e:
+			logger.error(f"Error saving execution result to database: {e}", exc_info=True)
+			# Don't fail the request if saving to database fails
+		
 		return response_data
 	except Exception as e:
 		logger.error(f"Error in workflow execution endpoint: {e}", exc_info=True)

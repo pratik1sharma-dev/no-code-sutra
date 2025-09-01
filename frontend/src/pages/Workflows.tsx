@@ -10,10 +10,14 @@ import {
   MoreVertical,
   Calendar,
   Activity,
-  Loader2
+  Loader2,
+  Globe,
+  Lock,
+  History
 } from 'lucide-react';
-import config from '../config/api';
 import { useNavigate } from 'react-router-dom';
+import apiService, { WorkflowListResponse } from '../services/api';
+import { authService } from '../services/auth';
 
 interface Workflow {
   id: string;
@@ -22,7 +26,11 @@ interface Workflow {
   created_at: string;
   updated_at: string;
   node_count: number;
-  status: 'draft' | 'active' | 'paused';
+  status: string;
+  user_id: string;
+  is_public: boolean;
+  version: number;
+  parent_id?: string;
 }
 
 const Workflows: React.FC = () => {
@@ -31,15 +39,33 @@ const Workflows: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'active' | 'paused'>('all');
+  const [sharingFilter, setSharingFilter] = useState<'all' | 'public' | 'private'>('all');
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Get current user info
+  useEffect(() => {
+    const userInfo = authService.getUser();
+    if (userInfo && userInfo.user_id) {
+      setCurrentUserId(userInfo.user_id);
+    }
+  }, []);
 
   // Load workflows from backend
   useEffect(() => {
     const loadWorkflows = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${config.api.baseUrl}/api/workflows`);
-        const data = await response.json();
-        setWorkflows(data.workflows || []);
+        const includePublic = sharingFilter === 'all' || sharingFilter === 'public';
+        const response = await apiService.listWorkflows({
+          include_public: includePublic,
+          show_versions: false,
+          limit: 50,
+          offset: 0
+        });
+        
+        setWorkflows(response.workflows || []);
+        setTotalCount(response.total);
       } catch (error) {
         console.error('Failed to load workflows:', error);
       } finally {
@@ -48,7 +74,7 @@ const Workflows: React.FC = () => {
     };
 
     loadWorkflows();
-  }, []);
+  }, [sharingFilter]);
 
   // Filter workflows
   const filteredWorkflows = workflows.filter(workflow => {
@@ -63,23 +89,22 @@ const Workflows: React.FC = () => {
   };
 
   const handleEditWorkflow = (workflowId: string) => {
+    console.log('Navigating to workflow:', workflowId);
     navigate(`/app/workflow/${workflowId}`);
   };
 
   const handleDeleteWorkflow = async (workflowId: string, workflowName: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${workflowName}"?`)) {
+    if (!window.confirm(`Are you sure you want to delete "${workflowName}"? This will remove all versions of this workflow.`)) {
       return;
     }
 
     try {
-      const response = await fetch(`${config.api.baseUrl}/api/workflows/${workflowId}`, {
-        method: 'DELETE'
-      });
+      const response = await apiService.deleteWorkflow(workflowId, true);
       
-      if (response.ok) {
+      if (response.success) {
         setWorkflows(prev => prev.filter(w => w.id !== workflowId));
       } else {
-        alert('Failed to delete workflow');
+        alert(`Failed to delete workflow: ${response.message}`);
       }
     } catch (error) {
       console.error('Failed to delete workflow:', error);
@@ -106,6 +131,27 @@ const Workflows: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">{workflow.name}</h3>
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(workflow.status)}`}>
                 {workflow.status}
+              </span>
+              
+              {/* Version badge */}
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                <History className="w-3 h-3 mr-1" />
+                v{workflow.version}
+              </span>
+              
+              {/* Public/Private badge */}
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700">
+                {workflow.is_public ? (
+                  <>
+                    <Globe className="w-3 h-3 mr-1" />
+                    Public
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3 h-3 mr-1" />
+                    Private
+                  </>
+                )}
               </span>
             </div>
             
@@ -237,18 +283,39 @@ const Workflows: React.FC = () => {
           </div>
         </div>
         
-        <div className="flex items-center space-x-2">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
-          </select>
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
+            <Filter className="w-4 h-4 text-gray-500" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            {currentUserId && (
+              <>
+                {sharingFilter === 'public' ? <Globe className="w-4 h-4 text-gray-500" /> : 
+                 sharingFilter === 'private' ? <Lock className="w-4 h-4 text-gray-500" /> : 
+                 <Filter className="w-4 h-4 text-gray-500" />}
+                <select
+                  value={sharingFilter}
+                  onChange={(e) => setSharingFilter(e.target.value as any)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">All Workflows</option>
+                  <option value="public">Public Only</option>
+                  <option value="private">Private Only</option>
+                </select>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -288,13 +355,27 @@ const Workflows: React.FC = () => {
       {/* Summary */}
       {filteredWorkflows.length > 0 && (
         <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
-          <div className="flex items-center justify-between text-sm text-gray-600">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-600 gap-2">
             <span>
               Showing {filteredWorkflows.length} of {workflows.length} workflows
             </span>
-            <div className="flex items-center space-x-4">
-              <span>{workflows.filter(w => w.status === 'active').length} active</span>
-              <span>{workflows.filter(w => w.status === 'draft').length} drafts</span>
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="flex items-center">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                {workflows.filter(w => w.status === 'active').length} active
+              </span>
+              <span className="flex items-center">
+                <span className="inline-block w-2 h-2 rounded-full bg-gray-500 mr-2"></span>
+                {workflows.filter(w => w.status === 'draft').length} drafts
+              </span>
+              <span className="flex items-center">
+                <Globe className="w-3 h-3 mr-1 text-blue-500" />
+                {workflows.filter(w => w.is_public).length} public
+              </span>
+              <span className="flex items-center">
+                <Lock className="w-3 h-3 mr-1 text-gray-500" />
+                {workflows.filter(w => !w.is_public).length} private
+              </span>
             </div>
           </div>
         </div>

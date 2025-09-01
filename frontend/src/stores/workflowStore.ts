@@ -180,9 +180,23 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       // Persist execution summary
       try {
         if (result && result.data) {
-          await apiService.saveExecution(result.data);
+          // Ensure we have the required fields for the execution record
+          const executionData = {
+            ...result.data,
+            workflow_id: currentWorkflow.id,
+            user_id: 'demo-user', // Use the same user_id as in the execution request
+            execution_id: result.data.execution_id || `exec-${Date.now()}`,
+            status: result.success ? 'completed' : 'failed',
+            started_at: new Date().toISOString(),
+            finished_at: new Date().toISOString()
+          };
+          
+          console.log('Saving execution data:', executionData);
+          await apiService.saveExecution(executionData);
         }
-      } catch {}
+      } catch (error) {
+        console.error('Failed to save execution:', error);
+      }
 
       // Update execution with real results
       set(state => ({

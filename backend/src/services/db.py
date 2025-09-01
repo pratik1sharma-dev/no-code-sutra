@@ -20,11 +20,25 @@ Base = declarative_base()
 
 
 def init_db() -> None:
-	"""Create tables if not existing (no migrations)."""
+	"""Create tables if not existing and run migrations."""
+	import logging
+	logger = logging.getLogger(__name__)
+	
+	# Import models to register them with SQLAlchemy
 	from . import models  # noqa: F401
 	from .scheduler.models import Base as SchedulerBase  # Import scheduler models
+	
+	# Create tables if they don't exist
 	Base.metadata.create_all(bind=engine)
 	SchedulerBase.metadata.create_all(bind=engine)
+	
+	# Run migrations for existing tables
+	try:
+		from .migrations import run_migrations
+		run_migrations()
+		logger.info("Database migrations completed successfully")
+	except Exception as e:
+		logger.error(f"Error running migrations: {e}", exc_info=True)
 
 
 def get_db():

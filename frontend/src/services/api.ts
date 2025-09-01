@@ -101,6 +101,40 @@ export interface ScheduleListItem {
 	metadata?: Record<string, any>;
 }
 
+export interface WorkflowExecutionHistoryItem {
+	id: string;
+	workflow_id: string;
+	user_id: string;
+	status: string;
+	started_at: string;
+	completed_at?: string;
+	duration_ms?: number;
+	node_count?: number;
+	has_error: boolean;
+}
+
+export interface WorkflowExecutionDetail {
+	id: string;
+	workflow_id: string;
+	workflow_name: string;
+	user_id: string;
+	status: string;
+	started_at: string;
+	completed_at?: string;
+	duration_ms?: number;
+	node_count?: number;
+	input_data?: any;
+	results?: any;
+	error?: string;
+}
+
+export interface WorkflowExecutionsResponse {
+	executions: WorkflowExecutionHistoryItem[];
+	total: number;
+	limit: number;
+	offset: number;
+}
+
 export interface ExecutionHistoryItem {
 	execution_id: string;
 	workflow_id: string;
@@ -121,6 +155,57 @@ export interface SchedulerStatusResponse {
 	executions_24h: number;
 	success_rate_24h: number;
 	status: string;
+	error?: string;
+}
+
+// Workflow persistence interfaces
+export interface WorkflowVersion {
+	id: string;
+	version: number;
+	name: string;
+	description?: string;
+	updated_at: string;
+	created_at: string;
+	is_current: boolean;
+	data?: any;
+}
+
+export interface WorkflowVersionsResponse {
+	workflow_id: string;
+	current_version: number;
+	total_versions: number;
+	versions: WorkflowVersion[];
+}
+
+export interface WorkflowListResponse {
+	workflows: Array<{
+		id: string;
+		name: string;
+		description: string;
+		user_id: string;
+		is_public: boolean;
+		version: number;
+		parent_id?: string;
+		created_at: string;
+		updated_at: string;
+		node_count: number;
+		status: string;
+	}>;
+	total: number;
+	limit: number;
+	offset: number;
+	filters: {
+		user_id?: string;
+		include_public: boolean;
+		show_versions: boolean;
+	};
+}
+
+export interface SaveWorkflowResponse {
+	success: boolean;
+	workflow_id: string;
+	version: number;
+	parent_id?: string;
 	error?: string;
 }
 
@@ -167,14 +252,17 @@ class ApiService {
 	}
 
 	// Save Workflow
-	async saveWorkflow(workflow: any): Promise<{ success: boolean; error?: string }> {
+	async saveWorkflow(workflow: any): Promise<SaveWorkflowResponse> {
 		const payload = {
 			id: workflow.id,
 			name: workflow.name,
 			description: workflow.description || '',
 			data: workflow,
+			is_public: workflow.is_public || false,
+			version: workflow.version || 1,
+			parent_id: workflow.parent_id || null
 		};
-		return this.request<{ success: boolean; error?: string }>('/api/workflows/save', {
+		return this.request<SaveWorkflowResponse>('/api/workflows/save', {
 			method: 'POST',
 			body: JSON.stringify(payload),
 		});
@@ -198,6 +286,42 @@ class ApiService {
 
 	async getWorkflowStatus(workflowId: string): Promise<WorkflowExecutionResponse> {
 		return this.request<WorkflowExecutionResponse>(`/api/workflows/${workflowId}/status`);
+	}
+	
+	// Get single workflow by ID
+	async getWorkflow(workflowId: string): Promise<any> {
+		return this.request<any>(`/api/workflows/${workflowId}`);
+	}
+	
+	// Get workflow versions
+	async getWorkflowVersions(workflowId: string, includeData: boolean = false): Promise<WorkflowVersionsResponse> {
+		return this.request<WorkflowVersionsResponse>(`/api/workflows/${workflowId}/versions?include_data=${includeData}`);
+	}
+	
+	// List workflows with filtering
+	async listWorkflows(options: { 
+		user_id?: string; 
+		include_public?: boolean; 
+		show_versions?: boolean;
+		limit?: number;
+		offset?: number;
+	} = {}): Promise<WorkflowListResponse> {
+		const params = new URLSearchParams();
+		if (options.user_id) params.append('user_id', options.user_id);
+		if (options.include_public !== undefined) params.append('include_public', options.include_public.toString());
+		if (options.show_versions !== undefined) params.append('show_versions', options.show_versions.toString());
+		if (options.limit) params.append('limit', options.limit.toString());
+		if (options.offset) params.append('offset', options.offset.toString());
+		
+		return this.request<WorkflowListResponse>(`/api/workflows?${params.toString()}`);
+	}
+	
+	// Delete workflow with version options
+	async deleteWorkflow(workflowId: string, deleteVersions: boolean = false): Promise<{ success: boolean; message: string; deleted_count: number }> {
+		return this.request<{ success: boolean; message: string; deleted_count: number }>(
+			`/api/workflows/${workflowId}?delete_versions=${deleteVersions}`, 
+			{ method: 'DELETE' }
+		);
 	}
 
 	// Available Agents
@@ -299,6 +423,33 @@ class ApiService {
 		limit: number = 50
 	): Promise<ExecutionHistoryItem[]> {
 		return this.request<ExecutionHistoryItem[]>(`/api/scheduler/${workflowId}/history?user_id=${userId}&limit=${limit}`);
+	}
+	
+	// Workflow Execution History
+	async getWorkflowExecutions(
+		workflowId: string,
+		options: {
+			limit?: number;
+			offset?: number;
+			status?: string;
+		} = {}
+	): Promise<WorkflowExecutionsResponse> {
+		const params = new URLSearchParams();
+		if (options.limit) params.append('limit', options.limit.toString());
+		if (options.offset) params.append('offset', options.offset.toString());
+		if (options.status) params.append('status', options.status);
+		
+		return this.request<WorkflowExecutionsResponse>(`/api/workflows/${workflowId}/executions?${params.toString()}`);
+	}
+	
+	async getWorkflowExecutionDetail(executionId: string): Promise<WorkflowExecutionDetail> {
+		return this.request<WorkflowExecutionDetail>(`/api/executions/${executionId}`);
+	}
+	
+	async deleteWorkflowExecution(executionId: string): Promise<{ success: boolean; message: string }> {
+		return this.request<{ success: boolean; message: string }>(`/api/executions/${executionId}`, {
+			method: 'DELETE'
+		});
 	}
 
 	async getSchedulerStatus(): Promise<SchedulerStatusResponse> {
