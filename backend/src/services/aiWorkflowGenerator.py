@@ -112,42 +112,36 @@ CRITICAL WORKFLOW RULES:
 5. No disconnected or orphaned nodes allowed
 6. Parallel branches must be properly connected to main flow
 
-RESPONSE FORMAT:
-You MUST return ONLY a valid JSON object. Do not include any explanatory text before or after the JSON.
-
-The JSON must have this exact structure:
-{{
-  "workflow": {{
+RESPONSE FORMAT (STRICT):
+You MUST return ONLY a valid JSON object with this exact structure (no prose):
+{
+  "workflow": {
     "name": "Descriptive workflow name",
     "description": "Clear description of what the workflow does",
+    "entry": "node_id_of_entry",
     "nodes": [
-      {{
+      {
         "id": "unique_id",
         "type": "node_type",
         "label": "Human readable label",
-        "position": {{"x": 100, "y": 100}},
-        "data": {{
+        "position": {"x": 100, "y": 100},
+        "reads": ["input.prompt", "node123.output"],
+        "writes": ["structured_data"],
+        "version": "v1",
+        "data": {
           "label": "Node label",
           "type": "node_type",
-          "config": {{}},
-          "status": "idle",
-          "executionCount": 0
-        }}
-      }}
+          "config": {}
+        }
+      }
     ],
-         "edges": [
-       {{
-         "id": "edge_id",
-         "source": "source_node_id",
-         "target": "target_node_id",
-         "type": "default",
-         "label": "",
-         "data_mapping": {{
-           "target_field": "source_node.output.field_name"
-         }}
-       }}
-     ],
-    "metadata": {{
+    "edges": [
+      {"id": "edge_id", "source": "source_node_id", "target": "target_node_id", "type": "default", "label": ""}
+    ],
+    "conditions": [
+      {"source": "node_id", "guards": [{"if": "content_type == 'image'", "target": "node_id"}]}
+    ],
+    "metadata": {
       "title": "Workflow title",
       "description": "Detailed description",
       "estimatedCost": "Free to $50/month",
@@ -155,11 +149,11 @@ The JSON must have this exact structure:
       "authRequirements": ["LinkedIn API Key", "SMTP Credentials"],
       "complexity": "simple|medium|complex",
       "estimatedTime": "5-10 minutes setup"
-    }}
-  }},
+    }
+  },
   "suggestions": ["Suggestion 1", "Suggestion 2"],
   "questions": ["Clarifying question 1", "Clarifying question 2"]
-}}
+}
 
 CRITICAL: Return ONLY the JSON object. No other text, explanations, or formatting.
 
@@ -167,7 +161,7 @@ CRITICAL: Return ONLY the JSON object. No other text, explanations, or formattin
             1. Keep workflows simple and focused
             2. Use clear, descriptive node labels
             3. Position nodes logically (left to right flow)
-            4. ENSURE ALL NODES ARE CONNECTED IN EXECUTION ORDER
+            4. ENSURE ALL NODES ARE CONNECTED IN EXECUTION ORDER AND DECLARE READS/WRITES
             5. Include relevant metadata for user understanding
             6. Suggest improvements and ask clarifying questions
             7. Focus on practical, achievable automations
@@ -263,12 +257,12 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
 
 5. CONFIGURATION STRUCTURE:
    For AI Agent nodes, include in config:
-   {{
+   {
      "prompt": "Your dynamically generated contextual prompt here",
      "model": "gpt-4",
      "temperature": 0.7,
      "max_tokens": 1000
-   }}
+   }
 
 6. WORKFLOW CHAIN AWARENESS:
    - If AI Agent → textOverlay: Generate content suitable for modern image overlay (hero, headlines, bullets, quotes, stats)
@@ -276,30 +270,9 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - If AI Agent → email: Generate professional email content
    - If AI Agent → slack: Generate concise, team-friendly messages
 
-7. DATA MAPPING FOR EDGES:
-   When creating edges between nodes, include data_mapping to specify how data flows:
-   
-   For AI Agent → Text Overlay:
-   {{
-     "data_mapping": {{
-       "structured_data": "ai_agent_1.output"
-     }}
-   }}
-   
-   For Text Overlay → Image Upload:
-   {{
-     "data_mapping": {{
-       "image_data_url": "textOverlay_1.output.image_data_url"
-     }}
-   }}
-   
-   For AI Agent + Image Upload → Instagram Post:
-   {{
-     "data_mapping": {{
-       "structured_data": "ai_agent_1.output",
-       "image_url": "image_upload_1.output.image_url"
-     }}
-   }}
+6. DECLARE DATA FLOW VIA READS/WRITES:
+   - Do NOT use edge-level data_mapping.
+   - Each node must declare what it reads (e.g., "input.prompt", "node123.image_url") and what it writes (e.g., "structured_data", "image_url").
 
 CRITICAL: Use your intelligence to generate appropriate prompts based on the user's specific needs. Don't use generic prompts - make them contextual and platform-specific. Consider the entire workflow chain when generating AI Agent prompts.
 
@@ -382,19 +355,22 @@ Generate the workflow in the specified JSON format."""
 				if last_brace != -1:
 					json_str = json_str[:last_brace + 1]
 					parsed = json.loads(json_str)
+			wf = parsed.get('workflow', {})
 			result = {
-				"name": parsed.get('workflow', {}).get('name') or self._generate_workflow_name(original_prompt),
-				"description": parsed.get('workflow', {}).get('description') or original_prompt,
-				"nodes": self._validate_and_enhance_nodes(parsed.get('workflow', {}).get('nodes', [])),
-				"edges": self._validate_and_enhance_edges(parsed.get('workflow', {}).get('edges', [])),
+				"name": wf.get('name') or self._generate_workflow_name(original_prompt),
+				"description": wf.get('description') or original_prompt,
+				"entry": wf.get('entry') or (wf.get('nodes', [{}])[0].get('id') if wf.get('nodes') else None),
+				"nodes": self._validate_and_enhance_nodes(wf.get('nodes', [])),
+				"edges": self._validate_and_enhance_edges(wf.get('edges', [])),
+				"conditions": wf.get('conditions', []),
 				"metadata": {
-					"title": parsed.get('workflow', {}).get('metadata', {}).get('title') or parsed.get('workflow', {}).get('name') or 'Generated Workflow',
-					"description": parsed.get('workflow', {}).get('metadata', {}).get('description') or original_prompt,
-					"estimatedCost": parsed.get('workflow', {}).get('metadata', {}).get('estimatedCost') or 'Free to $20/month',
-					"requiredIntegrations": parsed.get('workflow', {}).get('metadata', {}).get('requiredIntegrations') or [],
-					"authRequirements": parsed.get('workflow', {}).get('metadata', {}).get('authRequirements') or [],
-					"complexity": parsed.get('workflow', {}).get('metadata', {}).get('complexity') or 'simple',
-					"estimatedTime": parsed.get('workflow', {}).get('metadata', {}).get('estimatedTime') or '5-10 minutes'
+					"title": wf.get('metadata', {}).get('title') or wf.get('name') or 'Generated Workflow',
+					"description": wf.get('metadata', {}).get('description') or original_prompt,
+					"estimatedCost": wf.get('metadata', {}).get('estimatedCost') or 'Free to $20/month',
+					"requiredIntegrations": wf.get('metadata', {}).get('requiredIntegrations') or [],
+					"authRequirements": wf.get('metadata', {}).get('authRequirements') or [],
+					"complexity": wf.get('metadata', {}).get('complexity') or 'simple',
+					"estimatedTime": wf.get('metadata', {}).get('estimatedTime') or '5-10 minutes'
 				},
 				"suggestions": parsed.get('suggestions', []),
 				"questions": parsed.get('questions', [])
@@ -424,6 +400,9 @@ Generate the workflow in the specified JSON format."""
 				"type": original_type,
 				"label": node.get('label') or f"Step {index + 1}",
 				"position": node.get('position') or {"x": 100 + (index * 200), "y": 100},
+				"reads": node.get('reads') or [],
+				"writes": node.get('writes') or [],
+				"version": node.get('version') or 'v1',
 				"data": {
 					"label": node.get('data', {}).get('label') or node.get('label') or f"Step {index + 1}",
 					"type": original_type,
@@ -444,8 +423,7 @@ Generate the workflow in the specified JSON format."""
 				"source": edge.get('source') or '',
 				"target": edge.get('target') or '',
 				"type": edge.get('type') or 'default',
-				"label": edge.get('label') or '',
-				"data_mapping": edge.get('data_mapping') or {}
+				"label": edge.get('label') or ''
 			}
 			enhanced_edges.append(enhanced_edge)
 		return enhanced_edges
