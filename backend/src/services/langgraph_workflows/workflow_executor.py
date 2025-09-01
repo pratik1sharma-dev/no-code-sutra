@@ -186,6 +186,13 @@ class LangGraphWorkflowExecutor:
                             key_name = str(read_key).split('.')[-1]
                             node_input_state[key_name] = value
                     # Execute using existing single-node logic for consistency
+                    # Basic tracing: mark start
+                    state['last_event'] = {
+                        'type': 'node_start',
+                        'node_id': node_id,
+                        'node_type': node_type,
+                        'timestamp': datetime.now().isoformat()
+                    }
                     node_result = self.execute_node(
                         node_type=node_type,
                         node_config=node_config,
@@ -202,6 +209,14 @@ class LangGraphWorkflowExecutor:
                             missing.append(w)
                     if missing:
                         raise ValueError(f"Node {node_id} did not produce declared writes: {missing}")
+                    # Basic tracing: mark end
+                    merged['last_event'] = {
+                        'type': 'node_end',
+                        'node_id': node_id,
+                        'node_type': node_type,
+                        'timestamp': datetime.now().isoformat(),
+                        'status': node_result.get('status')
+                    }
                     return merged
 
                 return _wrapper
