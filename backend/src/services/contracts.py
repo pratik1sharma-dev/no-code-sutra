@@ -202,8 +202,9 @@ class TextOverlayInputV1(BaseModel):
 
 
 class TextOverlayOutputV1(BaseModel):
-    image_url: str
-    image_data_url: str
+    image_url: Optional[str] = None
+    image_data_url: Optional[str] = None
+    carousel_images: Optional[List[Dict[str, Any]]] = None
     template_used: Optional[str] = None
     platform_used: str
     post_type: str

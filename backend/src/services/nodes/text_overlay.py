@@ -884,8 +884,87 @@ class SmartTextPlacement:
                 
                         # Count significant brightness differences
                 for neighbor in neighbors:
-                    if abs(current[0] - neighbor[0]) > 20:  # Threshold for significant difference
-                        contrast += 1
+                    if abs(current - neighbor) > 30:  # Threshold for edge detection
+                        edge_count += 1
+                
+                total_pixels += 1
+        
+        # Return edge density as busyness score
+        return (edge_count / (total_pixels * 4)) * 100 if total_pixels > 0 else 0
+    
+    def _calculate_readability(self, brightness: float, contrast: float, busyness: float) -> float:
+        """Calculate overall readability score (0-100)"""
+        # Optimal brightness: 100-200 (not too dark, not too bright)
+        brightness_score = max(0, 100 - abs(brightness - 150) / 1.5)
+        
+        # Higher contrast = better readability
+        contrast_score = min(contrast / 2, 100)
+        
+        # Lower busyness = better readability  
+        busyness_score = max(100 - busyness, 0)
+        
+        # Weighted average
+        return (brightness_score * 0.4 + contrast_score * 0.4 + busyness_score * 0.2)
+    
+    def _get_zone_size(self, zone_name: str) -> int:
+        """Calculate the area of a zone in pixels"""
+        zone_coords = {
+            'top': (0, 0, self.width, int(self.height * 0.2)),
+            'bottom': (0, int(self.height * 0.75), self.width, self.height),
+            'left': (0, 0, int(self.width * 0.3), self.height),
+            'right': (int(self.width * 0.7), 0, self.width, self.height),
+            'center': (int(self.width * 0.3), int(self.height * 0.3), 
+                      int(self.width * 0.7), int(self.height * 0.7))
+        }
+        
+        x1, y1, x2, y2 = zone_coords[zone_name]
+        return (x2 - x1) * (y2 - y1)
+    
+    def select_best_zone(self, content_type: str, content_length: int) -> Tuple[str, Dict[str, Any]]:
+        """Select the best zone based on content type and image analysis"""
+        
+        # Content type preferences
+        content_preferences = {
+            'headline': ['top', 'center', 'left', 'right', 'bottom'],
+            'subhead': ['top', 'center', 'left', 'right', 'bottom'], 
+            'bullets': ['bottom', 'left', 'right', 'center', 'top'],
+            'quote': ['left', 'right', 'center', 'top', 'bottom'],
+            'caption': ['bottom', 'left', 'right', 'center', 'top']
+        }
+        
+        # Get preferred zones for this content type
+        preferred_zones = content_preferences.get(content_type, ['center', 'top', 'bottom'])
+        
+        # Score each preferred zone
+        zone_rankings = []
+        
+        for zone_name in preferred_zones:
+            if zone_name in self.zone_scores:
+                score = self.zone_scores[zone_name]['readability']
+                
+                # Adjust score based on content length
+                if content_length > 100:  # Long content
+                    # Prefer larger zones
+                    zone_size = self._get_zone_size(zone_name)
+                    size_bonus = min(zone_size / 1000, 20)  # Max 20 point bonus
+                    score += size_bonus
+                elif content_length < 30:  # Short content
+                    # Prefer center zones for impact
+                    if zone_name == 'center':
+                        score += 15
+                
+                zone_rankings.append((zone_name, score))
+        
+        # Sort by score (highest first)
+        zone_rankings.sort(key=lambda x: x[1], reverse=True)
+        
+        # Return best zone and its data
+        best_zone = zone_rankings[0][0] if zone_rankings else 'center'
+        return best_zone, self.zone_scores[best_zone]
+    
+    def adapt_text_style(self, zone_name: str) -> Dict[str, Any]:
+        """Adapt text styling based on zone characteristics"""
+        
         zone_data = self.zone_scores[zone_name]
         brightness = zone_data['brightness']
         contrast = zone_data['contrast']
@@ -907,23 +986,6 @@ class SmartTextPlacement:
             'shadow_intensity': shadow_intensity,
             'zone_coordinates': zone_data['coordinates']
         }
-    
-    def calculate_readability(self, zone_name: str) -> float:
-        """Calculate readability score based on brightness and contrast"""
-        zone_data = self.zone_scores[zone_name]
-        brightness = zone_data['brightness']
-        contrast = zone_data['contrast']
-        
-        # Choose text color based on background brightness
-        if brightness > 150:  # Light background
-            text_color = (0, 0, 0, 255)  # Black text
-            bg_opacity = 0.8  # More opaque background
-        else:  # Dark background  
-            text_color = (255, 255, 255, 255)  # White text
-            bg_opacity = 0.6  # More transparent background
-            
-        # Simple readability score (higher is better)
-        return contrast * bg_opacity
 
     def get_optimal_text_area(self, zone_name: str, content_length: int) -> Tuple[int, int, int, int]:
         """Get optimal text area within the selected zone"""
@@ -1077,13 +1139,14 @@ def generate_carousel_overlay(state: Dict[str, Any], structured_content: Dict[st
         print(f"🎯 Carousel generation summary:")
         print(f"🎯 Total slides generated: {len(generated_slides)}")
         
-        return {
-            'status': 'completed',
-            'carousel_images': generated_slides,
-            'post_type': 'carousel',
-            'slide_count': len(generated_slides),
-            'timestamp': datetime.now().isoformat()
-        }
+        # Structure the output using the contract
+        output = TextOverlayOutputV1(
+            carousel_images=generated_slides,
+            platform_used=platform,
+            post_type='carousel',
+            timestamp=datetime.now().isoformat()
+        )
+        return output.dict()
         
     except Exception as e:
         print(f"❌ Error in carousel overlay generation: {e}")
