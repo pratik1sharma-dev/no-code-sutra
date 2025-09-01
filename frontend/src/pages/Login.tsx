@@ -35,7 +35,7 @@ const Login: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h1 className="text-4xl font-cormorant font-semibold text-center text-primary-600">
-            No Code Sutra
+          TaaranAi
           </h1>
           <h2 className="mt-6 text-center text-3xl font-semibold text-secondary-900">
             Sign in to your account
