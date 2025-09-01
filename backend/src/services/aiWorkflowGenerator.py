@@ -334,13 +334,18 @@ Generate the workflow in the specified JSON format."""
 	def _parse_ai_response(self, response: str, original_prompt: str) -> Dict[str, Any]:
 		logger.info("Parsing AI response")
 		try:
-			json_match = response.find('{')
+			# Prefer fenced JSON blocks if present
+			import re
+			code_block = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", response, re.IGNORECASE)
+			candidate = code_block.group(1) if code_block else None
+			json_match = (candidate or response).find('{')
 			if json_match == -1:
 				logger.error("No JSON found in response")
 				raise Exception('No JSON found in response')
+			text = candidate or response
 			brace_count = 0
 			end_pos = json_match
-			for i, char in enumerate(response[json_match:], json_match):
+			for i, char in enumerate(text[json_match:], json_match):
 				if char == '{':
 					brace_count += 1
 				elif char == '}':
@@ -348,7 +353,15 @@ Generate the workflow in the specified JSON format."""
 					if brace_count == 0:
 						end_pos = i + 1
 						break
-			json_str = response[json_match:end_pos].strip()
+			json_str = text[json_match:end_pos].strip()
+			# Sanitize common issues: backticks, smart quotes, control chars, trailing commas
+			json_str = json_str.replace('```', '')
+			json_str = json_str.replace('\u201c', '"').replace('\u201d', '"').replace('\u2019', "'")
+			json_str = json_str.replace('“', '"').replace('”', '"').replace('’', "'")
+			# Remove invalid control characters except standard whitespace
+			json_str = re.sub(r"[\x00-\x08\x0B-\x0C\x0E-\x1F]", " ", json_str)
+			# Remove trailing commas before closing braces/brackets
+			json_str = re.sub(r",\s*(\}|\])", r"\1", json_str)
 			try:
 				parsed = json.loads(json_str)
 			except json.JSONDecodeError as e:
@@ -439,35 +452,33 @@ Generate the workflow in the specified JSON format."""
 	def _generate_fallback_workflow(self, prompt: str) -> Dict[str, Any]:
 		logger.info(f"Generating fallback workflow for prompt: '{prompt[:50]}...'")
 		workflow_name = self._generate_workflow_name(prompt)
-		fallback_workflow = {
-			"workflow": {
-				"name": workflow_name,
-				"description": f"Automation workflow for: {prompt}",
-				"nodes": [
-					{
-						"id": "1",
-						"type": "aiAgent",
+		flattened = {
+			"name": workflow_name,
+			"description": f"Automation workflow for: {prompt}",
+			"nodes": [
+				{
+					"id": "1",
+					"type": "aiAgent",
+					"label": "Process Request",
+					"position": {"x": 100, "y": 100},
+					"data": {
 						"label": "Process Request",
-						"position": {"x": 100, "y": 100},
-						"data": {
-							"label": "Process Request",
-							"type": "aiAgent",
-							"config": {"prompt": prompt},
-							"status": "idle",
-							"executionCount": 0
-						}
+						"type": "aiAgent",
+						"config": {"prompt": prompt},
+						"status": "idle",
+						"executionCount": 0
 					}
-				],
-				"edges": [],
-				"metadata": {
-					"title": workflow_name,
-					"description": f"Basic automation for: {prompt}",
-					"estimatedCost": "Free",
-					"requiredIntegrations": [],
-					"authRequirements": [],
-					"complexity": "simple",
-					"estimatedTime": "5 minutes"
 				}
+			],
+			"edges": [],
+			"metadata": {
+				"title": workflow_name,
+				"description": f"Basic automation for: {prompt}",
+				"estimatedCost": "Free",
+				"requiredIntegrations": [],
+				"authRequirements": [],
+				"complexity": "simple",
+				"estimatedTime": "5 minutes"
 			},
 			"suggestions": [
 				"Consider adding more specific steps to make this workflow more robust",
@@ -479,5 +490,5 @@ Generate the workflow in the specified JSON format."""
 			]
 		}
 		logger.info(f"Fallback workflow generated: {workflow_name} with 1 node")
-		return fallback_workflow 
+		return flattened 
         
