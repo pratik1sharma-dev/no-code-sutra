@@ -943,6 +943,25 @@ async def download_canva_template(template_id: str, format: str = "png", user_id
     except Exception as e:
         		raise HTTPException(status_code=500, detail=f"Failed to download template: {str(e)}")
 
+@app.get("/api/workflows/stream")
+async def stream_workflow(workflow_json: str, input_json: str, http_request: Request, user: Optional[dict] = Depends(optional_auth)):
+	"""Stream workflow execution events via Server-Sent Events (SSE).
+	- Accepts URL-encoded JSON strings for workflow and input
+	- Returns text/event-stream with data: <json> lines
+	"""
+	try:
+		# Apply rate limiting
+		if security_config.RATE_LIMIT_ENABLED:
+			identifier = get_user_identifier(http_request, user)
+			await apply_rate_limit(http_request, identifier, "workflow", bool(user))
+		import json as _json
+		workflow = _json.loads(workflow_json)
+		inputs = _json.loads(input_json)
+		stream = langgraph_executor.stream_execution(workflow, inputs)
+		return StreamingResponse(stream, media_type="text/event-stream")
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=f"Streaming failed: {str(e)}")
+
 # Include additional routes
 import sys
 import os

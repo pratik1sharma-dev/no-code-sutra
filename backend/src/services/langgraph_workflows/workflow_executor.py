@@ -457,3 +457,49 @@ class LangGraphWorkflowExecutor:
                     if in_degree[node] == 0:
                         queue.append(node)
         return result 
+
+    def stream_execution(self, workflow_data: Dict[str, Any], input_data: Dict[str, Any]):
+        """Yield step events during workflow execution for SSE consumers."""
+        try:
+            initial_state = {
+                'workflow_id': str(uuid.uuid4()),
+                'start_time': datetime.now().isoformat(),
+                'input_data': input_data,
+                'workflow_name': workflow_data.get('name', 'Unknown'),
+                'nodes_executed': [],
+                'node_results': {}
+            }
+            graph = self.build_workflow(workflow_data)
+            try:
+                # Preferred: use LangGraph streaming API if available
+                for event in graph.stream(initial_state):  # type: ignore[attr-defined]
+                    # event is typically a (node_name, state) or dict depending on version
+                    try:
+                        import json as _json
+                        if isinstance(event, tuple) and len(event) == 2:
+                            node_name, state = event
+                            payload = {
+                                'type': 'node_event',
+                                'node': node_name,
+                                'timestamp': datetime.now().isoformat(),
+                                'state_keys': list(state.keys()) if isinstance(state, dict) else []
+                            }
+                            yield f"data: {_json.dumps(payload)}\n\n"
+                        elif isinstance(event, dict):
+                            yield f"data: { _json.dumps(event) }\n\n"
+                    except Exception:
+                        continue
+                # Final state after stream completes
+                final_state = graph.invoke(initial_state)
+                import json as _json
+                yield f"data: {_json.dumps({'type': 'completed', 'execution_id': final_state.get('workflow_id')})}\n\n"
+            except Exception:
+                # Fallback: no native stream support; emit coarse events
+                import time, json as _json
+                yield f"data: {_json.dumps({'type': 'start', 'ts': datetime.now().isoformat()})}\n\n"
+                # Execute non-streaming and emit summary
+                result = self.execute_workflow(workflow_data, input_data)
+                yield f"data: {_json.dumps({'type': 'completed', 'result': {'status': result.get('status'), 'execution_id': result.get('execution_id')}})}\n\n"
+        except Exception as e:
+            import json as _json
+            yield f"data: {_json.dumps({'type': 'error', 'error': str(e)})}\n\n" 
