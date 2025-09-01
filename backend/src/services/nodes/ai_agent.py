@@ -132,9 +132,12 @@ Optionally, if you think a specific visual template would work particularly well
         state['topic'] = topic
         state['status'] = 'completed'
         state['timestamp'] = datetime.now().isoformat()
-        return state
+
+        # Return a dictionary matching the declared 'writes' from the contract
+        return {'dynamic': state.get('result', {})}
     except Exception as e:
         state['status'] = 'failed'
         state['error'] = str(e)
         state['timestamp'] = datetime.now().isoformat()
-        return state
+        # Even on failure, return the expected structure
+        return {'dynamic': {'error': str(e), 'status': 'failed'}}
