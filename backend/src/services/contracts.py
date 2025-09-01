@@ -119,3 +119,71 @@ class CanvaTemplateOutputV1(BaseModel):
     canva_design_url: Optional[str] = None
     image_data_url: str
 
+
+class DataNodeInputV1(BaseModel):
+    input_source: Optional[str] = None
+    output_name: str = "post_data"
+    operation: str = "pass_through"  # pass_through|transform|filter|aggregate
+    filter_criteria: Dict[str, Any] = Field(default_factory=dict)
+    aggregation_type: str = "sum"
+
+
+class DataNodeOutputV1(BaseModel):
+    output_name: str
+    value: Any
+
+
+class ConditionInputV1(BaseModel):
+    condition: str = ""
+    input_value: Any = None
+
+
+class ConditionOutputV1(BaseModel):
+    condition_result: bool
+    next_step: Optional[str] = None
+
+
+class DelayInputV1(BaseModel):
+    delay_seconds: int = 1
+
+
+class DelayOutputV1(BaseModel):
+    scheduled_for: str
+
+
+class ScheduleInputV1(BaseModel):
+    schedule_type: str = "daily"
+    schedule_time: str = "09:00"
+
+
+class ScheduleOutputV1(BaseModel):
+    type: str
+    time: str
+    created_at: str
+
+
+class BlogWriterInputV1(BaseModel):
+    topic: str
+    style: str = "professional"
+    length: str = "medium"
+
+
+class BlogWriterOutputV1(BaseModel):
+    topic: str
+    content: str
+    style: str
+    length: str
+    generated_at: str
+
+
+class SeoOptimizerInputV1(BaseModel):
+    content: str
+    target_keywords: List[str] = Field(default_factory=list)
+
+
+class SeoOptimizerOutputV1(BaseModel):
+    original_content: str
+    optimized_content: str
+    target_keywords: List[str]
+    optimized_at: str
+

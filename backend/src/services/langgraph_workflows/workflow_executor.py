@@ -185,13 +185,14 @@ class LangGraphWorkflowExecutor:
                             # Assign to top-level by last segment name
                             key_name = str(read_key).split('.')[-1]
                             node_input_state[key_name] = value
-                    # Execute using existing single-node logic for consistency
+                    start_ts = datetime.now()
+                    # Execute the node
                     # Basic tracing: mark start
                     state['last_event'] = {
                         'type': 'node_start',
                         'node_id': node_id,
                         'node_type': node_type,
-                        'timestamp': datetime.now().isoformat()
+                        'timestamp': start_ts.isoformat()
                     }
                     node_result = self.execute_node(
                         node_type=node_type,
@@ -200,6 +201,8 @@ class LangGraphWorkflowExecutor:
                         edges=edges_data,
                         current_node_id=node_id
                     )
+                    end_ts = datetime.now()
+                    duration_ms = int((end_ts - start_ts).total_seconds() * 1000)
                     # Merge back into state for downstream nodes
                     merged = self.merge_node_result(state, node_result, node_id)
                     # Validate declared writes exist in merged state
@@ -214,8 +217,10 @@ class LangGraphWorkflowExecutor:
                         'type': 'node_end',
                         'node_id': node_id,
                         'node_type': node_type,
-                        'timestamp': datetime.now().isoformat(),
-                        'status': node_result.get('status')
+                        'timestamp': end_ts.isoformat(),
+                        'status': node_result.get('status'),
+                        'duration_ms': duration_ms,
+                        'error': node_result.get('error')
                     }
                     return merged
 

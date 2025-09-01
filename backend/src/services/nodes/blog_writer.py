@@ -1,21 +1,24 @@
 from typing import Dict, Any
 from datetime import datetime
+from ..contracts import BlogWriterInputV1, BlogWriterOutputV1
 
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        topic = state.get('topic', 'blog topic')
-        style = state.get('style', 'professional')
-        length = state.get('length', 'medium')
-        content = f"[{style} | {length}] Draft blog about: {topic}"
-        blog_data = {
-            'topic': topic,
-            'content': content,
-            'style': style,
-            'length': length,
-            'generated_at': datetime.now().isoformat()
-        }
-        state['blog_data'] = blog_data
+        inp = BlogWriterInputV1(
+            topic=state.get('topic', 'blog topic'),
+            style=state.get('style', 'professional'),
+            length=state.get('length', 'medium')
+        )
+        content = f"[{inp.style} | {inp.length}] Draft blog about: {inp.topic}"
+        out = BlogWriterOutputV1(
+            topic=inp.topic,
+            content=content,
+            style=inp.style,
+            length=inp.length,
+            generated_at=datetime.now().isoformat()
+        )
+        state['blog_data'] = out.model_dump()
         state['status'] = 'completed'
         state['timestamp'] = datetime.now().isoformat()
         return state
