@@ -27,7 +27,7 @@ const Sidebar: React.FC = () => {
       {/* Logo */}
       <div className="flex items-center justify-center h-16 border-b border-secondary-200">
         <h1 className="text-2xl font-cormorant font-semibold text-primary-600">
-          No Code Sutra
+          TaaranAi
         </h1>
       </div>
 

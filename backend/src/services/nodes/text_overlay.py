@@ -1014,6 +1014,24 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         validated_input = TextOverlayInputV1(**state)
         overlay_text = validated_input.structured_data
         
+        # DEBUG: Show exactly what text we're going to overlay
+        print(f"🔍 TEXT OVERLAY DEBUG - Raw overlay_text: {overlay_text}")
+        print(f"🔍 TEXT OVERLAY DEBUG - Type: {type(overlay_text)}")
+        
+        if isinstance(overlay_text, dict):
+            print(f"🔍 TEXT OVERLAY DEBUG - Dict keys: {list(overlay_text.keys())}")
+            for key, value in overlay_text.items():
+                if isinstance(value, str):
+                    print(f"🔍 TEXT OVERLAY DEBUG - {key}: '{value}' (length: {len(value)})")
+                elif isinstance(value, list):
+                    print(f"🔍 TEXT OVERLAY DEBUG - {key}: {len(value)} items")
+                    for i, item in enumerate(value[:3]):  # Show first 3 items
+                        print(f"🔍 TEXT OVERLAY DEBUG -   [{i}]: '{item}' (length: {len(str(item))})")
+                else:
+                    print(f"🔍 TEXT OVERLAY DEBUG - {key}: {type(value)} = {value}")
+        else:
+            print(f"🔍 TEXT OVERLAY DEBUG - String content: '{overlay_text}' (length: {len(str(overlay_text))})")
+        
         # NEW: Priority order - Instagram Templates > Canva > Smart Placement
         if TEMPLATES_AVAILABLE and validated_input.use_instagram_template:
             print(f"🎨 Using Instagram Template Engine (template: {validated_input.instagram_template_name or 'auto-select'})")
