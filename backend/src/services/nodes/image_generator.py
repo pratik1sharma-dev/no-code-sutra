@@ -17,6 +17,13 @@ class DynamicImageFetcher:
         self.pexels_api_key = os.getenv('PEXELS_API_KEY')
         self.pixabay_api_key = os.getenv('PIXABAY_API_KEY')
         
+        # Initialize LLM client for query enhancement
+        from ..llm.bedrock_client import BedrockClient
+        try:
+            self.llm_client = BedrockClient() if os.getenv("AWS_BEARER_TOKEN_BEDROCK") else None
+        except:
+            self.llm_client = None
+    
     def extract_keywords(self, content: Dict[str, Any]) -> List[str]:
         """Extract relevant keywords from content for image search"""
         # Check if custom keywords are provided (for slide-specific images)
@@ -54,6 +61,53 @@ class DynamicImageFetcher:
         
         # Return top 5 most relevant keywords
         return unique_keywords[:5]
+    
+    def enhance_search_query_with_ai(self, content: Dict[str, Any]) -> str:
+        """Use AI to generate optimized image search queries"""
+        if not self.llm_client:
+            return self.fallback_query_generation(content)
+        
+        try:
+            content_text = json.dumps(content, indent=2)
+            prompt = f"""Analyze this content and generate the BEST single image search query for finding a professional, high-quality background image:
+
+Content: {content_text}
+
+Requirements:
+- Generate ONE concise search query (2-4 words max)
+- Focus on visual concepts, not text content
+- Prioritize professional, clean, modern aesthetics
+- Consider Instagram/social media suitability
+- Avoid overly specific terms that might return no results
+
+Examples:
+- For business content: "modern office space"
+- For tech content: "abstract technology"
+- For lifestyle content: "minimalist lifestyle"
+
+Return ONLY the search query, nothing else."""
+
+            response = self.llm_client.generate(prompt)
+            query = response.strip().strip('"').strip("'")
+            
+            # Validate query length and content
+            if len(query.split()) <= 6 and len(query) > 3:
+                print(f"🤖 AI-enhanced query: '{query}'")
+                return query
+            else:
+                print(f"⚠️ AI query too long/short, using fallback: '{query}'")
+                return self.fallback_query_generation(content)
+                
+        except Exception as e:
+            print(f"❌ AI query enhancement failed: {e}")
+            return self.fallback_query_generation(content)
+    
+    def fallback_query_generation(self, content: Dict[str, Any]) -> str:
+        """Fallback query generation using keyword extraction"""
+        keywords = self.extract_keywords(content)
+        if not keywords:
+            return "modern business professional"
+        return ' '.join(keywords[:3])
     
     def search_unsplash(self, query: str) -> Optional[str]:
         """Search Unsplash for relevant images"""
@@ -244,49 +298,42 @@ class DynamicImageFetcher:
     
     def fetch_relevant_image(self, content: Dict[str, Any]) -> str:
         """Fetch the most relevant background image using enhanced fallback chain"""
-        keywords = self.extract_keywords(content)
+        query = self.enhance_search_query_with_ai(content)
         
-        if not keywords:
-            # Fallback to generic terms
-            keywords = ['business', 'technology', 'modern']
-        
-        # Create search query from keywords
-        search_query = ' '.join(keywords[:3])  # Use top 3 keywords
-        
-        print(f"Searching for images with query: {search_query}")
+        print(f"Searching for images with query: {query}")
         
         # Try Google Custom Search first (access to entire web)
-        image_url = self.search_google_custom(search_query)
+        image_url = self.search_google_custom(query)
         if image_url:
             print(f"Found Google Custom Search image: {image_url}")
             return image_url
         
         # Try Unsplash Source second (no API key required)
-        image_url = self.search_unsplash_source(search_query)
+        image_url = self.search_unsplash_source(query)
         if image_url:
             print(f"Found Unsplash Source image: {image_url}")
             return image_url
         
         # Try Unsplash API third (high quality stock photos, requires API key)
-        image_url = self.search_unsplash(search_query)
+        image_url = self.search_unsplash(query)
         if image_url:
             print(f"Found Unsplash API image: {image_url}")
             return image_url
         
         # Try Pexels API fourth (requires API key)
-        image_url = self.search_pexels(search_query)
+        image_url = self.search_pexels(query)
         if image_url:
             print(f"Found Pexels API image: {image_url}")
             return image_url
         
         # Try Pixabay API fifth (requires API key)
-        image_url = self.search_pixabay(search_query)
+        image_url = self.search_pixabay(query)
         if image_url:
             print(f"Found Pixabay API image: {image_url}")
             return image_url
         
         # Try curated stock images (no API key required)
-        image_url = self.get_stock_image(search_query)
+        image_url = self.get_stock_image(query)
         print(f"Using curated stock image: {image_url}")
         return image_url
 

@@ -41,12 +41,12 @@ class AIWorkflowGenerator:
 			logger.info(f"AIWorkflowGenerator initialized with LLM client: {type(self.llm_client).__name__ if self.llm_client else 'None'}")
 			self._initialized = True
 	
-	def _initialize_llm_client(self) -> Optional[LLMClient]:
-		"""Initialize LLM client: prefer Bedrock; fallback to OpenAI if configured; else None."""
-		provider = os.getenv("LLM_PROVIDER", "bedrock").lower()
-		if provider == "bedrock":
-			if os.getenv("AWS_BEARER_TOKEN_BEDROCK"):
-				return BedrockClient()
+	def _initialize_llm_client(self, provider: str = "bedrock"):
+		"""Initialize the appropriate LLM client based on provider."""
+		if provider == "bedrock" and os.getenv("AWS_BEARER_TOKEN_BEDROCK"):
+			if BedrockClient:
+				system_prompt = self._build_system_prompt()
+				return BedrockClient(system_prompt=system_prompt)
 			logger.warning("Bedrock not configured. Falling back to OpenAI if available.")
 		if provider == "openai" or not os.getenv("AWS_BEARER_TOKEN_BEDROCK"):
 			if OpenAIClient and os.getenv("OPENAI_API_KEY"):
@@ -62,14 +62,9 @@ class AIWorkflowGenerator:
 			if self.llm_client is None:
 				logger.warning("No LLM provider configured, using fallback workflow")
 				return self._generate_fallback_workflow(prompt)
-			logger.info("Building prompts for LLM")
-			system_prompt = self._build_system_prompt()
-			user_prompt = self._build_user_prompt(prompt)
-			full_prompt = f"{system_prompt}\n\n{user_prompt}"
-			logger.info(f"Full prompt for LLM: {full_prompt}")
 			logger.info("Invoking LLM client")
 			# Run blocking call in thread to keep FastAPI happy if used async
-			response_content = await asyncio.to_thread(self.llm_client.generate, full_prompt)
+			response_content = await asyncio.to_thread(self.llm_client.generate, prompt)
 			if not response_content:
 				logger.error("No response content from LLM client")
 				raise Exception('No response from AI service')
@@ -504,4 +499,3 @@ Generate the workflow in the specified JSON format."""
 		}
 		logger.info(f"Fallback workflow generated: {workflow_name} with 1 node")
 		return flattened 
-        
