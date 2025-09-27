@@ -1563,7 +1563,7 @@ def _render_text_with_smart_styling(draw: ImageDraw.Draw, content: Any, content_
     
     if content_type == 'bullets' and isinstance(content, list):
         for i, bullet in enumerate(content[:3]):
-            bullet_text = f"• {bullet}"
+            bullet_text = f"- {bullet}"
             bullet_y = text_y + (i * 40)
             
             # Draw shadow first

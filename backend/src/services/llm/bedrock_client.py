@@ -9,20 +9,23 @@ class BedrockClient(LLMClient):
     """Amazon Bedrock bearer-token based client adapter."""
 
     def __init__(self, model_id: Optional[str] = None, region: Optional[str] = None, system_prompt: Optional[str] = None) -> None:
-        # Force use of 8B model if 70B is causing issues
-        configured_model = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-8b-instruct-v1:0")
-        if "70b" in configured_model.lower():
-            # Fallback to 8B model if 70B is configured but causing issues
-            self.model_id = model_id or "meta.llama3-1-8b-instruct-v1:0"
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Falling back from 70B to 8B model due to potential availability issues")
-        else:
-            self.model_id = model_id or configured_model
-        
-        self.region = region or os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
+        # Use configured model (prefer 70B model)
+        self.model_id = model_id or os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-70b-instruct-v1:0")
+        self.region = region or os.getenv("AWS_DEFAULT_REGION", "us-west-2")
         self.token = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
         self.system_prompt = system_prompt
+        
+        # Log model configuration
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Bedrock client initialized with model: {self.model_id} in region: {self.region}")
+        
+        if "70b" in self.model_id.lower():
+            logger.info("Using Llama 3.1 70B model - ensure model access is enabled in AWS Bedrock Console")
+        elif "8b" in self.model_id.lower():
+            logger.info("Using Llama 3.1 8B model")
+        else:
+            logger.warning(f"Unknown model type: {self.model_id}")
 
     def generate(self, prompt: str, *, timeout: float | None = 120.0, system_prompt: Optional[str] = None) -> str:
         if not self.token:
