@@ -13,13 +13,13 @@ class BedrockClient(LLMClient):
         self.region = region or os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
         self.token = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
 
-    def generate(self, prompt: str, *, timeout: float | None = 30.0) -> str:
+    def generate(self, prompt: str, *, timeout: float | None = 120.0) -> str:
         if not self.token:
             raise RuntimeError("AWS_BEARER_TOKEN_BEDROCK not configured")
         url = f"https://bedrock-runtime.{self.region}.amazonaws.com/model/{self.model_id}/converse"
         payload = {"messages": [{"role": "user", "content": [{"text": prompt}]}]}
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.token}"}
-        resp = requests.post(url, json=payload, headers=headers, timeout=timeout or 30.0)
+        resp = requests.post(url, json=payload, headers=headers, timeout=timeout or 120.0)
         resp.raise_for_status()
         data = resp.json()
         # Attempt common shapes

@@ -272,3 +272,11 @@ The current system is **production-ready** with:
 - ✅ Testing coverage
 
 **The Instagram integration is ready to generate and post professional content at scale!** 🎉
+
+
+Concerns
+1. Cant we use tooling where each node is registered as tool by the llm model. LLM will tell the execution order as per its understanding around in what order it will prefer executing
+
+2. Each node will also have properties that can be changed by user 
+2. Once, send LLM will execute it...llm will understand results and may also tweak or reattempt in another way...
+3. Whatever way it chooses, in the end we can have human in the loop approval to reconfirm 
