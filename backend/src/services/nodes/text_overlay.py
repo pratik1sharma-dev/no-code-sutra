@@ -1009,6 +1009,33 @@ class SmartTextPlacement:
 
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Intelligent text overlay that adapts based on image generation mode"""
+    
+    # Check if overlay should be skipped
+    if state.get('skip_overlay', False):
+        print("⏭️ Skipping text overlay - image already complete")
+        return state
+    
+    # Check if image already has text (AI-generated complete images)
+    if state.get('has_text', False):
+        print("📝 Image already has text - enhancing existing overlay")
+        return enhance_existing_text_overlay(state)
+    
+    # Standard text overlay process
+    print("🎨 Applying standard text overlay")
+    return apply_standard_text_overlay(state)
+
+def enhance_existing_text_overlay(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Enhance images that already have text (AI-generated)"""
+    try:
+        # For now, just pass through - future enhancement could adjust colors, fonts, etc.
+        print("✅ Text overlay enhancement completed (pass-through)")
+        return state
+    except Exception as e:
+        print(f"❌ Error enhancing text overlay: {e}")
+        return state
+
+def apply_standard_text_overlay(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         # Validate input using the contract
         validated_input = TextOverlayInputV1(**state)

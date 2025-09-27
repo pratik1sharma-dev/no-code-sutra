@@ -7,22 +7,200 @@ import json
 import random
 
 
-class DynamicImageFetcher:
-    """Fetches relevant background images from multiple public APIs"""
+class SmartImageGenerator:
+    """Smart image generator supporting multiple modes: search, curated, AI-generated"""
     
     def __init__(self):
+        # API keys for image search
         self.google_api_key = os.getenv('GOOGLE_CUSTOM_SEARCH_API_KEY')
         self.google_search_engine_id = os.getenv('GOOGLE_CUSTOM_SEARCH_ENGINE_ID')
         self.unsplash_access_key = os.getenv('UNSPLASH_ACCESS_KEY')
         self.pexels_api_key = os.getenv('PEXELS_API_KEY')
         self.pixabay_api_key = os.getenv('PIXABAY_API_KEY')
         
-        # Initialize LLM client for query enhancement
+        # AWS Bedrock image generation
+        self.aws_region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
+        self.aws_token = os.getenv('AWS_BEARER_TOKEN_BEDROCK')
+        
+        # Initialize LLM client for mode detection and query enhancement
         from ..llm.bedrock_client import BedrockClient
         try:
             self.llm_client = BedrockClient() if os.getenv("AWS_BEARER_TOKEN_BEDROCK") else None
         except:
             self.llm_client = None
+        
+    
+    def detect_image_mode(self, prompt: str, content: Dict[str, Any]) -> str:
+        """Detect the best image generation mode based on prompt and content"""
+        if not self.llm_client:
+            return "search"  # Default fallback
+        
+        try:
+            analysis_prompt = f"""Analyze this Instagram post request and determine the best image strategy:
+
+Prompt: "{prompt}"
+Content: {json.dumps(content, indent=2)}
+
+Choose the best mode:
+- "search": For general content needing stock photos/backgrounds
+- "curated": For brand-consistent, corporate content  
+- "ai_generate": For unique, creative, custom concepts that need original imagery
+- "hybrid": For high-quality posts needing multiple options
+
+Respond with ONLY the mode name: search, curated, ai_generate, or hybrid"""
+
+            response = self.llm_client.generate(analysis_prompt)
+            mode = response.strip().lower()
+            
+            if mode in ["search", "curated", "ai_generate", "hybrid"]:
+                print(f"🤖 AI selected mode: {mode}")
+                return mode
+            else:
+                print(f"⚠️ Invalid mode '{mode}', defaulting to search")
+                return "search"
+                
+        except Exception as e:
+            print(f"❌ Mode detection failed: {e}")
+            return "search"
+    
+    def generate_ai_image(self, prompt: str, content: Dict[str, Any]) -> Optional[str]:
+        """Generate AI image using AWS Bedrock Titan Image Generator"""
+        if not self.aws_token:
+            print("⚠️ AWS Bedrock token not configured for AI image generation")
+            return None
+        
+        try:
+            # Create optimized prompt for Titan Image Generator
+            if self.llm_client:
+                titan_prompt = self.create_titan_prompt(prompt, content)
+            else:
+                titan_prompt = f"Professional Instagram post image: {prompt}"
+            
+            print(f"🎨 Generating AI image with AWS Titan: {titan_prompt}")
+            
+            # Call AWS Bedrock Titan Image Generator
+            url = f"https://bedrock-runtime.{self.aws_region}.amazonaws.com/model/amazon.titan-image-generator-v1/invoke"
+            
+            payload = {
+                "taskType": "TEXT_IMAGE",
+                "textToImageParams": {
+                    "text": titan_prompt,
+                    "negativeText": "blurry, low quality, distorted, watermark, text overlay"
+                },
+                "imageGenerationConfig": {
+                    "numberOfImages": 1,
+                    "height": 1024,
+                    "width": 1024,
+                    "cfgScale": 8.0,
+                    "seed": random.randint(0, 2147483647)
+                }
+            }
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.aws_token}"
+            }
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=60)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            # Extract base64 image and convert to URL
+            if 'images' in result and len(result['images']) > 0:
+                base64_image = result['images'][0]
+                # For now, return a placeholder URL - in production, upload to S3/Cloudinary
+                image_url = f"data:image/png;base64,{base64_image}"
+                print(f"✅ AWS Titan image generated successfully")
+                return image_url
+            else:
+                print(f"❌ No images returned from AWS Titan")
+                return None
+            
+        except Exception as e:
+            print(f"❌ AWS Titan image generation failed: {e}")
+            return None
+    
+    def create_titan_prompt(self, user_prompt: str, content: Dict[str, Any]) -> str:
+        """Create optimized AWS Titan Image Generator prompt"""
+        try:
+            content_text = json.dumps(content, indent=2)
+            prompt_optimization = f"""Create an AWS Titan Image Generator prompt for a professional Instagram post image.
+
+User Request: "{user_prompt}"
+Content: {content_text}
+
+Requirements:
+- Professional, high-quality, Instagram-ready
+- Square aspect ratio (1:1)
+- Modern, clean aesthetic
+- Suitable for text overlay
+- Brand-safe and appropriate
+- No text or watermarks in the image
+
+Generate a detailed Titan prompt (max 512 characters):"""
+
+            response = self.llm_client.generate(prompt_optimization)
+            optimized_prompt = response.strip()
+            
+            # Ensure it's not too long for Titan
+            if len(optimized_prompt) > 512:
+                optimized_prompt = optimized_prompt[:509] + "..."
+            
+            return optimized_prompt
+            
+        except Exception as e:
+            print(f"❌ Titan prompt optimization failed: {e}")
+            return f"Professional Instagram post background image: {user_prompt}"
+    
+    def get_curated_images(self, content: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Get curated brand images from library"""
+        # Enhanced curated library with more categories and better quality scores
+        curated_library = {
+            'business': [
+                {
+                    'url': 'https://images.unsplash.com/photo-1556761175-b413da4baf72?w=1080&h=1080&fit=crop',
+                    'quality_score': 85,
+                    'tags': ['business', 'professional', 'office', 'corporate']
+                },
+                {
+                    'url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1080&h=1080&fit=crop',
+                    'quality_score': 90,
+                    'tags': ['business', 'meeting', 'professional', 'teamwork']
+                }
+            ],
+            'technology': [
+                {
+                    'url': 'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=1080&h=1080&fit=crop',
+                    'quality_score': 88,
+                    'tags': ['technology', 'digital', 'innovation', 'modern']
+                },
+                {
+                    'url': 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1080&h=1080&fit=crop',
+                    'quality_score': 92,
+                    'tags': ['ai', 'artificial intelligence', 'technology', 'future']
+                }
+            ],
+            'lifestyle': [
+                {
+                    'url': 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1080&h=1080&fit=crop',
+                    'quality_score': 87,
+                    'tags': ['lifestyle', 'modern', 'minimal', 'clean']
+                }
+            ]
+        }
+        
+        # Find best matching category based on content
+        keywords = self.extract_keywords(content)
+        best_category = 'business'  # default
+        
+        for category, images in curated_library.items():
+            for image in images:
+                if any(keyword in image['tags'] for keyword in keywords):
+                    best_category = category
+                    break
+        
+        return curated_library.get(best_category, curated_library['business'])
     
     def extract_keywords(self, content: Dict[str, Any]) -> List[str]:
         """Extract relevant keywords from content for image search"""
@@ -296,46 +474,137 @@ Return ONLY the search query, nothing else."""
         seed = hash(query) % 1000
         return f"https://picsum.photos/seed/{seed}/1080/1080"
     
-    def fetch_relevant_image(self, content: Dict[str, Any]) -> str:
-        """Fetch the most relevant background image using enhanced fallback chain"""
-        query = self.enhance_search_query_with_ai(content)
+    def generate_image_by_mode(self, mode: str, prompt: str, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate image based on selected mode"""
+        print(f"🎯 Generating image using mode: {mode}")
         
-        print(f"Searching for images with query: {query}")
+        if mode == "ai_generate":
+            # AI-generated image
+            image_url = self.generate_ai_image(prompt, content)
+            if image_url:
+                return {
+                    'image_url': image_url,
+                    'source': 'ai_generated',
+                    'mode': mode,
+                    'has_text': False,  # DALL-E generates background only by default
+                    'skip_overlay': False,
+                    'quality_score': 95
+                }
         
-        # Try Google Custom Search first (access to entire web)
-        image_url = self.search_google_custom(query)
+        elif mode == "curated":
+            # Curated brand images
+            curated_images = self.get_curated_images(content)
+            if curated_images:
+                best_image = max(curated_images, key=lambda x: x['quality_score'])
+                return {
+                    'image_url': best_image['url'],
+                    'source': 'curated',
+                    'mode': mode,
+                    'has_text': False,
+                    'skip_overlay': False,
+                    'quality_score': best_image['quality_score']
+                }
+        
+        elif mode == "hybrid":
+            # Try multiple sources and pick best
+            all_candidates = []
+            
+            # Try AI generation
+            ai_url = self.generate_ai_image(prompt, content)
+            if ai_url:
+                all_candidates.append({
+                    'image_url': ai_url,
+                    'source': 'ai_generated',
+                    'quality_score': 95
+                })
+            
+            # Try curated
+            curated_images = self.get_curated_images(content)
+            if curated_images:
+                best_curated = max(curated_images, key=lambda x: x['quality_score'])
+                all_candidates.append({
+                    'image_url': best_curated['url'],
+                    'source': 'curated',
+                    'quality_score': best_curated['quality_score']
+                })
+            
+            # Try search
+            search_result = self.fetch_search_image(content)
+            if search_result:
+                all_candidates.append(search_result)
+            
+            # Return best candidate
+            if all_candidates:
+                best = max(all_candidates, key=lambda x: x['quality_score'])
+                return {
+                    **best,
+                    'mode': mode,
+                    'has_text': False,
+                    'skip_overlay': False
+                }
+        
+        # Default to search mode
+        return self.fetch_search_image(content) or self.get_fallback_image()
+    
+    def fetch_search_image(self, content: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Fetch image using search APIs"""
+        keywords = self.extract_keywords(content)
+        
+        if not keywords:
+            keywords = ['business', 'technology', 'modern']
+        
+        search_query = ' '.join(keywords[:3])
+        print(f"🔍 Searching for images with query: {search_query}")
+        
+        # Try Google Custom Search first
+        image_url = self.search_google_custom(search_query)
         if image_url:
-            print(f"Found Google Custom Search image: {image_url}")
-            return image_url
+            return {
+                'image_url': image_url,
+                'source': 'google_search',
+                'quality_score': 80
+            }
         
-        # Try Unsplash Source second (no API key required)
-        image_url = self.search_unsplash_source(query)
+        # Try Unsplash Source
+        image_url = self.search_unsplash_source(search_query)
         if image_url:
-            print(f"Found Unsplash Source image: {image_url}")
-            return image_url
+            return {
+                'image_url': image_url,
+                'source': 'unsplash_source',
+                'quality_score': 75
+            }
         
-        # Try Unsplash API third (high quality stock photos, requires API key)
-        image_url = self.search_unsplash(query)
+        # Try Unsplash API
+        image_url = self.search_unsplash(search_query)
         if image_url:
-            print(f"Found Unsplash API image: {image_url}")
-            return image_url
+            return {
+                'image_url': image_url,
+                'source': 'unsplash_api',
+                'quality_score': 85
+            }
         
-        # Try Pexels API fourth (requires API key)
-        image_url = self.search_pexels(query)
+        # Try other APIs...
+        image_url = self.search_pexels(search_query)
         if image_url:
-            print(f"Found Pexels API image: {image_url}")
-            return image_url
+            return {
+                'image_url': image_url,
+                'source': 'pexels',
+                'quality_score': 70
+            }
         
-        # Try Pixabay API fifth (requires API key)
-        image_url = self.search_pixabay(query)
-        if image_url:
-            print(f"Found Pixabay API image: {image_url}")
-            return image_url
-        
-        # Try curated stock images (no API key required)
-        image_url = self.get_stock_image(query)
-        print(f"Using curated stock image: {image_url}")
-        return image_url
+        return None
+    
+    def get_fallback_image(self) -> Dict[str, Any]:
+        """Get fallback image when all else fails"""
+        fallback_url = self.get_stock_image("business professional")
+        return {
+            'image_url': fallback_url,
+            'source': 'fallback_stock',
+            'mode': 'search',
+            'has_text': False,
+            'skip_overlay': False,
+            'quality_score': 60
+        }
 
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -348,48 +617,49 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         style = state.get('style', 'modern')
         user_image_url = state.get('user_image_url')  # For future user uploads
         
-        # Initialize image fetcher
-        image_fetcher = DynamicImageFetcher()
+        # Initialize smart image generator
+        smart_generator = SmartImageGenerator()
         
         # Determine image source
         if user_image_url:
-            # User provided image (future feature)
-            image_url = user_image_url
-            source = 'user_upload'
-        elif prompt and 'generate' in prompt.lower():
-            # AI image generation (future feature)
-            # For now, fall back to dynamic fetching
-            image_url = image_fetcher.fetch_relevant_image(content)
-            source = 'ai_generation_fallback'
+            # User provided image
+            result = {
+                'image_url': user_image_url,
+                'source': 'user_upload',
+                'mode': 'user_upload',
+                'has_text': False,
+                'skip_overlay': False,
+                'quality_score': 100
+            }
         else:
-            # Dynamic background image fetching
-            image_url = image_fetcher.fetch_relevant_image(content)
-            source = 'dynamic_fetch'
+            # Detect best mode for this content
+            mode = smart_generator.detect_image_mode(prompt, content)
+            
+            # Generate image using detected mode
+            result = smart_generator.generate_image_by_mode(mode, prompt, content)
         
-        # Prepare response
-        image_data = {
-            'prompt': prompt,
-            'style': style,
-            'image_url': image_url,
-            'source': source,
-            'keywords': image_fetcher.extract_keywords(content) if content else [],
-            'generated_at': datetime.now().isoformat()
-        }
-        
-        print(f"Image generator completed - Source: {source}, URL: {image_url}")
+        print(f"✅ Smart image generation completed - Mode: {result.get('mode', 'unknown')}, Source: {result.get('source', 'unknown')}")
 
-        # Return a dictionary matching the declared 'writes' from the contract
+        # Return enhanced state with mode information
         return {
-            'image_url': image_url,
-            'source': source,
-            'keywords': image_fetcher.extract_keywords(content) if content else []
+            'image_url': result['image_url'],
+            'source': result['source'],
+            'mode': result.get('mode', 'search'),
+            'has_text': result.get('has_text', False),
+            'skip_overlay': result.get('skip_overlay', False),
+            'quality_score': result.get('quality_score', 60),
+            'keywords': smart_generator.extract_keywords(content) if content else []
         }
         
     except Exception as e:
-        print(f"Error in image generator node: {e}")
-        # Even on failure, return the expected structure
+        print(f"❌ Error in smart image generator: {e}")
+        # Return fallback structure
         return {
             'image_url': None,
             'source': 'error',
+            'mode': 'error',
+            'has_text': False,
+            'skip_overlay': False,
+            'quality_score': 0,
             'keywords': []
         }
