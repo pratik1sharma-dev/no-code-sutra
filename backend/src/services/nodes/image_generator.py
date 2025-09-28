@@ -19,7 +19,7 @@ class SmartImageGenerator:
         self.pixabay_api_key = os.getenv('PIXABAY_API_KEY')
         
         # AWS Bedrock image generation
-        self.aws_region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
+        self.aws_region = os.getenv('AWS_DEFAULT_REGION', 'us-west-2')  # Titan Image Generator is available in us-west-2
         self.aws_token = os.getenv('AWS_BEARER_TOKEN_BEDROCK')
         
         # Initialize LLM client for mode detection and query enhancement
@@ -78,8 +78,13 @@ Respond with ONLY the mode name: search, curated, ai_generate, or hybrid"""
             
             print(f"🎨 Generating AI image with AWS Titan: {titan_prompt}")
             
-            # Call AWS Bedrock Titan Image Generator
-            url = f"https://bedrock-runtime.{self.aws_region}.amazonaws.com/model/amazon.titan-image-generator-v1/invoke"
+            # Call AWS Bedrock Titan Image Generator (using v2 model)
+            url = f"https://bedrock-runtime.{self.aws_region}.amazonaws.com/model/amazon.titan-image-generator-v2:0/invoke"
+            
+            # Validate prompt length (Titan has limits)
+            if len(titan_prompt) > 512:
+                titan_prompt = titan_prompt[:509] + "..."
+                print(f"⚠️ Prompt truncated to 512 characters for Titan compatibility")
             
             payload = {
                 "taskType": "TEXT_IMAGE",
@@ -96,15 +101,40 @@ Respond with ONLY the mode name: search, curated, ai_generate, or hybrid"""
                 }
             }
             
+            # Validate payload structure
+            required_fields = ["taskType", "textToImageParams", "imageGenerationConfig"]
+            for field in required_fields:
+                if field not in payload:
+                    raise ValueError(f"Missing required field: {field}")
+            
+            if "text" not in payload["textToImageParams"]:
+                raise ValueError("Missing required field: textToImageParams.text")
+            
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.aws_token}"
             }
             
+            # Enhanced logging for debugging
+            print(f"🔍 BEDROCK DEBUG - URL: {url}")
+            print(f"🔍 BEDROCK DEBUG - Region: {self.aws_region}")
+            print(f"🔍 BEDROCK DEBUG - Token length: {len(self.aws_token) if self.aws_token else 0}")
+            print(f"🔍 BEDROCK DEBUG - Token prefix: {self.aws_token[:10] if self.aws_token else 'None'}...")
+            print(f"🔍 BEDROCK DEBUG - Payload: {json.dumps(payload, indent=2)}")
+            print(f"🔍 BEDROCK DEBUG - Headers: {json.dumps({k: v[:20] + '...' if k == 'Authorization' and len(v) > 20 else v for k, v in headers.items()}, indent=2)}")
+            
             response = requests.post(url, json=payload, headers=headers, timeout=60)
-            response.raise_for_status()
+            
+            # Log response details
+            print(f"🔍 BEDROCK DEBUG - Response status: {response.status_code}")
+            print(f"🔍 BEDROCK DEBUG - Response headers: {dict(response.headers)}")
+            
+            if response.status_code != 200:
+                print(f"🔍 BEDROCK DEBUG - Error response body: {response.text}")
+                response.raise_for_status()
             
             result = response.json()
+            print(f"🔍 BEDROCK DEBUG - Response keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
             
             # Extract base64 image and convert to URL
             if 'images' in result and len(result['images']) > 0:
@@ -115,11 +145,23 @@ Respond with ONLY the mode name: search, curated, ai_generate, or hybrid"""
                 return image_url
             else:
                 print(f"❌ No images returned from AWS Titan")
+                print(f"🔍 BEDROCK DEBUG - Full response: {json.dumps(result, indent=2)}")
                 return None
             
+        except requests.exceptions.HTTPError as e:
+            print(f"❌ AWS Titan HTTP error: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"🔍 BEDROCK DEBUG - HTTP Error response: {e.response.text}")
+                print(f"🔍 BEDROCK DEBUG - HTTP Error status: {e.response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print(f"❌ AWS Titan request error: {e}")
+        except json.JSONDecodeError as e:
+            print(f"❌ AWS Titan JSON decode error: {e}")
         except Exception as e:
             print(f"❌ AWS Titan image generation failed: {e}")
-            return None
+            import traceback
+            print(f"🔍 BEDROCK DEBUG - Full traceback: {traceback.format_exc()}")
+        return None
     
     def create_titan_prompt(self, user_prompt: str, content: Dict[str, Any]) -> str:
         """Create optimized AWS Titan Image Generator prompt"""
