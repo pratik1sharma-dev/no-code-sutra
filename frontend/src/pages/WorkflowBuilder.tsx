@@ -24,6 +24,7 @@ import WorkflowExecutionHistory from '../components/ui/WorkflowExecutionHistory'
 import type { WorkflowNodeData, WorkflowNode, WorkflowEdge, NodeType } from '../types/workflow';
 import type { ScheduleConfig } from '../types/scheduler';
 import { apiService } from '../services/api';
+import { WorkflowRunViewer } from '../components/workflow/WorkflowRunViewer';
 
 // Droppable React Flow wrapper
 const DroppableReactFlow: React.FC<{
@@ -175,6 +176,19 @@ const WorkflowBuilder: React.FC = () => {
   
   const { getNodeComponent } = useNodeRegistry();
 
+  const strictWorkflow = useMemo(() => {
+    if (!currentWorkflow) return null;
+    const entry = (currentWorkflow as any).entry || (currentWorkflow.nodes?.[0]?.id ?? null);
+    const nodes = (currentWorkflow.nodes || []).map((n: any) => ({
+      ...n,
+      reads: Array.isArray((n as any).reads) ? (n as any).reads : [],
+      writes: Array.isArray((n as any).writes) ? (n as any).writes : [],
+      version: (n as any).version || 'v1',
+    }));
+    const edges = (currentWorkflow.edges || []).map((e: any) => ({ id: e.id, source: e.source, target: e.target, type: (e as any).type || 'default', label: (e as any).label || '' }));
+    const conditions = Array.isArray((currentWorkflow as any).conditions) ? (currentWorkflow as any).conditions : [];
+    return { ...currentWorkflow, entry, nodes, edges, conditions };
+  }, [currentWorkflow]);
   // Load workflow data from API when editing an existing workflow
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);

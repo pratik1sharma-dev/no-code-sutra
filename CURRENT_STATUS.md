@@ -217,6 +217,13 @@ The Instagram integration is **fully functional** and ready for production use. 
 - **Effort**: High (5-7 days)
 - **ROI**: Medium (competitive advantage)
 
+### **Option 5: LangGraph-Native Execution & Data Contracts (RFC Adoption)**
+- **Focus**: Replace custom topological executor with LangGraph edges/conditions; add durable checkpointing (Redis/Postgres); enforce typed node I/O contracts with validation/normalization; enable event streaming
+- **Impact**: Higher reliability, resumability, and parallel/branching support; fewer schema-related failures; better observability
+- **Effort**: Medium-High (4-6 days)
+- **ROI**: High (robustness, scalability, developer velocity)
+- **Dependencies**: Redis/Postgres for checkpoints, minor UI updates for live step logs, incremental node schema updates
+
 ---
 
 ## 📈 **SUCCESS METRICS**
@@ -265,3 +272,11 @@ The current system is **production-ready** with:
 - ✅ Testing coverage
 
 **The Instagram integration is ready to generate and post professional content at scale!** 🎉
+
+
+Concerns
+1. Cant we use tooling where each node is registered as tool by the llm model. LLM will tell the execution order as per its understanding around in what order it will prefer executing
+
+2. Each node will also have properties that can be changed by user 
+2. Once, send LLM will execute it...llm will understand results and may also tweak or reattempt in another way...
+3. Whatever way it chooses, in the end we can have human in the loop approval to reconfirm 

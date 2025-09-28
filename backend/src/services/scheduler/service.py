@@ -51,7 +51,7 @@ class WorkflowSchedulerService:
             config = ScheduleConfig(
                 cron_expression=cron_expression,
                 timezone=timezone,
-                user_metadata=metadata
+                metadata=metadata
             )
             
             # Schedule with backend
@@ -126,7 +126,7 @@ class WorkflowSchedulerService:
                 workflow_id=workflow_id,
                 user_id=user_id,
                 run_at=run_at,
-                user_metadata=metadata
+                metadata=metadata
             )
             
             if not result.success:

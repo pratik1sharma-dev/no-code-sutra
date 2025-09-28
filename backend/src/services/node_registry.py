@@ -48,7 +48,7 @@ class NodeRegistry:
             color='primary',
             required_inputs=['task', 'prompt'],
             optional_inputs=['model', 'temperature', 'max_tokens'],
-            output_schema={'type': 'object', 'properties': {'dynamic': {'type': 'any'}}}
+            output_schema={'type': 'object', 'properties': {'structured_data': {'type': 'object'}}} # The AI-generated content
         )
         
         # Social Media Nodes
@@ -264,12 +264,13 @@ class NodeRegistry:
             ],
             output_schema={'type': 'object', 'properties': {
                 'image_url': {'type': 'string'},
+                'image_data_url': {'type': 'string'},
+                'carousel_images': {'type': 'array'},
                 'template_used': {'type': 'string'},
-                'template_engine': {'type': 'string'},
-                'available_templates': {'type': 'array'},
-                'canva_design_id': {'type': 'string'},
-                'canva_design_url': {'type': 'string'},
-                'canva_template_used': {'type': 'boolean'}
+                'platform_used': {'type': 'string'},
+                'post_type': {'type': 'string'},
+                'status': {'type': 'string'},
+                'timestamp': {'type': 'string'}
             }}
         )
         

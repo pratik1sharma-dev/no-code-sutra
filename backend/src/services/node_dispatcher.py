@@ -14,6 +14,7 @@ from .nodes import seo_optimizer as seo_exec
 from .nodes import text_overlay as text_overlay_exec
 from .nodes import image_upload as image_upload_exec
 from .nodes import canva_template as canva_template_exec
+from .nodes import approval as approval_exec
 
 
 class NodeDispatcher:
@@ -36,6 +37,7 @@ class NodeDispatcher:
             "imageUpload": image_upload_exec.execute,
             "seoOptimizer": seo_exec.execute,
             "canvaTemplate": canva_template_exec.execute,
+            "approval": approval_exec.execute,
         }
 
     def get_executor(self, node_type: str) -> Callable:

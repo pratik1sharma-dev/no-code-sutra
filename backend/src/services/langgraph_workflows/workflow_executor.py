@@ -1,7 +1,18 @@
 from typing import Dict, Any, List, Optional
+import os
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
+try:
+    # Prefer a durable SQL-based checkpointer when configured
+    from langgraph.checkpoint.sqlite import SqliteSaver  # type: ignore
+except Exception:  # pragma: no cover
+    SqliteSaver = None  # type: ignore
+try:
+    # Optional Postgres checkpointer (if available in installed langgraph version)
+    from langgraph.checkpoint.postgres import PostgresSaver  # type: ignore
+except Exception:  # pragma: no cover
+    PostgresSaver = None  # type: ignore
 import json
 from datetime import datetime
 import uuid
@@ -22,11 +33,38 @@ logger = logging.getLogger(__name__)
 class LangGraphWorkflowExecutor:
     def __init__(self):
         self.dispatcher = NodeDispatcher()
-        self.memory = MemorySaver()
+        # Choose checkpointer: durable sqlite if configured, else in-memory
+        checkpoint_backend = os.getenv('CHECKPOINT_BACKEND', 'memory').lower()
+        if checkpoint_backend == 'postgres' and PostgresSaver is not None:
+            pg_url = os.getenv('CHECKPOINT_POSTGRES_URL') or os.getenv('DATABASE_URL')
+            if not pg_url:
+                print("LangGraph postgres checkpointer requested but no URL provided; falling back to memory")
+                self.memory = MemorySaver()
+            else:
+                try:
+                    self.memory = PostgresSaver(pg_url)  # type: ignore
+                    print("LangGraph checkpointer: postgres")
+                except Exception as e:
+                    print(f"LangGraph postgres checkpointer init failed: {e}; falling back to memory")
+                    self.memory = MemorySaver()
+        elif checkpoint_backend == 'sqlite' and SqliteSaver is not None:
+            db_path = os.getenv('CHECKPOINT_SQLITE_PATH', '/workspace/.checkpoints/langgraph_checkpoints.sqlite')
+            # Ensure directory exists
+            try:
+                os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            except Exception:
+                pass
+            self.memory = SqliteSaver(db_path)
+            print(f"LangGraph checkpointer: sqlite at {db_path}")
+        else:
+            self.memory = MemorySaver()
+            if checkpoint_backend != 'memory':
+                print(f"LangGraph checkpointer fallback to memory (requested: {checkpoint_backend})")
     
     def resolve_data_reference(self, reference: str, state: Dict[str, Any]) -> Any:
         """Resolve data references like 'node2.post_data' or 'ai_agent_1.output'.
         - If format is 'nodeId.field', first try node_results[nodeId][field], then top-level state[field]
+        - If format is 'input.something', read from state['input_data']
         - If plain 'field', return state.get(field)
         """
         try:
@@ -35,7 +73,12 @@ class LangGraphWorkflowExecutor:
                 if len(parts) >= 2:
                     node_id_ref = parts[0]
                     field_path = parts[1:]
-                    
+                    # Special-case: input.* reads initial input_data
+                    if node_id_ref == 'input':
+                        input_data = state.get('input_data', {}) or {}
+                        if isinstance(input_data, dict):
+                            # only support single-segment access for input.*
+                            return input_data.get(field_path[0]) if field_path else None
                     # Try node-scoped result first
                     node_results = state.get('node_results', {}) or {}
                     if node_id_ref in node_results and isinstance(node_results[node_id_ref], dict):
@@ -97,6 +140,28 @@ class LangGraphWorkflowExecutor:
         })
         return merged_state
     
+    def _sanitize_for_json(self, value: Any) -> Any:
+        """Recursively sanitize values so they are JSON-serializable."""
+        try:
+            # Primitive types pass through
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                return value
+            # datetime -> ISO string
+            from datetime import datetime as _dt
+            if isinstance(value, _dt):
+                return value.isoformat()
+            # dict -> sanitize keys/values
+            if isinstance(value, dict):
+                return {str(k): self._sanitize_for_json(v) for k, v in value.items()}
+            # list/tuple -> sanitize items
+            if isinstance(value, (list, tuple)):
+                return [self._sanitize_for_json(v) for v in value]
+            # Fallback: string representation
+            return str(value)
+        except Exception:
+            return str(value)
+    
+    
     def _apply_edge_data_mappings(self, state: Dict[str, Any], edges: List[Dict[str, Any]], current_node_id: str) -> Dict[str, Any]:
         """Apply data_mapping from incoming edges to the current node's input state."""
         if not edges:
@@ -115,43 +180,173 @@ class LangGraphWorkflowExecutor:
         return updated
     
     def build_workflow(self, workflow_data: Dict[str, Any]) -> StateGraph:
-        """Build a LangGraph workflow from frontend workflow data"""
+        """Build and compile a LangGraph workflow from frontend workflow data.
+        - Wrap node executors to merge results back into state
+        - Require explicit `entry`
+        - Support optional `conditions` for conditional routing
+        - Preserve declared linear edges and END
+        """
         try:
-            workflow = StateGraph(Dict[str, Any])
-            nodes_data = workflow_data.get('nodes', [])
-            edges_data = workflow_data.get('edges', [])
-            node_functions: Dict[str, Any] = {}
+            builder = StateGraph(Dict[str, Any])
+            nodes_data = workflow_data.get('nodes', []) or []
+            edges_data = workflow_data.get('edges', []) or []
+            conditions_data = workflow_data.get('conditions', []) or []
+
+            # Enforce no-backcompat schema: require entry + reads/writes
+            entry_node = workflow_data.get('entry')
+            if not entry_node:
+                raise ValueError("Workflow must specify explicit 'entry' node id")
+            for node in nodes_data:
+                if 'reads' not in node or 'writes' not in node:
+                    raise ValueError(f"Node {node.get('id')} must include 'reads' and 'writes' lists")
+
+            # Precompute node configs and types
+            node_config_by_id: Dict[str, Dict[str, Any]] = {}
+            node_type_by_id: Dict[str, str] = {}
+            node_reads_by_id: Dict[str, List[str]] = {}
+            node_writes_by_id: Dict[str, List[str]] = {}
             for node in nodes_data:
                 node_id = node['id']
                 node_type = node['type']
-                # Map node types to functions via dispatcher (OCP)
-                node_functions[node_id] = self.dispatcher.get_executor(node_type)
-                workflow.add_node(node_id, node_functions[node_id])
-            # Add edges to the graph
+                node_type_by_id[node_id] = node_type
+                node_config_by_id[node_id] = (node.get('data', {}) or {}).get('config', {}) or {}
+                node_reads_by_id[node_id] = node.get('reads', []) or []
+                node_writes_by_id[node_id] = node.get('writes', []) or []
+
+            # Wrapper to adapt executors to LangGraph state updates
+            def make_node_wrapper(node_id: str):
+                node_type = node_type_by_id.get(node_id, 'unknown')
+                node_config = node_config_by_id.get(node_id, {})
+                reads = node_reads_by_id.get(node_id, [])
+                writes = node_writes_by_id.get(node_id, [])
+
+                def _wrapper(state: Dict[str, Any]) -> Dict[str, Any]:
+                    # Build node input view from declared reads
+                    node_input_state = state.copy()
+                    for read_key in reads:
+                        value = self.resolve_data_reference(str(read_key), state)
+                        if value is not None:
+                            # Assign to top-level by last segment name
+                            key_name = str(read_key).split('.')[-1]
+                            node_input_state[key_name] = value
+                    start_ts = datetime.now()
+                    # Execute the node
+                    # Basic tracing: mark start
+                    state['last_event'] = {
+                        'type': 'node_start',
+                        'node_id': node_id,
+                        'node_type': node_type,
+                        'timestamp': start_ts.isoformat()
+                    }
+                    node_result = self.execute_node(
+                        node_type=node_type,
+                        node_config=node_config,
+                        input_data=node_input_state,
+                        edges=edges_data,
+                        current_node_id=node_id
+                    )
+                    end_ts = datetime.now()
+                    duration_ms = int((end_ts - start_ts).total_seconds() * 1000)
+                    # Merge back into state for downstream nodes
+                    merged = self.merge_node_result(state, node_result, node_id)
+                    # Validate declared writes exist in merged state
+                    missing = []
+                    for w in writes:
+                        if w not in merged and (not merged.get('node_results', {}).get(node_id, {}).get(w)):
+                            missing.append(w)
+                    if missing:
+                        raise ValueError(f"Node {node_id} did not produce declared writes: {missing}")
+                    # Basic tracing: mark end
+                    merged['last_event'] = {
+                        'type': 'node_end',
+                        'node_id': node_id,
+                        'node_type': node_type,
+                        'timestamp': end_ts.isoformat(),
+                        'status': node_result.get('status'),
+                        'duration_ms': duration_ms,
+                        'error': node_result.get('error')
+                    }
+                    return merged
+
+                return _wrapper
+
+            # Add nodes
+            for node in nodes_data:
+                node_id = node['id']
+                builder.add_node(node_id, make_node_wrapper(node_id))
+
+            # Add linear edges
+            node_ids = {n['id'] for n in nodes_data}
             for edge in edges_data:
-                source = edge['source']
-                target = edge['target']
-                if source in node_functions and target in node_functions:
-                    workflow.add_edge(source, target)
+                source = edge.get('source')
+                target = edge.get('target')
+                if source in node_ids and target in node_ids:
+                    builder.add_edge(source, target)
+
+            # Add conditional edges (optional)
+            # Expected shape: {"source": "n1", "guards": [{"if": "content_type == 'image'", "target": "n2"}, ...]}
+            def _make_route_fn(guards: List[Dict[str, Any]]):
+                def _route(state: Dict[str, Any]) -> str:
+                    # Very simple evaluator: supports equality of dotted keys to string/numeric literals
+                    def _get_value(path: str):
+                        parts = path.split('.')
+                        val = state
+                        for p in parts:
+                            if isinstance(val, dict) and p in val:
+                                val = val[p]
+                            else:
+                                return None
+                        return val
+
+                    for g in guards:
+                        expr = (g.get('if') or '').strip()
+                        tgt = g.get('target')
+                        if not expr or not tgt:
+                            continue
+                        # Handle patterns like: key == 'value' or key == 123
+                        if '==' in expr:
+                            left, right = expr.split('==', 1)
+                            left = left.strip()
+                            right = right.strip().strip()  # keep quotes for now
+                            left_val = _get_value(left)
+                            # strip quotes if present
+                            if (right.startswith("'") and right.endswith("'")) or (right.startswith('"') and right.endswith('"')):
+                                right_val = right[1:-1]
+                            else:
+                                try:
+                                    right_val = json.loads(right)
+                                except Exception:
+                                    right_val = right
+                            if left_val == right_val:
+                                return tgt
+                    return '__end__'
+
+                return _route
+
+            for cond in conditions_data:
+                source = cond.get('source')
+                guards = cond.get('guards') or []
+                if not source or not isinstance(guards, list):
+                    continue
+                targets = {g.get('target') for g in guards if g.get('target')}
+                mapping: Dict[str, Any] = {t: t for t in targets if t}
+                mapping['__end__'] = END
+                builder.add_conditional_edges(source, _make_route_fn(guards), mapping)
+
             # Entry/exit points
+            builder.set_entry_point(entry_node)
+            # Always add END edge for safety from any node without outgoing edge
+            # Here we conservatively add END from the last declared node
             if nodes_data:
-                entry_node = nodes_data[0]['id']
-                workflow.set_entry_point(entry_node)
-            else:
-                workflow.add_node("start", lambda state: state)
-                workflow.set_entry_point("start")
-            if nodes_data:
-                exit_node = nodes_data[-1]['id']
-                workflow.add_edge(exit_node, END)
-            else:
-                workflow.add_edge("start", END)
-            return workflow.compile(checkpointer=self.memory)
+                builder.add_edge(nodes_data[-1]['id'], END)
+
+            return builder.compile(checkpointer=self.memory)
         except Exception as e:
             logger.error(f"Error building workflow: {e}", exc_info=True)
             return self._create_default_workflow()
     
     def execute_workflow(self, workflow_data: Dict[str, Any], input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a workflow using LangGraph"""
+        """Execute a workflow using a compiled LangGraph with wrapped nodes."""
         try:
             workflow_id = str(uuid.uuid4())
             logger.info(f"🚀 Starting workflow execution - ID: {workflow_id}, Name: {workflow_data.get('name', 'Unknown')}")
@@ -164,48 +359,15 @@ class LangGraphWorkflowExecutor:
                 'nodes_executed': [],
                 'node_results': {}
             }
-            current_state = initial_state.copy()
-            execution_order = self._get_execution_order(workflow_data['nodes'], workflow_data['edges'])
-            logger.info(f"📋 Execution order: {execution_order}")
-            for node_id in execution_order:
-                logger.info(f"🔄 Executing node: {node_id}")
-                node_data = next((node for node in workflow_data['nodes'] if node['id'] == node_id), None)
-                if not node_data:
-                    logger.warning(f"Node {node_id} not found in workflow")
-                    continue
-                current_state['current_node'] = node_id
-                current_state['node_config'] = node_data.get('data', {}).get('config', {})
-                # Apply data mappings from incoming edges to produce the node's input view
-                node_input_state = self._apply_edge_data_mappings(current_state, workflow_data.get('edges', []), node_id)
-                # Execute the node
-                node_result = self.execute_node(
-                    node_data['type'],
-                    node_data.get('data', {}).get('config', {}),
-                    node_input_state,
-                    workflow_data.get('edges', []),
-                    node_id
-                )
-                current_state = self.merge_node_result(current_state, node_result, node_id)
-                status = node_result.get('status', 'unknown')
-                if status == 'failed':
-                    logger.error(f"❌ Node {node_id} failed: {node_result.get('error', 'Unknown error')}")
-                else:
-                    logger.info(f"✅ Node {node_id} completed with status: {status}")
-                logger.info(f"📊 State keys after {node_id}: {list(current_state.keys())}")
-                if 'node_results' in current_state:
-                    logger.info(f"📋 Node results available: {list(current_state['node_results'].keys())}")
-            # Check if any nodes failed
-            failed_nodes = [node for node in current_state.get('nodes_executed', []) if node.get('status') == 'failed']
+            graph = self.build_workflow(workflow_data)
+            # Provide required configurable keys for checkpointer
+            checkpoint_ns = os.getenv('CHECKPOINT_NAMESPACE', 'workflows')
+            config = {"configurable": {"thread_id": workflow_id, "checkpoint_ns": checkpoint_ns}}
+            final_state = graph.invoke(initial_state, config=config)
+            # Determine failures from executed nodes
+            executed_nodes = final_state.get('nodes_executed', []) or []
+            failed_nodes = [n for n in executed_nodes if (n or {}).get('status') == 'failed']
             has_failures = len(failed_nodes) > 0
-            
-            if has_failures:
-                logger.warning(f"⚠️ Workflow {workflow_id} completed with {len(failed_nodes)} failed nodes")
-                for failed_node in failed_nodes:
-                    logger.error(f"Failed node details - ID: {failed_node.get('node_id')}, Error: {failed_node.get('result', {}).get('error', 'Unknown')}")
-            else:
-                logger.info(f"🎉 Workflow {workflow_id} completed successfully")
-            
-            # Create clean result without circular references
             result = {
                 'workflow_id': str(initial_state['workflow_id']),
                 'start_time': str(initial_state['start_time']),
@@ -215,12 +377,26 @@ class LangGraphWorkflowExecutor:
                 'execution_id': str(initial_state['workflow_id']),
                 'end_time': datetime.now().isoformat(),
                 'failed_nodes': self._sanitize_for_json(failed_nodes) if has_failures else [],
-                'error_details': [{'node_id': str(node.get('node_id', '')), 'error': str(node.get('result', {}).get('error', 'Unknown error'))} for node in failed_nodes] if has_failures else []
+                'error_details': [
+                    {
+                        'node_id': str(node.get('node_id', '')),
+                        'error': str((node.get('result') or {}).get('error', 'Unknown error'))
+                    }
+                    for node in failed_nodes
+                ] if has_failures else []
             }
-            essential_keys = ['result', 'output', 'content', 'status', 'timestamp', 'image_url', 'social_data', 'instagram_post']
+            essential_keys = ['result', 'output', 'content', 'status', 'timestamp', 'image_url', 'social_data', 'instagram_post', 'node_results', 'nodes_executed']
             for key in essential_keys:
-                if key in current_state:
-                    result[key] = self._sanitize_for_json(current_state[key])
+                if key in final_state:
+                    value = final_state[key]
+                    if isinstance(value, (str, int, float, bool, type(None))):
+                        result[key] = value
+                    elif isinstance(value, dict):
+                        result[key] = {k: (v if isinstance(v, (str, int, float, bool, type(None))) else str(v)) for k, v in value.items()}
+                    elif isinstance(value, list):
+                        result[key] = [(item if isinstance(item, (str, int, float, bool, type(None))) else str(item)) for item in value]
+                    else:
+                        result[key] = str(value)
             return result
         except Exception as e:
             logger.error(f"💥 Critical workflow execution error: {e}", exc_info=True)
@@ -375,20 +551,53 @@ class LangGraphWorkflowExecutor:
                     in_degree[node] -= 1
                     if in_degree[node] == 0:
                         queue.append(node)
-        return result
-    
-    def _sanitize_for_json(self, obj: Any, max_depth: int = 5, current_depth: int = 0) -> Any:
-        """Sanitize objects for JSON serialization, preventing circular references"""
-        if current_depth > max_depth:
-            return str(obj)
-        
-        if obj is None or isinstance(obj, (str, int, float, bool)):
-            return obj
-        elif isinstance(obj, datetime):
-            return obj.isoformat()
-        elif isinstance(obj, dict):
-            return {str(k): self._sanitize_for_json(v, max_depth, current_depth + 1) for k, v in obj.items()}
-        elif isinstance(obj, (list, tuple)):
-            return [self._sanitize_for_json(item, max_depth, current_depth + 1) for item in obj]
-        else:
-            return str(obj) 
+        return result 
+
+    def stream_execution(self, workflow_data: Dict[str, Any], input_data: Dict[str, Any]):
+        """Yield step events during workflow execution for SSE consumers."""
+        try:
+            initial_state = {
+                'workflow_id': str(uuid.uuid4()),
+                'start_time': datetime.now().isoformat(),
+                'input_data': input_data,
+                'workflow_name': workflow_data.get('name', 'Unknown'),
+                'nodes_executed': [],
+                'node_results': {}
+            }
+            graph = self.build_workflow(workflow_data)
+            # Provide required configurable keys for checkpointer
+            checkpoint_ns = os.getenv('CHECKPOINT_NAMESPACE', 'workflows')
+            config = {"configurable": {"thread_id": initial_state['workflow_id'], "checkpoint_ns": checkpoint_ns}}
+            try:
+                # Preferred: use LangGraph streaming API if available
+                for event in graph.stream(initial_state, config=config):  # type: ignore[attr-defined]
+                    # event is typically a (node_name, state) or dict depending on version
+                    try:
+                        import json as _json
+                        if isinstance(event, tuple) and len(event) == 2:
+                            node_name, state = event
+                            payload = {
+                                'type': 'node_event',
+                                'node': node_name,
+                                'timestamp': datetime.now().isoformat(),
+                                'state_keys': list(state.keys()) if isinstance(state, dict) else []
+                            }
+                            yield f"data: {_json.dumps(payload)}\n\n"
+                        elif isinstance(event, dict):
+                            yield f"data: { _json.dumps(event) }\n\n"
+                    except Exception:
+                        continue
+                # Final state after stream completes
+                final_state = graph.invoke(initial_state, config=config)
+                import json as _json
+                yield f"data: {_json.dumps({'type': 'completed', 'execution_id': final_state.get('workflow_id')})}\n\n"
+            except Exception:
+                # Fallback: no native stream support; emit coarse events
+                import time, json as _json
+                yield f"data: {_json.dumps({'type': 'start', 'ts': datetime.now().isoformat()})}\n\n"
+                # Execute non-streaming and emit summary
+                result = self.execute_workflow(workflow_data, input_data)
+                yield f"data: {_json.dumps({'type': 'completed', 'result': {'status': result.get('status'), 'execution_id': result.get('execution_id')}})}\n\n"
+        except Exception as e:
+            import json as _json
+            yield f"data: {_json.dumps({'type': 'error', 'error': str(e)})}\n\n" 

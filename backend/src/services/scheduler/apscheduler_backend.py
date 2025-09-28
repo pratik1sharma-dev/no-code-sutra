@@ -263,9 +263,6 @@ class APSchedulerBackend(SchedulerInterface):
             # Import here to avoid circular imports
             from services.langgraph_workflows.workflow_executor import LangGraphWorkflowExecutor
             
-            # Create workflow executor
-            executor = LangGraphWorkflowExecutor()
-            
             # Load workflow definition (you'll need to implement this)
             workflow_definition = await APSchedulerBackend._load_workflow_definition(workflow_id)
             
@@ -273,9 +270,10 @@ class APSchedulerBackend(SchedulerInterface):
                 raise Exception(f"Workflow {workflow_id} not found")
             
             # Execute the workflow
-            result = await executor.execute_workflow(
-                workflow_definition,
-                initial_state={'user_id': user_id, 'scheduled_execution': True}
+            executor = LangGraphWorkflowExecutor()
+            result = executor.execute_workflow(
+                workflow_data=workflow_definition,
+                input_data={'user_id': user_id, 'scheduled_execution': True}
             )
             
             completed_at = datetime.utcnow()
@@ -329,27 +327,55 @@ class APSchedulerBackend(SchedulerInterface):
     
     @staticmethod
     async def _load_workflow_definition(workflow_id: str) -> Optional[Dict[str, Any]]:
-        """Load workflow definition from database"""
-        # TODO: Implement workflow loading from your database
-        # This is a placeholder - you'll need to integrate with your workflow storage
-        return {
-            'id': workflow_id,
-            'nodes': [],
-            'edges': []
-        }
-    
+        """Load workflow definition from database (strict schema expected)."""
+        try:
+            from services.db import SessionLocal
+            from services.models import Workflow as WorkflowModel
+            db = SessionLocal()
+            wf = db.query(WorkflowModel).filter(WorkflowModel.id == workflow_id).first()
+            if not wf:
+                return None
+            return wf.data
+        except Exception:
+            return None
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
     @staticmethod
     async def _log_execution_result(result: ExecutionResult) -> None:
-        """Log execution result to database"""
-        # TODO: Implement execution logging to database
-        # This would store execution results for history and monitoring
-        logger.info(f"Execution logged", extra={
-            "execution_id": result.execution_id,
-            "workflow_id": result.workflow_id,
-            "user_id": result.user_id,
-            "status": "SUCCESS" if result.success else "FAILED",
-            "duration_ms": (result.completed_at - result.started_at).total_seconds() * 1000 if result.completed_at and result.started_at else None
-        })
+        """Log execution result to database for history and monitoring."""
+        try:
+            from services.db import SessionLocal
+            from services.scheduler.models import WorkflowExecution
+            db = SessionLocal()
+            exec_row = WorkflowExecution(
+                id=uuid.UUID(result.execution_id),
+                schedule_id=None,
+                workflow_id=uuid.UUID(result.workflow_id),
+                user_id=uuid.UUID(result.user_id),
+                execution_type='scheduled',
+                status='completed' if result.success else 'failed',
+                success=result.success,
+                started_at=result.started_at,
+                completed_at=result.completed_at,
+                duration_seconds=int((result.completed_at - result.started_at).total_seconds()) if result.completed_at else None,
+                error_message=result.error_message,
+                result_data=result.result_data,
+                backend_execution_id=None,
+                node_results_count=(len((result.result_data or {}).get('nodes_executed', [])) if isinstance((result.result_data or {}).get('nodes_executed'), list) else 0)
+            )
+            db.add(exec_row)
+            db.commit()
+        except Exception as e:
+            print(f"Failed to log execution: {e}")
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
     
     @property
     def backend_type(self) -> SchedulerBackend:

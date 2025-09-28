@@ -9,6 +9,7 @@ import os
 import math
 import random
 from abc import ABC, abstractmethod
+from ..contracts import TextOverlayInputV1, TextOverlayOutputV1
 
 # Import the new Instagram Template Engine
 try:
@@ -881,7 +882,7 @@ class SmartTextPlacement:
                     pixels[idx + width]   # bottom
                 ]
                 
-                # Count significant brightness differences
+                        # Count significant brightness differences
                 for neighbor in neighbors:
                     if abs(current - neighbor) > 30:  # Threshold for edge detection
                         edge_count += 1
@@ -985,7 +986,7 @@ class SmartTextPlacement:
             'shadow_intensity': shadow_intensity,
             'zone_coordinates': zone_data['coordinates']
         }
-    
+
     def get_optimal_text_area(self, zone_name: str, content_length: int) -> Tuple[int, int, int, int]:
         """Get optimal text area within the selected zone"""
         
@@ -1008,59 +1009,94 @@ class SmartTextPlacement:
 
 
 def execute(state: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        # Get the structured data from AI agent or any other source
-        overlay_text = state.get('structured_data') or state.get('overlay_text') or state.get('result') or state.get('output')
-        print(f"Text overlay node processing - overlay_text: {overlay_text} type: {type(overlay_text)}")
+    """Intelligent text overlay that adapts based on image generation mode"""
+    
+    # Check if overlay should be skipped
+    if state.get('skip_overlay', False):
+        print("⏭️ Skipping text overlay - image already complete")
+        return state
+    
+    # Check if image already has text (AI-generated complete images)
+    if state.get('has_text', False):
+        print("📝 Image already has text - enhancing existing overlay")
+        return enhance_existing_text_overlay(state)
+    
+    # Standard text overlay process
+    print("🎨 Applying standard text overlay")
+    return apply_standard_text_overlay(state)
 
-        # Get platform and post type
-        platform = state.get('platform', 'instagram')
-        post_type = state.get('post_type', 'single')  # NEW: Get post type
+def enhance_existing_text_overlay(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Enhance images that already have text (AI-generated)"""
+    try:
+        # For now, just pass through - future enhancement could adjust colors, fonts, etc.
+        print("✅ Text overlay enhancement completed (pass-through)")
+        return state
+    except Exception as e:
+        print(f"❌ Error enhancing text overlay: {e}")
+        return state
+
+def apply_standard_text_overlay(state: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        # Validate input using the contract
+        validated_input = TextOverlayInputV1(**state)
+        overlay_text = validated_input.structured_data
         
-        # Check template preferences
-        canva_template_id = state.get('canva_template_id', 'EAGFcgTrfLo')  # Default template ID
-        use_canva_template = state.get('use_canva_template', False)  # Default to False now
-        use_instagram_template = state.get('use_instagram_template', True)  # NEW: Default to True
-        instagram_template_name = state.get('instagram_template_name')  # NEW: Specific template
+        # DEBUG: Show exactly what text we're going to overlay
+        print(f"🔍 TEXT OVERLAY DEBUG - Raw overlay_text: {overlay_text}")
+        print(f"🔍 TEXT OVERLAY DEBUG - Type: {type(overlay_text)}")
+        
+        if isinstance(overlay_text, dict):
+            print(f"🔍 TEXT OVERLAY DEBUG - Dict keys: {list(overlay_text.keys())}")
+            for key, value in overlay_text.items():
+                if isinstance(value, str):
+                    print(f"🔍 TEXT OVERLAY DEBUG - {key}: '{value}' (length: {len(value)})")
+                elif isinstance(value, list):
+                    print(f"🔍 TEXT OVERLAY DEBUG - {key}: {len(value)} items")
+                    for i, item in enumerate(value[:3]):  # Show first 3 items
+                        print(f"🔍 TEXT OVERLAY DEBUG -   [{i}]: '{item}' (length: {len(str(item))})")
+                else:
+                    print(f"🔍 TEXT OVERLAY DEBUG - {key}: {type(value)} = {value}")
+        else:
+            print(f"🔍 TEXT OVERLAY DEBUG - String content: '{overlay_text}' (length: {len(str(overlay_text))})")
         
         # NEW: Priority order - Instagram Templates > Canva > Smart Placement
-        if TEMPLATES_AVAILABLE and use_instagram_template:
-            print(f"🎨 Using Instagram Template Engine (template: {instagram_template_name or 'auto-select'})")
-            return generate_instagram_template_overlay(state, overlay_text, platform, post_type)
-        elif canva_template_id and use_canva_template:
-            print(f"🎨 Using Canva template: {canva_template_id}")
-            return generate_canva_template_overlay(state, overlay_text, platform, post_type)
+        if TEMPLATES_AVAILABLE and validated_input.use_instagram_template:
+            print(f"🎨 Using Instagram Template Engine (template: {validated_input.instagram_template_name or 'auto-select'})")
+            return generate_instagram_template_overlay(state, overlay_text, validated_input.platform, validated_input.post_type)
+        elif validated_input.canva_template_id and validated_input.use_canva_template:
+            print(f"🎨 Using Canva template: {validated_input.canva_template_id}")
+            return generate_canva_template_overlay(state, overlay_text, validated_input.platform, validated_input.post_type)
         
         # Auto-detect post type from content structure
         if isinstance(overlay_text, dict):
             if 'slides' in overlay_text and isinstance(overlay_text['slides'], list) and len(overlay_text['slides']) > 1:
-                post_type = 'carousel'
+                validated_input.post_type = 'carousel'
                 print(f"🎯 Auto-detected carousel post type from slides array ({len(overlay_text['slides'])} slides)")
             elif 'script' in overlay_text or 'key_points' in overlay_text:
-                post_type = 'video_reel'
+                validated_input.post_type = 'video_reel'
                 print(f"🎯 Auto-detected video_reel post type from content structure")
             elif 'call_to_action' in overlay_text:
-                post_type = 'story'
+                validated_input.post_type = 'story'
                 print(f"🎯 Auto-detected story post type from content structure")
         
-        print(f"Text overlay - Platform: {platform}, Post Type: {post_type}")
+        print(f"Text overlay - Platform: {validated_input.platform}, Post Type: {validated_input.post_type}")
 
         # Process structured data intelligently for any JSON structure
         if isinstance(overlay_text, dict):
-            content_converter = ContentStructureConverter(platform, post_type)
+            content_converter = ContentStructureConverter(validated_input.platform, validated_input.post_type)
             structured_content = content_converter.convert_to_platform_structure(overlay_text)
         else:
             structured_content = None
 
         # Route to appropriate rendering function based on post type
-        if post_type == 'carousel':
-            return generate_carousel_overlay(state, structured_content, platform)
-        elif post_type == 'video_reel':
-            return generate_video_reel_overlay(state, structured_content, platform)
-        elif post_type == 'story':
-            return generate_story_overlay(state, structured_content, platform)
+        if validated_input.post_type == 'carousel':
+            return generate_carousel_overlay(state, structured_content, validated_input.platform)
+        elif validated_input.post_type == 'video_reel':
+            return generate_video_reel_overlay(state, structured_content, validated_input.platform)
+        elif validated_input.post_type == 'story':
+            return generate_story_overlay(state, structured_content, validated_input.platform)
         else:
-            return generate_single_overlay(state, structured_content, platform, post_type)
+            return generate_single_overlay(state, structured_content, validated_input.platform, validated_input.post_type)
             
     except Exception as e:
         print(f"Error in text overlay node: {e}")
@@ -1098,16 +1134,15 @@ def generate_single_overlay(state: Dict[str, Any], structured_content: Dict[str,
         image_data = buffer.getvalue()
         image_data_url = f"data:image/png;base64,{base64.b64encode(image_data).decode()}"
         
-        # Update state with results
-        state['image_url'] = image_data_url
-        state['image_data_url'] = image_data_url
-        state['overlay_text_used'] = str(structured_content) if structured_content else 'No content'
-        state['platform_used'] = platform
-        state['post_type'] = post_type
-        state['status'] = 'completed'
-        state['timestamp'] = datetime.now().isoformat()
-        state['smart_placement_used'] = True
-        return state
+        # Structure the output using the contract
+        output = TextOverlayOutputV1(
+            image_url=image_data_url,
+            image_data_url=image_data_url,
+            platform_used=platform,
+            post_type=post_type,
+            timestamp=datetime.now().isoformat()
+        )
+        return output.dict()
         
     except Exception as e:
         print(f"Error in single overlay generation: {e}")
@@ -1149,13 +1184,14 @@ def generate_carousel_overlay(state: Dict[str, Any], structured_content: Dict[st
         print(f"🎯 Carousel generation summary:")
         print(f"🎯 Total slides generated: {len(generated_slides)}")
         
-        return {
-            'status': 'completed',
-            'carousel_images': generated_slides,
-            'post_type': 'carousel',
-            'slide_count': len(generated_slides),
-            'timestamp': datetime.now().isoformat()
-        }
+        # Structure the output using the contract
+        output = TextOverlayOutputV1(
+            carousel_images=generated_slides,
+            platform_used=platform,
+            post_type='carousel',
+            timestamp=datetime.now().isoformat()
+        )
+        return output.dict()
         
     except Exception as e:
         print(f"❌ Error in carousel overlay generation: {e}")
@@ -1527,7 +1563,7 @@ def _render_text_with_smart_styling(draw: ImageDraw.Draw, content: Any, content_
     
     if content_type == 'bullets' and isinstance(content, list):
         for i, bullet in enumerate(content[:3]):
-            bullet_text = f"• {bullet}"
+            bullet_text = f"- {bullet}"
             bullet_y = text_y + (i * 40)
             
             # Draw shadow first
@@ -1664,22 +1700,16 @@ def generate_instagram_template_overlay(state: Dict[str, Any], overlay_text: Dic
         )
         
         if result['success']:
-            # Update state with results
-            state.update({
-                'image_url': result['image_data_url'],
-                'image_data_url': result['image_data_url'],
-                'template_used': result['template_used'],
-                'template_engine': 'instagram_templates',
-                'available_templates': result['available_templates'],
-                'overlay_text_used': str(content),
-                'platform_used': platform,
-                'post_type': post_type,
-                'status': 'completed',
-                'timestamp': datetime.now().isoformat()
-            })
-            
-            print(f"✅ Instagram template overlay completed using template: {result['template_used']}")
-            return state
+            # Structure the output using the contract
+            output = TextOverlayOutputV1(
+                image_url=result.get('image_url', ''),
+                image_data_url=result.get('image_data_url', ''),
+                template_used=result.get('template_name', 'unknown'),
+                platform_used=platform,
+                post_type=post_type,
+                timestamp=datetime.now().isoformat()
+            )
+            return output.dict()
         else:
             raise Exception(f"Template generation failed: {result.get('error', 'Unknown error')}")
             
@@ -1767,19 +1797,22 @@ def generate_canva_template_overlay(state: Dict[str, Any], overlay_text: Dict[st
         
         print(f"🎨 Canva design exported successfully")
         
-        # Update state with results
-        state['image_url'] = data_url
-        state['image_data_url'] = data_url
-        state['canva_design_id'] = design_id
-        state['canva_design_url'] = design_url
-        state['overlay_text_used'] = str(content)
-        state['platform_used'] = platform
-        state['post_type'] = post_type
-        state['canva_template_used'] = True
-        state['status'] = 'completed'
-        state['timestamp'] = datetime.now().isoformat()
-        
-        return state
+        # Structure the output using the contract
+        output = TextOverlayOutputV1(
+            image_url=data_url,
+            image_data_url=data_url,
+            template_used=f"canva_{design_id}",
+            platform_used=platform,
+            post_type=post_type,
+            timestamp=datetime.now().isoformat()
+        )
+
+        # Combine contract-validated data with Canva-specific outputs
+        final_output = output.dict()
+        final_output['canva_design_id'] = design_id
+        final_output['canva_design_url'] = design_url
+
+        return final_output
         
     except Exception as e:
         print(f"❌ Error in Canva template overlay: {e}")

@@ -11,6 +11,19 @@ import type {
   ExecutionStep
 } from '../types/workflow';
 
+function strictifyWorkflow(workflow: any) {
+  const entry = workflow.entry || (workflow.nodes?.[0]?.id ?? null);
+  const nodes = (workflow.nodes || []).map((n: any) => ({
+    ...n,
+    reads: Array.isArray(n.reads) ? n.reads : [],
+    writes: Array.isArray(n.writes) ? n.writes : [],
+    version: n.version || 'v1',
+  }));
+  const edges = (workflow.edges || []).map((e: any) => ({ id: e.id, source: e.source, target: e.target, type: e.type || 'default', label: e.label || '' }));
+  const conditions = Array.isArray(workflow.conditions) ? workflow.conditions : [];
+  return { ...workflow, entry, nodes, edges, conditions };
+}
+
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   // Initial state
   currentWorkflow: null,
@@ -138,7 +151,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const { currentWorkflow } = get();
     if (!currentWorkflow) return { success: false };
     try {
-      const res = await apiService.saveWorkflow(currentWorkflow);
+      const strictWf = strictifyWorkflow(currentWorkflow);
+      const res = await apiService.saveWorkflow(strictWf);
       return res;
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : 'Failed to save' } as any;
@@ -168,11 +182,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
     try {
       // Ensure workflow is saved before execution
-      await apiService.saveWorkflow(currentWorkflow);
+      const strictWf = strictifyWorkflow(currentWorkflow);
+      await apiService.saveWorkflow(strictWf);
 
       // Execute workflow using LangGraph
       const result = await apiService.executeWorkflow({
-        workflow: currentWorkflow,
+        workflow: strictWf,
         input_data: {},
         user_id: 'demo-user'
       });
