@@ -286,25 +286,28 @@ Max 220 characters."""
             character_name = content.get('character_name', first_slide.get('subhead', 'Character'))
             character_description = content.get('character_description', f"Professional person, {character_name}")
             
-            # Generate base seed for consistency - use just the character name/description for same base
-            character_seed = hash(character_name + character_description) % 1000000
+            # Generate base seed for consistency from stable character attributes
+            base_seed_str = f"{content.get('character_name', '')}{content.get('character_description', '')}"
+            character_seed = hash(base_seed_str) % 2147483647 # Use a large prime for better distribution
             
             for i, slide in enumerate(slides):
                 story_line = slide.get('story_line', slide.get('headline', ''))
-                expression = slide.get('expression', 'confident')
+                expression = slide.get('expression', 'neutral') # Default to neutral for consistency
                 
-                # Build character-specific prompt for this slide - include expression info for variation
-                # Add content that helps maintain consistency across slides
-                character_prompt = self._build_character_prompt(character_description, expression, story_line, {
-                    **content, 
-                    'slide_index': i,
-                    'total_slides': len(slides),
-                    'character_consistency_hint': 'Maintain consistent character identity across all slides while showing different expressions'
-                })
+                # Build a more detailed and consistent character prompt
+                character_prompt = self._build_character_prompt(
+                    character_description,
+                    expression,
+                    story_line,
+                    content,
+                    slide_index=i,
+                    total_slides=len(slides)
+                )
                 
-                # Use the same base seed for consistency, but the expression in the prompt provides variation
-                # This ensures the same character appears across slides with different expressions
-                image_url = self._generate_character_image(character_prompt, character_seed)
+                # Use a consistent seed for the character but allow slight variations per slide
+                # This helps maintain identity while allowing for different expressions or poses
+                slide_seed = character_seed + i
+                image_url = self._generate_character_image(character_prompt, slide_seed)
                 
                 if image_url:
                     character_images.append({
@@ -334,52 +337,62 @@ Max 220 characters."""
             return self.generate_image_by_mode("ai_generate", "", content)
     
     
-    def _build_character_prompt(self, character_desc: str, expression: str, story_context: str, content: Dict[str, Any]) -> str:
-        """Build a character-specific prompt for Titan"""
-        try:
-            # Create detailed character prompt with strict space constraints
-            character_prompt = f"""Professional portrait of {character_desc}, {expression} expression, {story_context}. 
-            Composition: Character occupies ONLY LEFT 30% of frame, leaving RIGHT 70% completely empty for text overlay.
-            Background is clean studio with soft gradients, high quality, realistic photography style, Instagram-ready (1080x1080), no text, no watermarks.
-            Character should be clearly separated from right side where story text will be placed.
-            Style: cinematic, professional, with soft lighting, character positioned to leave maximum empty space for overlay text.
-            Model: Generated with {os.getenv('IMAGE_MODEL_NAME', 'Advanced Model')} for superior character consistency and positioning control."""
-            
-            # Use LLM to optimize if available with character consistency instructions
-            if self.llm_client:
-                optimization_prompt = f"""Create an optimized Titan Image Generator prompt for a consistent character headshot.
+def _build_character_prompt(self, character_desc: str, expression: str, story_context: str,
+                                content: Dict[str, Any], slide_index: int, total_slides: int) -> str:
+        """Build a more detailed and consistent character prompt for image generation."""
 
-Character: {character_desc}
-Expression: {expression}
-Story Context: {story_context}
-Content: {json.dumps(content, indent=2)}
+        # Define core character attributes for consistency
+        character_style = content.get('character_style', 'photorealistic')
+        character_clothing = content.get('character_clothing', 'business casual')
+        character_camera = content.get('camera_angle', 'eye-level')
 
-Requirements:
-- Professional portrait style, consistent character appearance
-- {expression} facial expression  
-- Composition: Character occupies ONLY LEFT 30% of frame, leaving RIGHT 70% completely empty for text overlay
-- Background is clean studio with soft gradients
-- High quality, realistic
-- Instagram-ready (1080x1080)
-- No text, no watermarks
-- Character should maintain consistent identity across multiple slides
-- Character should be clearly separated from right side where story text will be placed
-- Style: cinematic, professional, with soft lighting
-- Model: Optimized for {os.getenv('IMAGE_MODEL_NAME', 'Advanced Model')} capabilities
+        # Base prompt with strong consistency elements
+        prompt = (
+            f"masterpiece, best quality, {character_style} portrait of a character, {character_desc}, "
+            f"wearing {character_clothing}. Expression: {expression}. "
+            f"Camera: {character_camera}, close-up shot. "
+            f"Background: clean, minimalist studio with soft, neutral tones. "
+            f"Lighting: cinematic, soft light. "
+            f"Composition: character is on the left, leaving ample empty space on the right for text. "
+            f"Consistency identifier: Char_ID_{hash(content.get('character_name', '')) % 1000}. "
+            f"Slide {slide_index + 1} of {total_slides}. "
+            f"Context: {story_context}."
+        )
 
-Generate a concise prompt (max 150 characters):"""
+        # Add negative prompts to avoid common issues
+        negative_prompt = (
+            "text, watermark, logo, blurry, distorted, bad anatomy, disfigured, extra limbs, "
+            "poorly drawn face, mutation, ugly, tiling, out of frame, signature, "
+            "two people, multiple characters, inconsistent clothing, different person."
+        )
 
-                response = self.llm_client.generate(optimization_prompt)
-                optimized = response.strip()
-                if len(optimized) <= 150:
-                    return optimized
-            
-            # Fallback to basic prompt
-            return character_prompt[:TITAN_MAX_PROMPT_LEN]
-            
-        except Exception as e:
-            LOG.warning("Character prompt optimization failed: %s", e)
-            return f"Professional headshot of {character_desc}, {expression} expression, clean background, high quality"
+        # Combine and truncate to fit model limits
+        full_prompt = f"{prompt} --no {negative_prompt}"
+
+        # Ensure the prompt doesn't exceed the max length for the model
+        max_len = TITAN_MAX_PROMPT_LEN
+        if len(full_prompt) > max_len:
+            # Truncate the context part first if too long
+            context_len = len(story_context)
+            overflow = len(full_prompt) - max_len
+            if context_len > overflow:
+                story_context = story_context[:context_len - overflow - 3] + "..."
+                # Rebuild prompt with truncated context
+                prompt = (
+                    f"masterpiece, best quality, {character_style} portrait of a character, {character_desc}, "
+                    f"wearing {character_clothing}. Expression: {expression}. "
+                    f"Camera: {character_camera}, close-up shot. "
+                    f"Background: clean, minimalist studio with soft, neutral tones. "
+                    f"Lighting: cinematic, soft light. "
+                    f"Composition: character is on the left, leaving ample empty space on the right for text. "
+                    f"Consistency identifier: Char_ID_{hash(content.get('character_name', '')) % 1000}. "
+                    f"Slide {slide_index + 1} of {total_slides}. "
+                    f"Context: {story_context}."
+                )
+                full_prompt = f"{prompt} --no {negative_prompt}"
+
+        LOG.info("Built character prompt: %s", full_prompt)
+        return full_prompt[:max_len]
     
     def _generate_character_image(self, prompt: str, seed: int) -> Optional[str]:
         """Generate a character image with specific seed for consistency"""

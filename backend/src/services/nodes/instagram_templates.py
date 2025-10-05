@@ -621,73 +621,65 @@ class StoryTemplate(BaseTemplate):
         subhead = content.get('subhead', '')
         expression = content.get('expression', '')
         
-        # With 30%/70% constraint, text goes in RIGHT 70% of image
-        text_area_left = int(self.width * 0.3)  # Start from 30% (after character)
-        text_area_right = self.width
+        # Detect safe zone for text placement, avoiding character
+        safe_zones = self._detect_safe_text_zones(img)
+        text_area = safe_zones.get('largest_zone', (int(self.width * 0.4), 80, self.width - 80, self.height - 80))
+
+        # Unpack text area coordinates
+        text_area_left, text_area_top, text_area_right, text_area_bottom = text_area
         text_area_width = text_area_right - text_area_left
         
-        # Primary text placement - story content in right 70% area
+        # Primary text placement - story content
         if story_line:
-            story_font = self.get_font('regular', 38)
-            # Use the right 70% area for text with padding
-            max_text_width = text_area_width - 60  # Leave 30px padding on each side
+            story_font = self.get_font('regular', 40)
+            max_text_width = text_area_width - 40  # Padding
             lines = self._wrap_text(draw, story_line, story_font, max_text_width)
-            line_height = 44
+            line_height = 50
             
-            # Position story text in right area with vertical centering
             total_text_height = len(lines) * line_height
-            start_y = max(100, (self.height - total_text_height) // 2)  # Vertically center with top margin
+            start_y = text_area_top + (text_area_bottom - text_area_top - total_text_height) // 2
+            start_y = max(start_y, text_area_top + 20) # Ensure it's within bounds
             
-            # Draw each line of the story in right 70% area
             current_y = start_y
             for line in lines:
                 bbox = draw.textbbox((0, 0), line, font=story_font)
                 text_width = bbox[2] - bbox[0]
-                # Center text within right 70% area
                 x_position = text_area_left + (text_area_width - text_width) // 2
+
+                # Add subtle shadow for readability
+                draw.text((x_position + 2, current_y + 2), line, fill=(0, 0, 0, 150), font=story_font)
                 draw.text((x_position, current_y), line, fill=text_color[:3], font=story_font)
                 current_y += line_height
-        
-        # Headline in right 70% area at top
-        headline_y = 60  # Near top of right area
+
+        # Headline at top of safe zone
         if headline:
-            headline_font = self.get_font('bold', 42)
+            headline_font = self.get_font('bold', 48)
             bbox = draw.textbbox((0, 0), headline, font=headline_font)
             text_width = bbox[2] - bbox[0]
-            # Center in right 70% area
             x_position = text_area_left + (text_area_width - text_width) // 2
+            headline_y = text_area_top + 40
             draw.text((x_position, headline_y), headline, fill=text_color[:3], font=headline_font)
-        
-        # Subhead placement in right 70% area
-        subhead_y = headline_y + 60 if headline else headline_y + 30
-        if subhead and not story_line:  # Only if no story line to avoid duplication
-            subhead_font = self.get_font('regular', 34)
+
+        # Subhead below headline
+        if subhead and not story_line:
+            subhead_font = self.get_font('regular', 36)
             bbox = draw.textbbox((0, 0), subhead, font=subhead_font)
             text_width = bbox[2] - bbox[0]
-            # Center in right 70% area
             x_position = text_area_left + (text_area_width - text_width) // 2
+            subhead_y = text_area_top + 100
             draw.text((x_position, subhead_y), subhead, fill=text_color[:3], font=subhead_font)
-        elif subhead and story_line:
-            # If both story_line and subhead, place subhead after headline in right area
-            subhead_font = self.get_font('regular', 34)
-            bbox = draw.textbbox((0, 0), subhead, font=subhead_font)
-            text_width = bbox[2] - bbox[0]
-            # Center in right 70% area
-            x_position = text_area_left + (text_area_width - text_width) // 2
-            draw.text((x_position, subhead_y), subhead, fill=text_color[:3], font=subhead_font)
-        
-        # Expression in bottom right 70% area
+
+        # Expression at bottom of safe zone
         if expression:
-            expr_font = self.get_font('bold', 30)
-            expr_text = f"{expression.upper()}"
+            expr_font = self.get_font('bold', 32)
+            expr_text = f"~ {expression.strip().capitalize()} ~"
             bbox = draw.textbbox((0, 0), expr_text, font=expr_font)
             text_width = bbox[2] - bbox[0]
-            # Center in right 70% area at bottom
             x_position = text_area_left + (text_area_width - text_width) // 2
-            y_position = self.height - 100  # Near bottom
-            draw.text((x_position, y_position), expr_text, fill=accent_color[:3], font=expr_font)
+            expr_y = text_area_bottom - 80
+            draw.text((x_position, expr_y), expr_text, fill=accent_color[:3], font=expr_font)
         
-        return img
+        return img.convert('RGB')
     
     def _detect_safe_text_zones(self, image: Image.Image) -> Dict[str, Tuple[int, int, int, int]]:
         """
