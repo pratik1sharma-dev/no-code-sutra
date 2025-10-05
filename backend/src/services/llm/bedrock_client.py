@@ -48,14 +48,12 @@ class BedrockClient(LLMClient):
         # Add debugging
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"Bedrock request URL: {url}")
-        logger.info(f"Bedrock model: {self.model_id}")
-        logger.info(f"Bedrock region: {self.region}")
-        logger.info(f"System prompt length: {len(sys_prompt) if sys_prompt else 0}")
-        logger.info(f"User prompt length: {len(prompt)}")
-        logger.info(f"Total messages: {len(messages)}")
-        
+        logger.info(f"🚀 Bedrock request - URL: {url} | Model: {self.model_id} | Region: {self.region} | Sys prompt: {len(sys_prompt) if sys_prompt else 0} chars | User prompt: {len(prompt)} chars | Messages: {len(messages)}")
         try:
+            # Log full payload (size + preview) before sending
+            import json as _json
+            payload_str = _json.dumps(payload, ensure_ascii=False)
+            logger.info(f"📤 Bedrock request payload - Size: {len(payload_str)} chars | Body: {payload_str[:2000]}{'...' if len(payload_str) > 2000 else ''}")
             resp = requests.post(url, json=payload, headers=headers, timeout=timeout or 120.0)
             
             # Log response details for debugging
@@ -81,11 +79,14 @@ class BedrockClient(LLMClient):
                         raise RuntimeError(f"Bedrock API error: {error_body}")
             
             resp.raise_for_status()
+            
+            # Log successful response
+            logger.info(f"✅ Bedrock response - Status: {resp.status_code} | Body length: {len(resp.text)} chars | Response: {resp.text[:1000]}{'...' if len(resp.text) > 1000 else ''}")
+            
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {e}")
             raise RuntimeError(f"Failed to connect to Bedrock API: {e}")
         data = resp.json()
-        # Attempt common shapes
         if 'content' in data:
             return data['content'][0]['text']
         if 'message' in data:

@@ -5,6 +5,37 @@ import re
 import os
 import json
 import random
+import logging
+import base64
+from pathlib import Path
+
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not available, continue with system env vars
+
+
+LOG = logging.getLogger(__name__)
+
+
+# Constants - Model agnostic approach
+IMAGE_MODEL_INVOKE_URL = os.getenv('IMAGE_MODEL_INVOKE_URL', 'model/stability.stable-diffusion-xl-v1/invoke')  # Default to SDXL for better quality
+TITAN_MODEL_INVOKE_URL = "model/amazon.titan-image-generator-v1/invoke"
+MAX_PROMPT_LEN = int(os.getenv('IMAGE_MAX_PROMPT_LEN', '2048'))  # SDXL supports longer prompts
+TITAN_MAX_PROMPT_LEN = 512
+TITAN_NEGATIVE_PROMPT = "blurry, low quality, distorted, watermark, text overlay"
+NEGATIVE_PROMPT = os.getenv('IMAGE_NEGATIVE_PROMPT', 'blurry, low quality, distorted, watermark, text overlay, bad anatomy, disfigured')
+DEFAULT_STYLE = "modern"
+DEFAULT_IMG_SIZE = 1024
+TIMEOUT_SECS = 60
+
+AI_PROMPT_PREFIX = "Professional Instagram post image: "
+
+# Temp image storage
+TMP_IMAGE_DIR = Path(__file__).resolve().parents[3] / 'backend' / 'tmp_images'
+TMP_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class SmartImageGenerator:
@@ -32,7 +63,19 @@ class SmartImageGenerator:
     
     def detect_image_mode(self, prompt: str, content: Dict[str, Any]) -> str:
         """Detect the best image generation mode based on prompt and content"""
+        LOG.info("🔍 Detecting image mode - prompt: %s", prompt[:100] + "..." if len(prompt) > 100 else prompt)
+        LOG.info("🔍 Content keys: %s", list(content.keys()))
+        
+        # Check for character story content in slides format
+        slides = content.get('slides', [])
+        has_character_slides = any('story_line' in slide or 'expression' in slide for slide in slides)
+        
+        if has_character_slides:
+            LOG.info("🎭 Character story mode detected - has character slides: %s", has_character_slides)
+            return "character_story"
+        
         if not self.llm_client:
+            LOG.warning("⚠️ No LLM client available, defaulting to search")
             return "search"  # Default fallback
         
         try:
@@ -52,54 +95,62 @@ Respond with ONLY the mode name: search, curated, ai_generate, or hybrid"""
             response = self.llm_client.generate(analysis_prompt)
             mode = response.strip().lower()
             
+            LOG.debug("🤖 LLM response for mode detection: '%s'", mode)
+            
             if mode in ["search", "curated", "ai_generate", "hybrid"]:
-                print(f"🤖 AI selected mode: {mode}")
+                LOG.info("🤖 AI selected mode: %s, prompt: %s, content: %s", mode, prompt, content)
                 return mode
             else:
-                print(f"⚠️ Invalid mode '{mode}', defaulting to search")
+                LOG.warning("⚠️ Invalid mode '%s', defaulting to search", mode)
                 return "search"
                 
         except Exception as e:
-            print(f"❌ Mode detection failed: {e}")
+            LOG.error("❌ Mode detection failed: %s", e)
             return "search"
     
     def generate_ai_image(self, prompt: str, content: Dict[str, Any]) -> Optional[str]:
         """Generate AI image using AWS Bedrock Titan Image Generator"""
         if not self.aws_token:
-            print("⚠️ AWS Bedrock token not configured for AI image generation")
+            LOG.warning("AWS Bedrock token not configured for AI image generation")
             return None
         
         try:
             # Create optimized prompt for Titan Image Generator
-            if self.llm_client:
-                titan_prompt = self.create_titan_prompt(prompt, content)
-            else:
-                titan_prompt = f"Professional Instagram post image: {prompt}"
+            titan_prompt = self.create_titan_prompt(prompt, content)
             
-            print(f"🎨 Generating AI image with AWS Titan: {titan_prompt}")
+            LOG.info("Generating AI image with AWS Titan: %s", titan_prompt)
             
-            # Call AWS Bedrock Titan Image Generator (using v2 model)
-            url = f"https://bedrock-runtime.{self.aws_region}.amazonaws.com/model/amazon.titan-image-generator-v2:0/invoke"
+            # Call AWS Bedrock Image Generator (model-agnostic)
+            model_invoke_url = IMAGE_MODEL_INVOKE_URL  # Use configured model
+            url = f"https://bedrock-runtime.{self.aws_region}.amazonaws.com/{model_invoke_url}"
             
-            # Validate prompt length (Titan has limits)
-            if len(titan_prompt) > 512:
-                titan_prompt = titan_prompt[:509] + "..."
-                print(f"⚠️ Prompt truncated to 512 characters for Titan compatibility")
+            # Validate prompt length (model-specific limits)
+            model_max_len = MAX_PROMPT_LEN
+            if len(titan_prompt) > model_max_len:
+                titan_prompt = titan_prompt[:model_max_len - 3] + "..."
+                LOG.warning("Prompt truncated to %d characters for model compatibility", model_max_len)
             
             payload = {
                 "taskType": "TEXT_IMAGE",
                 "textToImageParams": {
                     "text": titan_prompt,
-                    "negativeText": "blurry, low quality, distorted, watermark, text overlay"
+                    "negativeText": NEGATIVE_PROMPT
                 },
                 "imageGenerationConfig": {
                     "numberOfImages": 1,
-                    "height": 1024,
-                    "width": 1024,
-                    "cfgScale": 8.0,
+                    "height": DEFAULT_IMG_SIZE,
+                    "width": DEFAULT_IMG_SIZE,
+                    "cfgScale": float(os.getenv('IMAGE_CFG_SCALE', '8.0')),
                     "seed": random.randint(0, 2147483647)
                 }
             }
+            
+            # Model-specific payload adjustments
+            model_name = os.getenv('IMAGE_MODEL_NAME', 'Unknown Model')
+            if 'stable diffusion' in model_name.lower() or 'sdxl' in model_name.lower():
+                # SDXL/SD 3.5 specific optimizations
+                payload["imageGenerationConfig"]["cfgScale"] = float(os.getenv('SD35_CFG_SCALE', '7.5'))  # SD 3.5 often works better with slightly higher CFG
+                payload["imageGenerationConfig"]["steps"] = int(os.getenv('SD35_STEPS', '60'))  # Add steps for better quality
             
             # Validate payload structure
             required_fields = ["taskType", "textToImageParams", "imageGenerationConfig"]
@@ -116,84 +167,283 @@ Respond with ONLY the mode name: search, curated, ai_generate, or hybrid"""
             }
             
             # Enhanced logging for debugging
-            print(f"🔍 BEDROCK DEBUG - URL: {url}")
-            print(f"🔍 BEDROCK DEBUG - Region: {self.aws_region}")
-            print(f"🔍 BEDROCK DEBUG - Token length: {len(self.aws_token) if self.aws_token else 0}")
-            print(f"🔍 BEDROCK DEBUG - Token prefix: {self.aws_token[:10] if self.aws_token else 'None'}...")
-            print(f"🔍 BEDROCK DEBUG - Payload: {json.dumps(payload, indent=2)}")
-            print(f"🔍 BEDROCK DEBUG - Headers: {json.dumps({k: v[:20] + '...' if k == 'Authorization' and len(v) > 20 else v for k, v in headers.items()}, indent=2)}")
+            LOG.debug("BEDROCK URL: %s", url)
+            LOG.debug("BEDROCK Region: %s", self.aws_region)
+            LOG.debug("BEDROCK Token length: %s", len(self.aws_token) if self.aws_token else 0)
+            LOG.debug("BEDROCK Payload: %s", json.dumps(payload, indent=2))
             
             response = requests.post(url, json=payload, headers=headers, timeout=60)
             
             # Log response details
-            print(f"🔍 BEDROCK DEBUG - Response status: {response.status_code}")
-            print(f"🔍 BEDROCK DEBUG - Response headers: {dict(response.headers)}")
+            LOG.debug("BEDROCK Response status: %s", response.status_code)
+            LOG.debug("BEDROCK Response headers: %s", dict(response.headers))
             
             if response.status_code != 200:
-                print(f"🔍 BEDROCK DEBUG - Error response body: {response.text}")
+                LOG.error("BEDROCK Error response body: %s", response.text)
                 response.raise_for_status()
             
             result = response.json()
-            print(f"🔍 BEDROCK DEBUG - Response keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+            LOG.debug("BEDROCK Response keys: %s", list(result.keys()) if isinstance(result, dict) else 'Not a dict')
             
             # Extract base64 image and convert to URL
             if 'images' in result and len(result['images']) > 0:
                 base64_image = result['images'][0]
                 # For now, return a placeholder URL - in production, upload to S3/Cloudinary
                 image_url = f"data:image/png;base64,{base64_image}"
-                print(f"✅ AWS Titan image generated successfully")
+                LOG.info("AWS Titan image generated successfully")
+
+                # Save a temporary copy locally for debugging/auditing
+                try:
+                    image_bytes = base64.b64decode(base64_image)
+                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
+                    filename = f"titan_{timestamp}.png"
+                    filepath = TMP_IMAGE_DIR / filename
+                    with open(filepath, 'wb') as f:
+                        f.write(image_bytes)
+                    LOG.info("Saved AI image to %s", str(filepath))
+                except Exception as save_err:
+                    LOG.warning("Failed to save temp AI image: %s", save_err)
                 return image_url
             else:
-                print(f"❌ No images returned from AWS Titan")
-                print(f"🔍 BEDROCK DEBUG - Full response: {json.dumps(result, indent=2)}")
+                LOG.warning("No images returned from AWS Titan")
+                LOG.debug("BEDROCK Full response: %s", json.dumps(result, indent=2))
                 return None
             
         except requests.exceptions.HTTPError as e:
-            print(f"❌ AWS Titan HTTP error: {e}")
+            LOG.error("AWS Titan HTTP error: %s", e)
             if hasattr(e, 'response') and e.response is not None:
-                print(f"🔍 BEDROCK DEBUG - HTTP Error response: {e.response.text}")
-                print(f"🔍 BEDROCK DEBUG - HTTP Error status: {e.response.status_code}")
+                LOG.error("BEDROCK HTTP Error response: %s", e.response.text)
+                LOG.error("BEDROCK HTTP Error status: %s", e.response.status_code)
         except requests.exceptions.RequestException as e:
-            print(f"❌ AWS Titan request error: {e}")
+            LOG.error("AWS Titan request error: %s", e)
         except json.JSONDecodeError as e:
-            print(f"❌ AWS Titan JSON decode error: {e}")
+            LOG.error("AWS Titan JSON decode error: %s", e)
         except Exception as e:
-            print(f"❌ AWS Titan image generation failed: {e}")
+            LOG.error("AWS Titan image generation failed: %s", e)
             import traceback
-            print(f"🔍 BEDROCK DEBUG - Full traceback: {traceback.format_exc()}")
+            LOG.debug("BEDROCK Full traceback: %s", traceback.format_exc())
         return None
     
     def create_titan_prompt(self, user_prompt: str, content: Dict[str, Any]) -> str:
         """Create optimized AWS Titan Image Generator prompt"""
         try:
+            # Use LLM to optimize prompt
             content_text = json.dumps(content, indent=2)
-            prompt_optimization = f"""Create an AWS Titan Image Generator prompt for a professional Instagram post image.
+            prompt_optimization = f"""Create an AWS Titan Image Generator prompt for a professional Instagram background image.
 
 User Request: "{user_prompt}"
 Content: {content_text}
 
-Requirements:
-- Professional, high-quality, Instagram-ready
-- Square aspect ratio (1:1)
-- Modern, clean aesthetic
-- Suitable for text overlay
-- Brand-safe and appropriate
-- No text or watermarks in the image
+CRITICAL REQUIREMENTS (follow strictly):
+- Square 1:1 composition for Instagram (1080x1080)
+- Professional, modern, clean, brand-safe
+- Visually depict the topic using concrete objects/scenes
+- No text, no watermarks, no logos, no faces unless explicitly mentioned
+- High contrast areas for future text overlay (empty space/negative space allowed)
 
-Generate a detailed Titan prompt (max 512 characters):"""
+Structure the prompt as:
+"Scene: <short scene>. Objects: <3-6 nouns>. Style: <style/modifiers>. Colors: <palette>. Mood: <mood>. Avoid: text, watermark, faces (unless requested)."
+
+Max 220 characters."""
 
             response = self.llm_client.generate(prompt_optimization)
             optimized_prompt = response.strip()
-            
-            # Ensure it's not too long for Titan
-            if len(optimized_prompt) > 512:
-                optimized_prompt = optimized_prompt[:509] + "..."
-            
+            if len(optimized_prompt) > 220:
+                optimized_prompt = optimized_prompt[:217] + "..."
             return optimized_prompt
             
         except Exception as e:
-            print(f"❌ Titan prompt optimization failed: {e}")
-            return f"Professional Instagram post background image: {user_prompt}"
+            LOG.warning("Titan prompt optimization failed: %s", e)
+            fallback = f"Scene: abstract modern background. Objects: {user_prompt}. Style: minimal, professional. Colors: cool neutrals. Avoid: text, watermarks, faces."
+            if len(fallback) > TITAN_MAX_PROMPT_LEN:
+                fallback = fallback[:TITAN_MAX_PROMPT_LEN - 3] + '...'
+            return fallback
+    
+    def generate_character_story(self, prompt: str, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate character-based story images from slides format"""
+        try:
+            # Only support slides format
+            slides = content.get('slides', [])
+            if not slides or not any('story_line' in slide or 'expression' in slide for slide in slides):
+                LOG.warning("No character slides found, falling back to AI generation")
+                return self.generate_image_by_mode("ai_generate", prompt, content)
+            
+            # Generate character slides
+            return self._generate_character_slides(slides, content)
+                
+        except Exception as e:
+            LOG.error("Character story generation failed: %s", e)
+            # Fallback to regular AI generation
+            return self.generate_image_by_mode("ai_generate", prompt, content)
+    
+    def _generate_character_slides(self, slides: List[Dict[str, Any]], content: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate character images from slides format"""
+        try:
+            character_images = []
+            
+            # Extract character info from first slide or content
+            first_slide = slides[0] if slides else {}
+            character_name = content.get('character_name', first_slide.get('subhead', 'Character'))
+            character_description = content.get('character_description', f"Professional person, {character_name}")
+            
+            # Generate base seed for consistency - use just the character name/description for same base
+            character_seed = hash(character_name + character_description) % 1000000
+            
+            for i, slide in enumerate(slides):
+                story_line = slide.get('story_line', slide.get('headline', ''))
+                expression = slide.get('expression', 'confident')
+                
+                # Build character-specific prompt for this slide - include expression info for variation
+                # Add content that helps maintain consistency across slides
+                character_prompt = self._build_character_prompt(character_description, expression, story_line, {
+                    **content, 
+                    'slide_index': i,
+                    'total_slides': len(slides),
+                    'character_consistency_hint': 'Maintain consistent character identity across all slides while showing different expressions'
+                })
+                
+                # Use the same base seed for consistency, but the expression in the prompt provides variation
+                # This ensures the same character appears across slides with different expressions
+                image_url = self._generate_character_image(character_prompt, character_seed)
+                
+                if image_url:
+                    character_images.append({
+                        'slide_index': i,
+                        'image_url': image_url,
+                        'expression': expression,
+                        'story_line': story_line,
+                        'character_name': character_name,
+                        'headline': slide.get('headline', ''),
+                        'subhead': slide.get('subhead', '')
+                    })
+            
+            LOG.info("🎭 Generated %d character slides", len(character_images))
+            
+            return {
+                'character_images': character_images,
+                'mode': 'character_story',
+                'source': 'ai_generated',
+                'has_text': False,
+                'skip_overlay': False,
+                'quality_score': 95
+            }
+            
+        except Exception as e:
+            LOG.error("Character slides generation failed: %s", e)
+            # Fallback to regular AI generation
+            return self.generate_image_by_mode("ai_generate", "", content)
+    
+    
+    def _build_character_prompt(self, character_desc: str, expression: str, story_context: str, content: Dict[str, Any]) -> str:
+        """Build a character-specific prompt for Titan"""
+        try:
+            # Create detailed character prompt with strict space constraints
+            character_prompt = f"""Professional portrait of {character_desc}, {expression} expression, {story_context}. 
+            Composition: Character occupies ONLY LEFT 30% of frame, leaving RIGHT 70% completely empty for text overlay.
+            Background is clean studio with soft gradients, high quality, realistic photography style, Instagram-ready (1080x1080), no text, no watermarks.
+            Character should be clearly separated from right side where story text will be placed.
+            Style: cinematic, professional, with soft lighting, character positioned to leave maximum empty space for overlay text.
+            Model: Generated with {os.getenv('IMAGE_MODEL_NAME', 'Advanced Model')} for superior character consistency and positioning control."""
+            
+            # Use LLM to optimize if available with character consistency instructions
+            if self.llm_client:
+                optimization_prompt = f"""Create an optimized Titan Image Generator prompt for a consistent character headshot.
+
+Character: {character_desc}
+Expression: {expression}
+Story Context: {story_context}
+Content: {json.dumps(content, indent=2)}
+
+Requirements:
+- Professional portrait style, consistent character appearance
+- {expression} facial expression  
+- Composition: Character occupies ONLY LEFT 30% of frame, leaving RIGHT 70% completely empty for text overlay
+- Background is clean studio with soft gradients
+- High quality, realistic
+- Instagram-ready (1080x1080)
+- No text, no watermarks
+- Character should maintain consistent identity across multiple slides
+- Character should be clearly separated from right side where story text will be placed
+- Style: cinematic, professional, with soft lighting
+- Model: Optimized for {os.getenv('IMAGE_MODEL_NAME', 'Advanced Model')} capabilities
+
+Generate a concise prompt (max 150 characters):"""
+
+                response = self.llm_client.generate(optimization_prompt)
+                optimized = response.strip()
+                if len(optimized) <= 150:
+                    return optimized
+            
+            # Fallback to basic prompt
+            return character_prompt[:TITAN_MAX_PROMPT_LEN]
+            
+        except Exception as e:
+            LOG.warning("Character prompt optimization failed: %s", e)
+            return f"Professional headshot of {character_desc}, {expression} expression, clean background, high quality"
+    
+    def _generate_character_image(self, prompt: str, seed: int) -> Optional[str]:
+        """Generate a character image with specific seed for consistency"""
+        try:
+            # Use the same Titan generation logic but with custom seed and configured model
+            model_invoke_url = IMAGE_MODEL_INVOKE_URL  # Use configured model
+            url = f"https://bedrock-runtime.{self.aws_region}.amazonaws.com/{model_invoke_url}"
+            
+            payload = {
+                "taskType": "TEXT_IMAGE",
+                "textToImageParams": {
+                    "text": prompt,
+                    "negativeText": NEGATIVE_PROMPT
+                },
+                "imageGenerationConfig": {
+                    "numberOfImages": 1,
+                    "height": DEFAULT_IMG_SIZE,
+                    "width": DEFAULT_IMG_SIZE,
+                    "cfgScale": float(os.getenv('IMAGE_CFG_SCALE', '8.0')),
+                    "seed": seed  # Use provided seed for consistency
+                }
+            }
+            
+            # Model-specific payload adjustments
+            model_name = os.getenv('IMAGE_MODEL_NAME', 'Unknown Model')
+            if 'stable diffusion' in model_name.lower() or 'sdxl' in model_name.lower():
+                # SDXL/SD 3.5 specific optimizations
+                payload["imageGenerationConfig"]["cfgScale"] = float(os.getenv('SD35_CFG_SCALE', '7.5'))
+                payload["imageGenerationConfig"]["steps"] = int(os.getenv('SD35_STEPS', '60'))
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.aws_token}"
+            }
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=TIMEOUT_SECS)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            if 'images' in result and len(result['images']) > 0:
+                base64_image = result['images'][0]
+                image_url = f"data:image/png;base64,{base64_image}"
+                
+                # Save temporary copy
+                try:
+                    image_bytes = base64.b64decode(base64_image)
+                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
+                    filename = f"character_{timestamp}.png"
+                    filepath = TMP_IMAGE_DIR / filename
+                    with open(filepath, 'wb') as f:
+                        f.write(image_bytes)
+                    LOG.info("Saved character image to %s", str(filepath))
+                except Exception as save_err:
+                    LOG.warning("Failed to save temp character image: %s", save_err)
+                
+                return image_url
+            else:
+                LOG.warning("No images returned from character generation")
+                return None
+                
+        except Exception as e:
+            LOG.error("Character image generation failed: %s", e)
+            return None
     
     def get_curated_images(self, content: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Get curated brand images from library"""
@@ -275,12 +525,19 @@ Generate a detailed Titan prompt (max 512 characters):"""
             keywords.extend([w for w in caption_words if len(w) > 3])
         
         # Remove duplicates and common words
-        common_words = {'the', 'and', 'for', 'with', 'this', 'that', 'will', 'can', 'are', 'you', 'your', 'from', 'have', 'they', 'been', 'their', 'what', 'when', 'where', 'which', 'there', 'here', 'some', 'very', 'just', 'only', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'among', 'within', 'without', 'against', 'toward', 'towards', 'upon', 'under', 'over', 'behind', 'beneath', 'beside', 'beyond', 'inside', 'outside', 'around', 'across', 'along', 'throughout', 'through', 'during', 'before', 'after', 'since', 'until', 'while', 'whereas', 'although', 'though', 'unless', 'except', 'besides', 'including', 'excluding', 'like', 'unlike', 'as', 'than', 'rather', 'quite', 'very', 'too', 'enough', 'so', 'such', 'more', 'most', 'less', 'least', 'fewer', 'fewest', 'many', 'much', 'several', 'some', 'any', 'all', 'every', 'each', 'either', 'neither', 'both', 'none', 'no', 'yes', 'maybe', 'perhaps', 'probably', 'definitely', 'certainly', 'surely', 'obviously', 'clearly', 'evidently', 'apparently', 'seemingly', 'supposedly', 'allegedly', 'reportedly', 'purportedly', 'ostensibly', 'nominally', 'formally', 'officially', 'legally', 'technically', 'theoretically', 'practically', 'virtually', 'essentially', 'basically', 'fundamentally', 'primarily', 'mainly', 'chiefly', 'principally', 'largely', 'mostly', 'generally', 'usually', 'typically', 'normally', 'ordinarily', 'commonly', 'frequently', 'often', 'sometimes', 'occasionally', 'rarely', 'seldom', 'hardly', 'scarcely', 'barely', 'almost', 'nearly', 'approximately', 'roughly', 'about', 'around', 'somewhere', 'anywhere', 'everywhere', 'nowhere', 'somehow', 'anyhow', 'anyway', 'regardless', 'nevertheless', 'nonetheless', 'however', 'nevertheless', 'still', 'yet', 'though', 'although', 'even', 'despite', 'in spite', 'except', 'but', 'however', 'nevertheless', 'nonetheless', 'still', 'yet', 'though', 'although', 'even', 'despite', 'in spite', 'except', 'but', 'however', 'nevertheless', 'nonetheless', 'still', 'yet', 'though', 'although', 'even', 'despite', 'in spite', 'except', 'but'}
+        common_words = {'the', 'and', 'for', 'with', 'this', 'that', 'will', 'can', 'are', 'you', 'your', 'from', 'have', 'they', 'been', 'their', 'what', 'when', 'where', 'which', 'there', 'here', 'some', 'very', 'just', 'only', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'among', 'within', 'without', 'against', 'toward', 'towards', 'upon', 'under', 'over', 'behind', 'beneath', 'beside', 'beyond', 'inside', 'outside', 'around', 'across', 'along', 'throughout', 'through', 'during', 'before', 'after', 'since', 'until', 'while', 'whereas', 'although', 'though', 'unless', 'except', 'besides', 'including', 'excluding', 'like', 'unlike', 'as', 'than', 'rather', 'quite', 'very', 'too', 'enough', 'so', 'such', 'more', 'most', 'less', 'least', 'fewer', 'fewest', 'many', 'much', 'several', 'some', 'any', 'all', 'every', 'each', 'either', 'neither', 'both', 'none', 'no', 'yes', 'maybe', 'perhaps', 'probably', 'definitely', 'certainly', 'surely', 'obviously', 'clearly', 'evidently', 'apparently', 'seemingly', 'supposedly', 'allegedly', 'reportedly', 'purportedly', 'ostensibly', 'nominally', 'formally', 'officially', 'legally', 'technically', 'theoretically', 'practically', 'virtually', 'essentially', 'basically', 'fundamentally', 'primarily', 'mainly', 'chiefly', 'principally', 'largely', 'mostly', 'generally', 'usually', 'typically', 'normally', 'ordinarily', 'commonly', 'frequently', 'often', 'sometimes', 'occasionally', 'rarely', 'seldom', 'hardly', 'scarcely', 'barely', 'almost', 'nearly', 'approximately', 'roughly', 'about', 'around', 'somewhere', 'anywhere', 'everywhere', 'nowhere', 'somehow', 'anyhow', 'anyway', 'regardless', 'nevertheless', 'nonetheless', 'however', 'nevertheless', 'still', 'yet', 'though', 'although', 'even', 'despite', 'in spite', 'except', 'but', 'however', 'nevertheless', 'nonetheless', 'still', 'yet', 'though', 'although', 'even', 'despite', 'in spite', 'except', 'but'}
         
         unique_keywords = list(set(keywords) - common_words)
         
+        # Prioritize AI/tech keywords if found
+        tech_keywords = ['ai', 'artificial', 'intelligence', 'machine', 'learning', 'neural', 'algorithm', 'tech', 'technology', 'digital', 'innovation', 'software', 'code', 'data', 'automation', 'robotics', 'computer', 'programming', 'development', 'trends', 'future', 'smart', 'advanced', 'cutting', 'edge']
+        ai_keywords = [kw for kw in unique_keywords if any(tech in kw.lower() for tech in tech_keywords)]
+        
+        # Combine AI keywords first, then others
+        prioritized_keywords = ai_keywords + [kw for kw in unique_keywords if kw not in ai_keywords]
+        
         # Return top 5 most relevant keywords
-        return unique_keywords[:5]
+        return prioritized_keywords[:5]
     
     def enhance_search_query_with_ai(self, content: Dict[str, Any]) -> str:
         """Use AI to generate optimized image search queries"""
@@ -528,10 +785,14 @@ Return ONLY the search query, nothing else."""
                     'image_url': image_url,
                     'source': 'ai_generated',
                     'mode': mode,
-                    'has_text': False,  # DALL-E generates background only by default
-                    'skip_overlay': False,
+                    'has_text': False,
+                    'skip_overlay': False,  # Enable overlay for AI images
                     'quality_score': 95
                 }
+        
+        elif mode == "character_story":
+            # Character-based story generation
+            return self.generate_character_story(prompt, content)
         
         elif mode == "curated":
             # Curated brand images
@@ -676,15 +937,45 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
         else:
             # Detect best mode for this content
             mode = smart_generator.detect_image_mode(prompt, content)
+            LOG.info(f"🤖 AI selected mode: {mode}, prompt: {prompt}, content: {content}")
             
             # Generate image using detected mode
-            result = smart_generator.generate_image_by_mode(mode, prompt, content)
-        
+            results = smart_generator.generate_image_by_mode(mode, prompt, content)
+            image_urls = []
+            for item in results.get('character_images', []):
+                if item.get('image_url'):
+                    image_urls.append(item.get('image_url'))
+            
+            # Prepare result with both single image_url and image_urls list
+            if image_urls:
+                # If we have character images, use the first one as primary but pass all as list
+                result = {
+                    'image_url': image_urls[0],  # Keep first image as primary
+                    'image_urls': image_urls,   # Pass all images as list
+                    'source': results.get('source', 'ai_generated'),
+                    'mode': mode,
+                    'has_text': results.get('has_text', False),
+                    'skip_overlay': results.get('skip_overlay', False),
+                    'quality_score': results.get('quality_score', 100)
+                }
+            else:
+                # If no character images, use the single image result
+                result = {
+                    'image_url': results.get('image_url'),
+                    'image_urls': [results.get('image_url')] if results.get('image_url') else [],  # Create list with single image or empty list
+                    'source': results.get('source', 'ai_generated'),
+                    'mode': mode,
+                    'has_text': results.get('has_text', False),
+                    'skip_overlay': results.get('skip_overlay', False),
+                    'quality_score': results.get('quality_score', 100)
+                }
+
         print(f"✅ Smart image generation completed - Mode: {result.get('mode', 'unknown')}, Source: {result.get('source', 'unknown')}")
 
         # Return enhanced state with mode information
         return {
             'image_url': result['image_url'],
+            'image_urls': result['image_urls'],
             'source': result['source'],
             'mode': result.get('mode', 'search'),
             'has_text': result.get('has_text', False),

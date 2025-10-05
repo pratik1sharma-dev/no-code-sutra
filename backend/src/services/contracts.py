@@ -2,6 +2,17 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 
+class SlideItem(BaseModel):
+    """Typed model for a single slide supporting both informational and character story fields."""
+    headline: str = ""
+    subhead: str = ""
+    # Informational carousel
+    bullets: List[str] = Field(default_factory=list)
+    # Character story carousel
+    story_line: str = ""
+    expression: str = ""
+
+
 class ContentV1(BaseModel):
     """Canonical content contract for Instagram/text-based content.
     Fields are optional with defaults to keep downstream robust.
@@ -15,6 +26,11 @@ class ContentV1(BaseModel):
     # Optional template hints
     recommended_template: Optional[str] = None
     template_reason: Optional[str] = None
+    # Optional character fields for character_story
+    character_name: Optional[str] = None
+    character_description: Optional[str] = None
+    # Optional slides for carousel/character_story
+    slides: Optional[List[SlideItem]] = None
 
 
 ALIASES: Dict[str, List[str]] = {
@@ -31,6 +47,7 @@ def normalize_to_content_v1(payload: Dict[str, Any]) -> Dict[str, Any]:
     - Applies alias mapping
     - Ensures bullets/hashtags are lists of strings
     - Coerces primitive values to strings
+    - Preserves validated character/slides fields when present
     """
     if not isinstance(payload, dict):
         return {
@@ -65,6 +82,31 @@ def normalize_to_content_v1(payload: Dict[str, Any]) -> Dict[str, Any]:
     for hint in ("recommended_template", "template_reason"):
         if hint in payload:
             normalized[hint] = payload.get(hint)
+
+    # Preserve character fields if present
+    if isinstance(payload.get("character_name"), str):
+        normalized["character_name"] = payload.get("character_name").strip()
+    if isinstance(payload.get("character_description"), str):
+        normalized["character_description"] = payload.get("character_description").strip()
+
+    # Preserve slides if present, coercing each item to SlideItem-friendly dict
+    raw_slides = payload.get("slides")
+    if isinstance(raw_slides, list) and raw_slides:
+        normalized_slides: List[Dict[str, Any]] = []
+        for item in raw_slides:
+            if not isinstance(item, dict):
+                continue
+            slide: Dict[str, Any] = {
+                "headline": str(item.get("headline", "")).strip(),
+                "subhead": str(item.get("subhead", "")).strip(),
+                # Coerce bullets list
+                "bullets": [str(v).strip() for v in item.get("bullets", [])] if isinstance(item.get("bullets"), list) else [],
+                "story_line": str(item.get("story_line", "")).strip(),
+                "expression": str(item.get("expression", "")).strip(),
+            }
+            normalized_slides.append(slide)
+        if normalized_slides:
+            normalized["slides"] = normalized_slides
 
     return normalized
 

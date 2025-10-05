@@ -86,6 +86,11 @@ def execute(state: Dict[str, Any]) -> Dict[str, Any]:
                 elif not caption and summary:
                     caption = summary[:200] + "..." if len(summary) > 200 else summary
                 
+                # Fallback: use configured caption if structured data caption is empty
+                if not caption and state.get('caption'):  # Use caption from node configuration
+                    caption = state['caption']
+                    print(f"🔍 Using configured caption as fallback: {caption[:50]}...")
+                
                 if hashtags and not title:  # Don't add hashtags if we already added them above
                     hashtag_text = ' '.join([f"#{tag.replace('#', '')}" for tag in hashtags])
                     content = f"{caption}\n\n{hashtag_text}"

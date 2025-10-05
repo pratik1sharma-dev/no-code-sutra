@@ -211,17 +211,32 @@ For AI Agent nodes, you must generate contextual prompts based on the user's int
    - Headline (max 35 chars): Main carousel title
    - Subhead (max 50 chars): Supporting description
    - Slides array (2-5 items):
-     - Title (max 25 chars): Slide title
-     - Content (max 80 chars): Slide content
-     - Stats (max 30 chars): Key metric or stat (optional)
-     - image_search_terms (array): 3 relevant image search terms for background image
+     - Headline (max 25 chars): Slide headline
+     - Subhead (max 60 chars): Slide description
+     - Bullets (1-3 items, max 30 chars each): Key points (optional)
    - Caption (max 200 chars): Engaging caption
    - Hashtags (5-8): Relevant hashtags
    - Recommended template: Choose from minimal|bold|gradient|split_screen|quote
    
    Each slide should be self-contained but connected to the main theme.
-   For image_search_terms, provide 3 visual, descriptive terms that would find good background images.
-   Return JSON: {\"headline\": \"...\", \"subhead\": \"...\", \"slides\": [...], \"caption\": \"...\", \"hashtags\": [...], \"recommended_template\": \"split_screen\"}"
+   Return JSON: {\"headline\": \"...\", \"subhead\": \"...\", \"slides\": [{\"headline\": \"...\", \"subhead\": \"...\", \"bullets\": [\"...\", \"...\"]}], \"caption\": \"...\", \"hashtags\": [\"...\"], \"recommended_template\": \"split_screen\"}"
+
+   **INSTAGRAM CAROUSEL (Character Story):**
+   "Create a character-based storytelling carousel (2-5 slides). Generate:
+   - Headline (max 35 chars): Story title or character name
+   - Subhead (max 50 chars): Brief character/context
+   - character_name: The character's name (one or two words)
+   - character_description: 1 short line describing the character (age/appearance/style)
+   - Slides array (2-5 items):
+     - Headline (max 25 chars): Moment title
+     - Subhead (max 60 chars): Context
+     - story_line (1-2 sentences): The story beat for this slide
+     - expression (one word): character emotion (e.g., confident, excited, thoughtful)
+   - Caption (max 200 chars): Engaging caption
+   - Hashtags (5-8): Relevant hashtags
+   
+   Each slide should represent a distinct story moment and maintain character consistency.
+   Return JSON: {\"headline\": \"...\", \"subhead\": \"...\", \"character_name\": \"...\", \"character_description\": \"...\", \"slides\": [{\"headline\": \"...\", \"subhead\": \"...\", \"story_line\": \"...\", \"expression\": \"confident\"}], \"caption\": \"...\", \"hashtags\": [\"...\"] }"
 
    **INSTAGRAM VIDEO REEL:**
    "Create Instagram video reel content. Generate:
@@ -280,7 +295,7 @@ CRITICAL: Use your intelligence to generate appropriate prompts based on the use
 IMAGE GENERATION WORKFLOW PATTERNS:
 
 🚨 CRITICAL INSTAGRAM WORKFLOW ORDER 🚨
-For Instagram posts with dynamic backgrounds, use this MANDATORY pattern:
+For Instagram posts with dynamic backgrounds, use this MANDATORY pattern(below are node types):
 1. aiAgent → imageGenerator → textOverlay → imageUpload → instagram_post
 
 ⚠️ ABSOLUTE REQUIREMENT: imageGenerator MUST ALWAYS come BEFORE textOverlay for Instagram templates to work properly.

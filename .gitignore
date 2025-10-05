@@ -150,7 +150,7 @@ temp/
 build/
 dist/
 out/
-
+backend/backend/tmp_images/
 # Test coverage
 coverage/
 .nyc_output/

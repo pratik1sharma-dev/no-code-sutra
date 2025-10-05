@@ -3,6 +3,8 @@ Instagram Template Engine - Professional Design Templates
 Provides multiple design templates for Instagram posts with AI-powered template selection
 """
 
+import cv2
+import numpy as np
 from typing import Dict, Any, Tuple, Optional, List
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import io
@@ -11,6 +13,24 @@ import math
 import random
 from abc import ABC, abstractmethod
 import colorsys
+
+# Try to import computer vision libraries for character detection
+try:
+    import cv2
+    import numpy as np
+    CV_AVAILABLE = True
+    print("✅ OpenCV loaded successfully for character detection")
+except ImportError:
+    CV_AVAILABLE = False
+    print("⚠️ OpenCV not available for character detection")
+
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+    print("✅ MediaPipe loaded successfully for character detection")
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+    print("⚠️ MediaPipe not available for character detection")
 
 
 class BaseTemplate(ABC):
@@ -341,7 +361,7 @@ class GradientTemplate(BaseTemplate):
         
         gradient = self.create_gradient_overlay(self.width, self.height, 
                                               primary_color[:3], secondary_color[:3], 
-                                              'vertical', 200)
+                                              'vertical', 100)
         img = Image.alpha_composite(img.convert('RGBA'), gradient)
         
         draw = ImageDraw.Draw(img)
@@ -568,6 +588,322 @@ class SplitScreenTemplate(BaseTemplate):
         return img
 
 
+class StoryTemplate(BaseTemplate):
+    """Story-focused design optimized for narrative content and character expressions"""
+    
+    def get_template_name(self) -> str:
+        return "story"
+    
+    def get_template_description(self) -> str:
+        return "Story-focused layout with emphasis on narrative content and character expressions"
+    
+    def render(self, background_img: Image.Image, content: Dict[str, Any], 
+               brand_config: Optional[Dict[str, Any]] = None) -> Image.Image:
+        if brand_config:
+            self.set_brand_config(brand_config)
+        
+        # Create base image
+        img = background_img.copy().resize((self.width, self.height), Image.Resampling.LANCZOS)
+        
+        # Add semi-transparent overlay for better text readability
+        overlay = Image.new('RGBA', (self.width, self.height), (0, 0, 0, 80))
+        img = Image.alpha_composite(img.convert('RGBA'), overlay)
+        
+        draw = ImageDraw.Draw(img)
+        
+        # Get colors
+        text_color = self.get_color('text_light')  # White text for contrast
+        accent_color = self.get_color('accent')
+        
+        # Story content gets primary focus
+        story_line = content.get('story_line', content.get('content', ''))
+        headline = content.get('headline', '')
+        subhead = content.get('subhead', '')
+        expression = content.get('expression', '')
+        
+        # With 30%/70% constraint, text goes in RIGHT 70% of image
+        text_area_left = int(self.width * 0.3)  # Start from 30% (after character)
+        text_area_right = self.width
+        text_area_width = text_area_right - text_area_left
+        
+        # Primary text placement - story content in right 70% area
+        if story_line:
+            story_font = self.get_font('regular', 38)
+            # Use the right 70% area for text with padding
+            max_text_width = text_area_width - 60  # Leave 30px padding on each side
+            lines = self._wrap_text(draw, story_line, story_font, max_text_width)
+            line_height = 44
+            
+            # Position story text in right area with vertical centering
+            total_text_height = len(lines) * line_height
+            start_y = max(100, (self.height - total_text_height) // 2)  # Vertically center with top margin
+            
+            # Draw each line of the story in right 70% area
+            current_y = start_y
+            for line in lines:
+                bbox = draw.textbbox((0, 0), line, font=story_font)
+                text_width = bbox[2] - bbox[0]
+                # Center text within right 70% area
+                x_position = text_area_left + (text_area_width - text_width) // 2
+                draw.text((x_position, current_y), line, fill=text_color[:3], font=story_font)
+                current_y += line_height
+        
+        # Headline in right 70% area at top
+        headline_y = 60  # Near top of right area
+        if headline:
+            headline_font = self.get_font('bold', 42)
+            bbox = draw.textbbox((0, 0), headline, font=headline_font)
+            text_width = bbox[2] - bbox[0]
+            # Center in right 70% area
+            x_position = text_area_left + (text_area_width - text_width) // 2
+            draw.text((x_position, headline_y), headline, fill=text_color[:3], font=headline_font)
+        
+        # Subhead placement in right 70% area
+        subhead_y = headline_y + 60 if headline else headline_y + 30
+        if subhead and not story_line:  # Only if no story line to avoid duplication
+            subhead_font = self.get_font('regular', 34)
+            bbox = draw.textbbox((0, 0), subhead, font=subhead_font)
+            text_width = bbox[2] - bbox[0]
+            # Center in right 70% area
+            x_position = text_area_left + (text_area_width - text_width) // 2
+            draw.text((x_position, subhead_y), subhead, fill=text_color[:3], font=subhead_font)
+        elif subhead and story_line:
+            # If both story_line and subhead, place subhead after headline in right area
+            subhead_font = self.get_font('regular', 34)
+            bbox = draw.textbbox((0, 0), subhead, font=subhead_font)
+            text_width = bbox[2] - bbox[0]
+            # Center in right 70% area
+            x_position = text_area_left + (text_area_width - text_width) // 2
+            draw.text((x_position, subhead_y), subhead, fill=text_color[:3], font=subhead_font)
+        
+        # Expression in bottom right 70% area
+        if expression:
+            expr_font = self.get_font('bold', 30)
+            expr_text = f"{expression.upper()}"
+            bbox = draw.textbbox((0, 0), expr_text, font=expr_font)
+            text_width = bbox[2] - bbox[0]
+            # Center in right 70% area at bottom
+            x_position = text_area_left + (text_area_width - text_width) // 2
+            y_position = self.height - 100  # Near bottom
+            draw.text((x_position, y_position), expr_text, fill=accent_color[:3], font=expr_font)
+        
+        return img
+    
+    def _detect_safe_text_zones(self, image: Image.Image) -> Dict[str, Tuple[int, int, int, int]]:
+        """
+        Detect character-free zones in image for safe text placement.
+        Returns dictionary of safe zones for text.
+        """
+        try:
+            width, height = image.size
+            
+            # Try to use MediaPipe for actual face detection if available
+            if MEDIAPIPE_AVAILABLE:
+                character_free_zones = self._detect_character_zones_with_mediapipe(image)
+                if character_free_zones:
+                    return character_free_zones
+            
+            # Fallback to heuristic-based zones (can be enhanced with actual detection)
+            
+            # Default heuristic zones that tend to be safer for text
+            top_zone = (0, 0, width, int(height * 0.25))      # Top 25%
+            bottom_zone = (0, int(height * 0.75), width, height)  # Bottom 25%  
+            center_zone = (int(width * 0.1), int(height * 0.3), int(width * 0.9), int(height * 0.7))  # Central 60%
+            left_zone = (0, int(height * 0.2), int(width * 0.3), int(height * 0.8))  # Left 30%
+            right_zone = (int(width * 0.7), int(height * 0.2), width, int(height * 0.8))  # Right 30%
+            
+            # Largest zone (central area)
+            largest_zone = center_zone
+            
+            return {
+                'top_zone': top_zone,
+                'bottom_zone': bottom_zone,
+                'center_zone': center_zone,
+                'left_zone': left_zone,
+                'right_zone': right_zone,
+                'largest_zone': largest_zone
+            }
+            
+        except Exception as e:
+            # Fallback to basic zones if detection fails
+            width, height = image.size
+            return {
+                'top_zone': (0, 0, width, int(height * 0.25)),
+                'bottom_zone': (0, int(height * 0.75), width, height),
+                'center_zone': (50, int(height * 0.2), width - 50, int(height * 0.8)),
+                'left_zone': (0, int(height * 0.2), int(width * 0.3), int(height * 0.8)),
+                'right_zone': (int(width * 0.7), int(height * 0.2), width, int(height * 0.8)),
+                'largest_zone': (50, int(height * 0.2), width - 50, int(height * 0.8))
+            }
+    
+    def _detect_character_zones_with_mediapipe(self, image: Image.Image) -> Optional[Dict[str, Tuple[int, int, int, int]]]:
+        """
+        Use MediaPipe to detect faces and calculate character-free zones for text.
+        """
+        try:
+            if not MEDIAPIPE_AVAILABLE:
+                return None
+            
+            # Convert PIL image to OpenCV format
+            opencv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            height, width = opencv_image.shape[:2]
+            
+            # Initialize MediaPipe Face Detection
+            mp_face_detection = mp.solutions.face_detection
+            face_detection = mp_face_detection.FaceDetection(
+                model_selection=1,  # Better for farther faces
+                min_detection_confidence=0.5
+            )
+            
+            # Detect faces
+            results = face_detection.process(opencv_image)
+            
+            if not results.detections:
+                # No faces detected, return default zones
+                return None
+            
+            # Calculate bounding boxes for all detected faces
+            face_boxes = []
+            for detection in results.detections:
+                bbox = detection.location_data.relative_bounding_box
+                x_min = int(bbox.xmin * width)
+                y_min = int(bbox.ymin * height)
+                x_max = int((bbox.xmin + bbox.width) * width)
+                y_max = int((bbox.ymin + bbox.height) * height)
+                face_boxes.append((x_min, y_min, x_max, y_max))
+            
+            # Calculate character-free zones by excluding face areas
+            safe_zones = self._calculate_safe_zones_from_faces(face_boxes, width, height)
+            return safe_zones
+            
+        except Exception as e:
+            print(f"⚠️ Character detection failed: {e}")
+            return None
+    
+    def _calculate_safe_zones_from_faces(self, face_boxes: List[Tuple[int, int, int, int]], 
+                                        image_width: int, image_height: int) -> Dict[str, Tuple[int, int, int, int]]:
+        """
+        Calculate safe text zones based on detected face positions.
+        """
+        # Merge overlapping face boxes
+        merged_boxes = self._merge_overlapping_boxes(face_boxes)
+        
+        # Calculate total occupied area
+        occupied_area = sum((box[2] - box[0]) * (box[3] - box[1]) for box in merged_boxes)
+        total_area = image_width * image_height
+        occupancy_ratio = occupied_area / total_area
+        
+        # If faces occupy too much space (>60%), use edge zones
+        if occupancy_ratio > 0.6:
+            top_zone = (0, 0, image_width, int(image_height * 0.2))
+            bottom_zone = (0, int(image_height * 0.8), image_width, image_height)
+            left_zone = (0, 0, int(image_width * 0.2), image_height)
+            right_zone = (int(image_width * 0.8), 0, image_width, image_height)
+        else:
+            # Calculate safe zones avoiding face areas
+            # Find vertical gaps between faces
+            face_ys = []
+            for box in merged_boxes:
+                face_ys.extend([box[1], box[3]])
+            
+            face_ys = sorted(set(face_ys))
+            
+            # Top safe zone (above all faces)
+            top_y_max = min(face_ys) if face_ys else int(image_height * 0.25)
+            top_zone = (0, 0, image_width, min(top_y_max, int(image_height * 0.3)))
+            
+            # Bottom safe zone (below all faces)  
+            bottom_y_min = max(face_ys) if face_ys else int(image_height * 0.75)
+            bottom_zone = (0, max(bottom_y_min, int(image_height * 0.7)), image_width, image_height)
+            
+            # Calculate horizontal safe zones
+            face_xs = []
+            for box in merged_boxes:
+                face_xs.extend([box[0], box[2]])
+            
+            face_xs = sorted(set(face_xs))
+            
+            # Left safe zone
+            left_x_max = min(face_xs) if face_xs else int(image_width * 0.25)
+            left_zone = (0, int(image_height * 0.2), min(left_x_max, int(image_width * 0.3)), int(image_height * 0.8))
+            
+            # Right safe zone
+            right_x_min = max(face_xs) if face_xs else int(image_width * 0.75)
+            right_zone = (max(right_x_min, int(image_width * 0.7)), int(image_height * 0.2), image_width, int(image_height * 0.8))
+        
+        # Central zone (with generous margins)
+        center_zone = (
+            int(image_width * 0.15), 
+            int(image_height * 0.25), 
+            int(image_width * 0.85), 
+            int(image_height * 0.75)
+        )
+        
+        # Largest safe zone (usually central with margins)
+        largest_zone = center_zone
+        
+        return {
+            'top_zone': top_zone,
+            'bottom_zone': bottom_zone, 
+            'center_zone': center_zone,
+            'left_zone': left_zone,
+            'right_zone': right_zone,
+            'largest_zone': largest_zone
+        }
+    
+    def _merge_overlapping_boxes(self, boxes: List[Tuple[int, int, int, int]]) -> List[Tuple[int, int, int, int]]:
+        """
+        Merge overlapping bounding boxes.
+        """
+        if not boxes:
+            return []
+        
+        # Sort boxes by x coordinate
+        boxes = sorted(boxes, key=lambda x: x[0])
+        merged = [boxes[0]]
+        
+        for current in boxes[1:]:
+            last = merged[-1]
+            # Check if boxes overlap
+            if current[0] <= last[2] and current[1] <= last[3] and current[2] >= last[0] and current[3] >= last[1]:
+                # Merge boxes
+                merged[-1] = (
+                    min(last[0], current[0]),
+                    min(last[1], current[1]),
+                    max(last[2], current[2]),
+                    max(last[3], current[3])
+                )
+            else:
+                merged.append(current)
+        
+        return merged
+    
+    def _wrap_text(self, draw: ImageDraw.Draw, text: str, font: ImageFont.FreeTypeFont, 
+                   max_width: int) -> List[str]:
+        """Wrap text to fit within max_width"""
+        lines = []
+        words = text.split()
+        
+        if not words:
+            return lines
+        
+        current_line = words[0]
+        
+        for word in words[1:]:
+            test_line = current_line + " " + word
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            text_width = bbox[2] - bbox[0]
+            
+            if text_width <= max_width:
+                current_line = test_line
+            else:
+                lines.append(current_line)
+                current_line = word
+        
+        lines.append(current_line)
+        return lines
+
+
 class QuoteTemplate(BaseTemplate):
     """Quote-focused design with elegant typography"""
     
@@ -667,7 +1003,8 @@ class InstagramTemplateEngine:
             'bold': BoldTemplate(),
             'gradient': GradientTemplate(),
             'split_screen': SplitScreenTemplate(),
-            'quote': QuoteTemplate()
+            'quote': QuoteTemplate(),
+            'story': StoryTemplate()
         }
         
         # Content type to template mapping for AI selection
@@ -678,7 +1015,8 @@ class InstagramTemplateEngine:
             'promotional': ['bold', 'gradient', 'split_screen'],
             'personal': ['minimal', 'quote', 'gradient'],
             'tech': ['minimal', 'split_screen', 'gradient'],
-            'lifestyle': ['gradient', 'minimal', 'quote']
+            'lifestyle': ['gradient', 'minimal', 'quote'],
+            'story': ['story', 'minimal', 'gradient']  # Add story-specific mapping
         }
     
     def get_available_templates(self) -> List[Dict[str, str]]:
@@ -708,11 +1046,24 @@ class InstagramTemplateEngine:
         if len(content.get('bullets', [])) > 3:
             suitable_templates = ['split_screen', 'bold'] + [t for t in suitable_templates if t not in ['split_screen', 'bold']]
         
+        # Special handling for storytelling content
+        if 'story_line' in content or 'expression' in content or any(key in content for key in ['story_line', 'expression']):
+            # Prioritize story template for storytelling content
+            suitable_templates = ['story'] + [t for t in suitable_templates if t != 'story']
+            # Also set content type to story if not already set
+            if not content_type:
+                content_type = 'story'
+                suitable_templates = self.content_mapping.get(content_type, ['story', 'minimal'])
+        
         # Return the most suitable template
         return suitable_templates[0] if suitable_templates else 'minimal'
     
     def _analyze_content_type(self, content: Dict[str, Any]) -> str:
         """Analyze content to determine type"""
+        # Check for storytelling specific fields first
+        if 'story_line' in content or 'expression' in content or 'character_name' in content:
+            return 'story'
+        
         text = ' '.join([
             str(content.get('headline', '')),
             str(content.get('subhead', '')),

@@ -9,14 +9,10 @@ import json
 import hashlib
 import secrets
 import time
-import logging
 from typing import Dict, List, Optional, Any
 from urllib.parse import urlencode
 import base64
 from datetime import datetime, timedelta
-
-# Configure logger
-logger = logging.getLogger(__name__)
 
 class CanvaIntegration:
     """Canva API integration service"""
@@ -76,7 +72,10 @@ class CanvaIntegration:
         ]
         
         # Log the scopes being used
-        logger.debug("Canva OAuth scopes configured", extra={"scopes": scopes, "scopes_string": ' '.join(scopes)})
+        print("🎨 Canva OAuth Scopes:")
+        print(f"   Scopes: {scopes}")
+        print(f"   Scopes string: {' '.join(scopes)}")
+        print("🎨 End of Canva OAuth Scopes")
         
         # Store code_verifier in state for later retrieval
         if state:
@@ -113,13 +112,18 @@ class CanvaIntegration:
         auth_url = f"{self.auth_url}?{urlencode(params)}"
         
         # Log the final parameters
-        logger.debug("Generated Canva authorization URL", extra={
-            "auth_url": self.auth_url,
-            "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
-            "state": state or 'default_state',
-            "full_url": auth_url
-        })
+        print("🎨 Canva OAuth Parameters:")
+        print(f"   Parameters: {params}")
+        print("🎨 End of Canva OAuth Parameters")
+        
+        # Log the generated URL for debugging
+        print("🎨 Generated Canva Authorization URL:")
+        print(f"   Auth URL: {self.auth_url}")
+        print(f"   Client ID: {self.client_id}")
+        print(f"   Redirect URI: {self.redirect_uri}")
+        print(f"   State: {state or 'default_state'}")
+        print(f"   Full URL: {auth_url}")
+        print("🎨 End of Canva Authorization URL")
         
         return auth_url
     
@@ -159,18 +163,18 @@ class CanvaIntegration:
         
         # Check if the authorization code is a JWT (Canva might use a different flow)
         if authorization_code.startswith('eyJ'):
-            logger.info("Detected JWT authorization code - using JWT OAuth flow")
+            print("🎨 Detected JWT authorization code - this might be a different OAuth flow")
             # For JWT-based flows, we might need to decode and use differently
             import jwt
             try:
                 # Try to decode the JWT (without verification for now)
                 decoded = jwt.decode(authorization_code, options={"verify_signature": False})
-                logger.debug("JWT authorization code decoded", extra={"decoded_keys": list(decoded.keys())})
+                print(f"🎨 JWT Decoded: {decoded}")
                 
                 # If it's a JWT, we might not need to exchange it
                 # The JWT might contain the access token directly
                 if 'access_token' in decoded:
-                    logger.info("JWT contains access token directly")
+                    print("🎨 JWT contains access token directly")
                     token_data = {
                         'access_token': decoded['access_token'],
                         'token_type': 'Bearer',
@@ -180,7 +184,7 @@ class CanvaIntegration:
                     return token_data
                 
                 # If JWT doesn't contain access_token, the JWT itself might be the access token
-                logger.info("Using JWT as access token")
+                print("🎨 JWT doesn't contain access_token - using JWT as access token")
                 token_data = {
                     'access_token': authorization_code,  # Use the JWT as the access token
                     'token_type': 'Bearer',
@@ -190,7 +194,7 @@ class CanvaIntegration:
                 return token_data
                     
             except Exception as jwt_error:
-                logger.error("Failed to decode JWT authorization code", extra={"error": str(jwt_error)})
+                print(f"🎨 JWT decode error: {jwt_error}")
         
         # Standard OAuth flow (fallback)
         headers = {
@@ -208,23 +212,29 @@ class CanvaIntegration:
         }
         
         # Log the token exchange request for debugging
-        logger.debug("Canva token exchange request", extra={
-            "token_url": self.token_url,
-            "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
-            "code_preview": authorization_code[:20] + "...",
-            "has_code_verifier": code_verifier is not None
-        })
+        print("🎨 Canva Token Exchange Request:")
+        print(f"   Token URL: {self.token_url}")
+        print(f"   Headers: {headers}")
+        print(f"   Client ID: {self.client_id}")
+        print(f"   Redirect URI: {self.redirect_uri}")
+        print(f"   Code: {authorization_code[:20]}...")
+        print(f"   Code Verifier: {code_verifier[:20] if code_verifier else 'None'}...")
+        print(f"   Request Data: {data}")
+        print("🎨 End of Token Exchange Request")
         
         # Try with explicit headers
         response = requests.post(self.token_url, data=data, headers=headers)
         
         # Log the response for debugging
-        logger.debug("Canva token exchange response", extra={
-            "status_code": response.status_code,
-            "response_headers": dict(response.headers),
-            "response_body": response.text if response.text else "[Empty response]"
-        })
+        print("🎨 Canva Token Exchange Response:")
+        print(f"   Status Code: {response.status_code}")
+        print(f"   Response Headers: {dict(response.headers)}")
+        try:
+            response_text = response.text
+            print(f"   Response Body: {response_text}")
+        except:
+            print("   Response Body: [Could not read]")
+        print("🎨 End of Token Exchange Response")
         
         response.raise_for_status()
         
@@ -545,7 +555,7 @@ class CanvaIntegration:
             design = self.create_design_from_template(template_id, canva_content)
             return design
         except Exception as e:
-            logger.warning("Canva design creation failed, using fallback", extra={"template_id": template_id, "error": str(e)})
+            print(f"🎨 Canva design creation failed (likely dev mode): {e}")
             # Fallback: Create custom design using template structure
             return self._create_custom_design_from_template(template_id, content_data)
     
@@ -562,9 +572,8 @@ class CanvaIntegration:
             Custom design information
         """
         try:
-            # Get template structure first
+            # Get template structure
             template_structure = self.get_template_structure(template_id)
-            editable_elements = template_structure.get('editable_elements', [])
             
             # Download template image
             template_image = self.download_template(template_id, 'png')
@@ -588,10 +597,27 @@ class CanvaIntegration:
                 font_medium = ImageFont.load_default()
                 font_small = ImageFont.load_default()
             
-            # Apply content using intelligent positioning
-            applied_positions = self._apply_content_with_positioning(
-                img, draw, content_data, editable_elements, font_large, font_medium, font_small
-            )
+            # Apply content to image
+            y_position = 100
+            
+            # Add headline
+            if 'headline' in content_data:
+                draw.text((50, y_position), content_data['headline'], 
+                         fill='black', font=font_large)
+                y_position += 80
+            
+            # Add subhead
+            if 'subhead' in content_data:
+                draw.text((50, y_position), content_data['subhead'], 
+                         fill='#666666', font=font_medium)
+                y_position += 60
+            
+            # Add bullets
+            if 'bullets' in content_data:
+                for bullet in content_data['bullets']:
+                    draw.text((50, y_position), f"• {bullet}", 
+                             fill='#333333', font=font_small)
+                    y_position += 40
             
             # Save to bytes
             output = io.BytesIO()
@@ -609,8 +635,6 @@ class CanvaIntegration:
                 'design_id': design_id,
                 'template_id': template_id,
                 'content_applied': content_data,
-                'applied_positions': applied_positions,
-                'editable_elements': editable_elements,
                 'image_data': image_base64,
                 'image_data_url': f"data:image/png;base64,{image_base64}",
                 'format': 'png',
@@ -621,7 +645,7 @@ class CanvaIntegration:
             }
             
         except Exception as e:
-            logger.error("Custom design creation failed, returning mock design", extra={"template_id": template_id, "error": str(e)})
+            print(f"🎨 Custom design creation failed: {e}")
             # Return a mock design with template info
             return {
                 'design_id': f"mock_design_{template_id}",
@@ -631,163 +655,6 @@ class CanvaIntegration:
                 'method': 'mock_fallback',
                 'created_at': datetime.now().isoformat()
             }
-    
-    def _apply_content_with_positioning(self, img, draw, content_data, editable_elements, 
-                                      font_large, font_medium, font_small):
-        """
-        Apply content to image using intelligent positioning based on template structure
-        
-        Args:
-            img: PIL Image object
-            draw: PIL ImageDraw object
-            content_data: Content to apply
-            editable_elements: List of editable elements from template structure
-            font_large, font_medium, font_small: Font objects
-            
-        Returns:
-            Dictionary of applied positions
-        """
-        applied_positions = {}
-        img_width, img_height = img.size
-        
-        # Strategy 1: Use template structure if available
-        if editable_elements:
-            applied_positions = self._apply_using_template_structure(
-                draw, content_data, editable_elements, font_large, font_medium, font_small
-            )
-        
-        # Strategy 2: Use intelligent positioning if no structure
-        if not applied_positions:
-            applied_positions = self._apply_using_intelligent_positioning(
-                draw, content_data, img_width, img_height, font_large, font_medium, font_small
-            )
-        
-        return applied_positions
-    
-    def _apply_using_template_structure(self, draw, content_data, editable_elements, 
-                                      font_large, font_medium, font_small):
-        """
-        Apply content using template structure information
-        """
-        applied_positions = {}
-        
-        for element in editable_elements:
-            element_type = element.get('type', '')
-            element_id = element.get('id', '')
-            position = element.get('position', {})
-            style = element.get('style', {})
-            
-            x = position.get('x', 0)
-            y = position.get('y', 0)
-            width = position.get('width', 200)
-            height = position.get('height', 100)
-            
-            # Map content to element types
-            if element_type == 'text':
-                if 'headline' in element_id.lower() and 'headline' in content_data:
-                    text = content_data['headline']
-                    font = font_large
-                    color = style.get('color', '#000000')
-                elif 'subhead' in element_id.lower() and 'subhead' in content_data:
-                    text = content_data['subhead']
-                    font = font_medium
-                    color = style.get('color', '#666666')
-                elif 'bullet' in element_id.lower() and 'bullets' in content_data:
-                    # Handle bullet points
-                    bullets = content_data['bullets']
-                    for i, bullet in enumerate(bullets):
-                        bullet_y = y + (i * 30)
-                        draw.text((x, bullet_y), f"• {bullet}", 
-                                 fill=color, font=font_small)
-                        applied_positions[f'bullet_{i}'] = {'x': x, 'y': bullet_y}
-                    continue
-                else:
-                    continue
-                
-                # Apply text with wrapping
-                wrapped_text = self._wrap_text(text, width, font)
-                draw.text((x, y), wrapped_text, fill=color, font=font)
-                applied_positions[element_id] = {'x': x, 'y': y, 'text': text}
-        
-        return applied_positions
-    
-    def _apply_using_intelligent_positioning(self, draw, content_data, img_width, img_height,
-                                           font_large, font_medium, font_small):
-        """
-        Apply content using intelligent positioning when template structure is not available
-        """
-        applied_positions = {}
-        
-        # Calculate positioning based on image dimensions
-        margin = 50
-        content_width = img_width - (2 * margin)
-        
-        # Start position
-        y_position = margin + 50
-        
-        # Add headline (top center)
-        if 'headline' in content_data:
-            headline = content_data['headline']
-            # Center the headline
-            bbox = draw.textbbox((0, 0), headline, font=font_large)
-            text_width = bbox[2] - bbox[0]
-            x = (img_width - text_width) // 2
-            
-            draw.text((x, y_position), headline, fill='black', font=font_large)
-            applied_positions['headline'] = {'x': x, 'y': y_position, 'text': headline}
-            y_position += 80
-        
-        # Add subhead (below headline)
-        if 'subhead' in content_data:
-            subhead = content_data['subhead']
-            # Center the subhead
-            bbox = draw.textbbox((0, 0), subhead, font=font_medium)
-            text_width = bbox[2] - bbox[0]
-            x = (img_width - text_width) // 2
-            
-            draw.text((x, y_position), subhead, fill='#666666', font=font_medium)
-            applied_positions['subhead'] = {'x': x, 'y': y_position, 'text': subhead}
-            y_position += 60
-        
-        # Add bullets (left-aligned)
-        if 'bullets' in content_data:
-            for i, bullet in enumerate(content_data['bullets']):
-                bullet_text = f"• {bullet}"
-                draw.text((margin, y_position), bullet_text, 
-                         fill='#333333', font=font_small)
-                applied_positions[f'bullet_{i}'] = {'x': margin, 'y': y_position, 'text': bullet_text}
-                y_position += 40
-        
-        return applied_positions
-    
-    def _wrap_text(self, text, max_width, font):
-        """
-        Wrap text to fit within a specified width
-        """
-        words = text.split()
-        lines = []
-        current_line = []
-        
-        for word in words:
-            current_line.append(word)
-            line_text = ' '.join(current_line)
-            bbox = font.getbbox(line_text)
-            line_width = bbox[2] - bbox[0]
-            
-            if line_width > max_width:
-                if len(current_line) > 1:
-                    current_line.pop()
-                    lines.append(' '.join(current_line))
-                    current_line = [word]
-                else:
-                    # Single word is too long, keep it
-                    lines.append(line_text)
-                    current_line = []
-        
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        return '\n'.join(lines)
     
     def _map_content_to_canva_format(self, content_data: Dict[str, Any]) -> Dict[str, Any]:
         """
